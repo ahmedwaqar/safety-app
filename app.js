@@ -50,6 +50,9 @@ HMI --> CTRL : task selection
     { id: crypto.randomUUID(), eventId: "HE-01", hazard: "H-01", situation: "OS-01", malfunction: "The robot controller issues an unintended motion command while the operator shares the workspace.", consequence: "Collision or crushing injury to the operator.", severity: "S3", exposure: "E4", controllability: "C3", safetyGoal: "SG-01" },
     { id: crypto.randomUUID(), eventId: "HE-02", hazard: "H-02", situation: "OS-01", malfunction: "The end effector loses workpiece retention while the cobot is moving.", consequence: "The released workpiece strikes the operator.", severity: "S2", exposure: "E3", controllability: "C3", safetyGoal: "SG-02" }
   ],
+  silAssessments: [
+    { id: crypto.randomUUID(), assessmentId: "SIL-01", safetyFunction: "Protective stop on obstacle detection", hazard: "H-03", situation: "OS-01", hazardousEvent: "The AMR continues moving after a person enters its travel path, creating a collision or crushing hazard.", consequence: "C3", frequency: "F2", avoidance: "P2", demand: "W3", safeState: "Controlled protective stop", evidence: "Stopping-distance and protective-field validation" }
+  ],
   customColumns: [{ key: "owner", label: "Owner" }],
   fmea: [
     { id: crypto.randomUUID(), component: "SCAN", failureMode: "Protective field not detected", effect: "Robot continues moving while operator enters shared workspace", hazard: "H-03", situation: "OS-01", severity: 9, occurrence: 2, detection: 3, action: "Add cyclic diagnostic monitoring", custom: { owner: "Controls" } },
@@ -74,6 +77,7 @@ function load() {
   const workspace = saved ? JSON.parse(saved) : structuredClone(seed);
   workspace.hara ??= structuredClone(seed.hara);
   workspace.safetyGoals ??= structuredClone(seed.safetyGoals);
+  workspace.silAssessments ??= structuredClone(seed.silAssessments);
   return workspace;
 }
 function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll(); }
@@ -90,13 +94,20 @@ function deriveAsil(severity, exposure, controllability) {
   };
   return table[severity]?.[exposure]?.[Number(controllability.slice(1)) - 1] || "QM";
 }
+function deriveSil(consequence, frequency, avoidance, demand) {
+  const riskWeight = Number(consequence.slice(1)) + Number(frequency.slice(1)) + Number(avoidance.slice(1)) - 3;
+  const demandShift = Number(demand.slice(1)) - 2;
+  const level = Math.max(0, Math.min(4, riskWeight + demandShift));
+  return level ? `SIL ${level}` : "No SIL";
+}
+function silClass(sil) { return sil === "No SIL" ? "asil-qm" : `sil-${sil.slice(-1)}`; }
 function goalBy(id) { return state.safetyGoals.find(goal => goal.id === id); }
 
 function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = ({ fmea: "FMEA worksheet", hara: "ISO 26262 HARA", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#page-title").textContent = ({ fmea: "FMEA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
 }
 
 function renderMetrics() {
@@ -141,8 +152,23 @@ function renderFmea() {
 
 function renderCatalog(group) {
   $(`#${group}-grid`).innerHTML = state[group].map(item => {
-    const links = group === "hazards" ? state.fmea.filter(x => x.hazard === item.id).length + state.requirements.filter(x => x.hazard === item.id).length + state.hara.filter(x => x.hazard === item.id).length : state.fmea.filter(x => x.situation === item.id).length + state.hara.filter(x => x.situation === item.id).length;
+    const links = group === "hazards" ? state.fmea.filter(x => x.hazard === item.id).length + state.requirements.filter(x => x.hazard === item.id).length + state.hara.filter(x => x.hazard === item.id).length + state.silAssessments.filter(x => x.hazard === item.id).length : state.fmea.filter(x => x.situation === item.id).length + state.hara.filter(x => x.situation === item.id).length + state.silAssessments.filter(x => x.situation === item.id).length;
     return `<article class="catalog-card"><div class="catalog-card-top"><span class="catalog-id">${esc(item.id)}</span><span class="category">${esc(item.category)}</span></div><h3>${esc(item.name)}</h3><p>${esc(item.description)}</p><div class="catalog-footer"><span>${links} linked reference${links === 1 ? "" : "s"}</span><button class="mini-btn" data-delete-catalog="${group}:${item.id}" title="Delete">×</button></div></article>`;
+  }).join("");
+}
+
+function renderSil() {
+  $("#sil-count").textContent = state.silAssessments.length;
+  $("#sil-summary").innerHTML = ["No SIL", "SIL 1", "SIL 2", "SIL 3", "SIL 4"].map(sil => `<div class="hara-stat"><strong>${state.silAssessments.filter(row => deriveSil(row.consequence, row.frequency, row.avoidance, row.demand) === sil).length}</strong><span>${sil} functions</span></div>`).join("");
+  $("#sil-body").innerHTML = state.silAssessments.map(row => {
+    const sil = deriveSil(row.consequence, row.frequency, row.avoidance, row.demand);
+    return `<tr>
+      <td><strong>${esc(row.assessmentId)} · ${esc(row.safetyFunction)}</strong><span class="subtext">${esc(row.hazardousEvent)}</span></td>
+      <td><strong>${esc(row.hazard)} · ${esc(named("hazards", row.hazard))}</strong><span class="subtext">${esc(row.situation)} · ${esc(named("situations", row.situation))}</span></td>
+      <td><strong>${esc(row.consequence)} / ${esc(row.frequency)} / ${esc(row.avoidance)} / ${esc(row.demand)}</strong></td>
+      <td><span class="asil ${silClass(sil)}">${esc(sil)}</span></td><td>${esc(row.safeState || "TBD")}</td><td>${esc(row.evidence || "TBD")}</td>
+      <td><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-sil="${row.id}">✎</button><button class="mini-btn" title="Delete" data-delete-sil="${row.id}">×</button></div></td>
+    </tr>`;
   }).join("");
 }
 
@@ -178,7 +204,7 @@ function renderArchitecture() {
   $("#component-count").textContent = state.components.length;
   $("#component-list").innerHTML = state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
 }
-function renderAll() { renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderArchitecture(); }
+function renderAll() { renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderArchitecture(); }
 
 function fillRowForm(row = {}) {
   const form = $("#row-form");
@@ -224,6 +250,19 @@ function updateAsilPreview() {
   const form = $("#hara-form");
   $("#asil-preview").textContent = deriveAsil(form.elements.severity.value, form.elements.exposure.value, form.elements.controllability.value);
 }
+function fillSilForm(row = {}) {
+  const form = $("#sil-form"); form.reset();
+  $("#sil-dialog-title").textContent = row.id ? "Edit SIL assessment" : "Add SIL assessment";
+  form.elements.id.value = row.id || "";
+  form.elements.hazard.innerHTML = options(state.hazards, row.hazard);
+  form.elements.situation.innerHTML = options(state.situations, row.situation);
+  ["assessmentId", "safetyFunction", "hazardousEvent", "consequence", "frequency", "avoidance", "demand", "safeState", "evidence"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
+  updateSilPreview(); $("#sil-dialog").showModal();
+}
+function updateSilPreview() {
+  const form = $("#sil-form");
+  $("#sil-preview").textContent = deriveSil(form.elements.consequence.value, form.elements.frequency.value, form.elements.avoidance.value, form.elements.demand.value);
+}
 
 $("#main-nav").addEventListener("click", event => { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); });
 document.addEventListener("click", event => {
@@ -236,7 +275,7 @@ document.addEventListener("click", event => {
   const removeCatalog = event.target.closest("[data-delete-catalog]");
   if (removeCatalog) {
     const [group, id] = removeCatalog.dataset.deleteCatalog.split(":");
-    const linked = group === "hazards" ? state.fmea.some(x => x.hazard === id) || state.requirements.some(x => x.hazard === id) || state.hara.some(x => x.hazard === id) : state.fmea.some(x => x.situation === id) || state.hara.some(x => x.situation === id);
+    const linked = group === "hazards" ? state.fmea.some(x => x.hazard === id) || state.requirements.some(x => x.hazard === id) || state.hara.some(x => x.hazard === id) || state.silAssessments.some(x => x.hazard === id) : state.fmea.some(x => x.situation === id) || state.hara.some(x => x.situation === id) || state.silAssessments.some(x => x.situation === id);
     if (linked) alert("This catalogue entry is referenced by the analysis and cannot be deleted.");
     else if (confirm("Delete this catalogue entry?")) { state[group] = state[group].filter(x => x.id !== id); save(); }
   }
@@ -250,6 +289,8 @@ document.addEventListener("click", event => {
     if (state.hara.some(row => row.safetyGoal === removeGoal.dataset.deleteGoal)) alert("This safety goal is referenced by a hazardous event and cannot be deleted.");
     else if (confirm("Delete this safety goal?")) { state.safetyGoals = state.safetyGoals.filter(goal => goal.id !== removeGoal.dataset.deleteGoal); save(); }
   }
+  const editSil = event.target.closest("[data-edit-sil]"); if (editSil) fillSilForm(state.silAssessments.find(x => x.id === editSil.dataset.editSil));
+  const removeSil = event.target.closest("[data-delete-sil]"); if (removeSil && confirm("Delete this SIL assessment?")) { state.silAssessments = state.silAssessments.filter(x => x.id !== removeSil.dataset.deleteSil); save(); }
 });
 
 $("#row-form").addEventListener("submit", event => {
@@ -311,6 +352,16 @@ $("#goal-form").addEventListener("submit", event => {
     if (data.originalId !== data.id) state.hara.forEach(row => { if (row.safetyGoal === data.originalId) row.safetyGoal = data.id; });
   } else state.safetyGoals.push(goal);
   $("#goal-dialog").close(); save();
+});
+$("#add-sil-btn").addEventListener("click", () => fillSilForm());
+$("#sil-form").addEventListener("change", updateSilPreview);
+$("#sil-form").addEventListener("submit", event => {
+  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  if (state.silAssessments.some(row => row.assessmentId === data.assessmentId && row.id !== data.id)) return alert("That SIL-assessment identifier already exists.");
+  const existing = state.silAssessments.find(row => row.id === data.id);
+  const row = { id: data.id || crypto.randomUUID(), assessmentId: data.assessmentId, safetyFunction: data.safetyFunction, hazard: data.hazard, situation: data.situation, hazardousEvent: data.hazardousEvent, consequence: data.consequence, frequency: data.frequency, avoidance: data.avoidance, demand: data.demand, safeState: data.safeState, evidence: data.evidence };
+  if (existing) Object.assign(existing, row); else state.silAssessments.push(row);
+  $("#sil-dialog").close(); save();
 });
 $("#parse-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value;

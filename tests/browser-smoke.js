@@ -84,7 +84,7 @@ try {
   await evaluate(`window.alert = message => window.__lastAlert = message; window.confirm = () => true;`);
 
   await test("navigation buttons switch all application views", async () => {
-    for (const view of ["fmea", "hara", "hazards", "situations", "requirements", "architecture", "overview"]) {
+    for (const view of ["fmea", "hara", "sil", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
     }
@@ -257,6 +257,57 @@ try {
     await click("#hara-dialog .dialog-close");
   });
 
+  await test("AMR SIL assessment derives SIL 4 and supports edit and delete", async () => {
+    await click('[data-view="sil"]');
+    const before = await count("#sil-body tr");
+    await click("#add-sil-btn");
+    assert(await isOpen("#sil-dialog"), "SIL dialog did not open");
+    await click("#sil-dialog .dialog-close");
+    assert(!await isOpen("#sil-dialog"), "SIL dialog close button failed");
+    await click("#add-sil-btn");
+    await fill('#sil-form [name="assessmentId"]', "SIL-TEST");
+    await fill('#sil-form [name="safetyFunction"]', "Test AMR protective stop");
+    await fill('#sil-form [name="hazardousEvent"]', "AMR fails to stop before collision.");
+    await fill('#sil-form [name="consequence"]', "C4");
+    await fill('#sil-form [name="frequency"]', "F2");
+    await fill('#sil-form [name="avoidance"]', "P2");
+    await fill('#sil-form [name="demand"]', "W3");
+    assert(await evaluate(`document.querySelector("#sil-preview").textContent`) === "SIL 4", "SIL preview did not derive SIL 4");
+    await click("#sil-dialog .dialog-actions .primary");
+    assert(await count("#sil-body tr") === before + 1, "SIL assessment was not added");
+    assert(await evaluate(`document.querySelector("#sil-body tr:last-child").textContent.includes("SIL 4")`), "saved SIL assessment does not show SIL 4");
+    await click("#sil-body tr:last-child [data-edit-sil]");
+    await fill('#sil-form [name="evidence"]', "Updated stopping-distance report");
+    await click("#sil-dialog .dialog-actions .primary");
+    assert(await evaluate(`document.querySelector("#sil-body tr:last-child").textContent.includes("Updated stopping-distance")`), "SIL assessment was not edited");
+    await click("#sil-body tr:last-child [data-delete-sil]");
+    assert(await count("#sil-body tr") === before, "SIL assessment was not deleted");
+  });
+
+  await test("AMR risk graph derives each target SIL boundary", async () => {
+    await click("#add-sil-btn");
+    for (const [consequence, frequency, avoidance, demand, expected] of [
+      ["C1", "F1", "P1", "W1", "No SIL"],
+      ["C1", "F1", "P2", "W2", "SIL 1"],
+      ["C2", "F1", "P2", "W2", "SIL 2"],
+      ["C3", "F1", "P2", "W2", "SIL 3"],
+      ["C4", "F1", "P2", "W2", "SIL 4"],
+      ["C4", "F2", "P2", "W3", "SIL 4"]
+    ]) {
+      const actual = await evaluate(`(() => {
+        const form = document.querySelector("#sil-form");
+        form.elements.consequence.value = "${consequence}";
+        form.elements.frequency.value = "${frequency}";
+        form.elements.avoidance.value = "${avoidance}";
+        form.elements.demand.value = "${demand}";
+        form.dispatchEvent(new Event("change", { bubbles: true }));
+        return document.querySelector("#sil-preview").textContent;
+      })()`);
+      assert(actual === expected, `${consequence}/${frequency}/${avoidance}/${demand} derived ${actual}, expected ${expected}`);
+    }
+    await click("#sil-dialog .dialog-close");
+  });
+
   await test("PlantUML import updates referenced components", async () => {
     await click('[data-view="architecture"]');
     await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
@@ -279,10 +330,11 @@ try {
     assert(await count("#fmea-body tr") === 4, "reset did not restore FMEA rows");
   });
 
-  await test("existing browser workspaces migrate to include HARA data", async () => {
-    await evaluate(`(() => { const workspace = JSON.parse(localStorage.getItem("safeguard-cobot-workspace-v1")); delete workspace.hara; delete workspace.safetyGoals; localStorage.setItem("safeguard-cobot-workspace-v1", JSON.stringify(workspace)); location.reload(); })()`);
+  await test("existing browser workspaces migrate to include new analysis data", async () => {
+    await evaluate(`(() => { const workspace = JSON.parse(localStorage.getItem("safeguard-cobot-workspace-v1")); delete workspace.hara; delete workspace.safetyGoals; delete workspace.silAssessments; localStorage.setItem("safeguard-cobot-workspace-v1", JSON.stringify(workspace)); location.reload(); })()`);
     await retry(async () => { assert(await count("#hara-body tr") === 2, "legacy workspace did not receive HARA seed data"); });
     assert(await count("#goal-list .requirement") === 2, "legacy workspace did not receive safety goals");
+    assert(await count("#sil-body tr") === 1, "legacy workspace did not receive AMR SIL assessment data");
   });
 
   await test("export button initiates JSON download", async () => {

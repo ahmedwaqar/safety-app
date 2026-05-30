@@ -1,0 +1,18 @@
+@startuml
+title Warehouse AMR safety training example
+
+component "Fleet manager" as FLEET
+component "AMR motion controller" as CTRL
+component "Safety controller" as SAFE
+component "Safety scanner" as SCAN
+component "Drive and brake system" as DRIVE
+component "Payload interface" as LOAD
+component "Charging interface" as CHARGE
+
+FLEET --> CTRL : route command
+SCAN --> SAFE : protective field status
+SAFE --> CTRL : safe motion enable
+CTRL --> DRIVE : speed and direction
+DRIVE --> LOAD : vehicle movement
+CHARGE --> CTRL : charging state
+@enduml

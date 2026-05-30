@@ -1,6 +1,6 @@
 # Safeguard Cobot Safety Studio
 
-Safeguard is a lightweight web app for collaborative-robot safety analysis. It keeps architecture, operational context, hazards, ISO 26262 hazard analysis and risk assessment (HARA), FMEA records, and safety requirements in one traceable browser workspace.
+Safeguard is a lightweight web app for collaborative-robot and autonomous-mobile-robot (AMR) safety analysis. It keeps architecture, operational context, hazards, AMR SIL assessments, ISO 26262 hazard analysis and risk assessment (HARA), FMEA records, and safety requirements in one traceable browser workspace.
 
 The app ships with an example cobot-cell safety case so the workflow is visible immediately after startup.
 
@@ -12,6 +12,7 @@ The app ships with an example cobot-cell safety case so the workflow is visible 
 | Architecture | Paste PlantUML source, render an SVG diagram locally, and import component aliases as reusable references |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
 | Hazard catalogue | Maintain reusable hazards and view linked analysis references |
+| AMR SIL assessment | Estimate a target Safety Integrity Level for AMR safety functions with a transparent C/F/P/W risk graph |
 | ISO 26262 HARA | Create hazardous events, classify severity (`S0`-`S3`), exposure (`E0`-`E4`), and controllability (`C0`-`C3`), then derive ASIL automatically |
 | Safety goals | Define top-level safety objectives with ASIL, safe state, FTTI, and hazardous-event traceability |
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
@@ -27,6 +28,16 @@ The app ships with an example cobot-cell safety case so the workflow is visible 
 - Google Chrome for the automated interaction suite
 
 The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](vendor/plantuml.jar). Rendering is local: PlantUML source does not leave the machine.
+
+## Beginner Training
+
+New to AMR safety analysis? Start with the hands-on [`AMR Robot Safety Training`](training/README.md). It includes:
+
+- Five beginner modules
+- A runnable warehouse-AMR PlantUML example
+- Working SIL, FMEA, and safety-requirement examples
+- Student tasks and a capstone assessment
+- A separate instructor answer key
 
 ## Start The App
 
@@ -51,10 +62,11 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 3. Add the relevant **Operational situations**.
 4. Maintain the reusable **Hazard catalogue**.
 5. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
-6. Add **Safety goals** for the classified hazardous events.
-7. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
-8. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
-9. Use the download button in the top bar to export `safeguard-cobot-analysis.json`.
+6. For an AMR application, use **AMR SIL assessment** to estimate the target SIL for each safety function.
+7. Add **Safety goals** for the classified hazardous events.
+8. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
+9. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
+10. Use the download button in the top bar to export `safeguard-cobot-analysis.json`.
 
 ## Using Each Workspace
 
@@ -86,6 +98,23 @@ ISO 26262 is intended for safety-related E/E systems installed in series-product
 
 Reference: [ISO 26262-3:2018 - Road vehicles - Functional safety - Part 3: Concept phase](https://www.iso.org/standard/68385.html).
 
+### AMR SIL Assessment
+
+Use **Add SIL assessment** to estimate a target SIL for an AMR safety function. Each assessment records:
+
+- Safety function, such as protective stop on obstacle detection
+- Linked hazard and operational situation
+- Hazardous event and potential consequence
+- Consequence (`C1`-`C4`)
+- Exposure frequency (`F1`-`F2`)
+- Possibility of avoidance (`P1`-`P2`)
+- Probability of the unwanted occurrence or demand (`W1`-`W3`)
+- Safe state and validation evidence
+
+The app uses the selected C/F/P/W values to display a transparent target estimate from **No SIL** through **SIL 4**. Treat the result as an engineering input for review, not an automatic compliance decision. The final required integrity level depends on the AMR type, safety function, operating zone, applicable machinery standards, and the organization's accepted risk-assessment method.
+
+[ISO 3691-4:2023](https://www.iso.org/standard/83545.html) specifies safety requirements and verification means for driverless industrial trucks and explicitly includes autonomous mobile robots among its examples. For functional-safety lifecycle and SIL concepts, consult the applicable IEC 61508-family standard and competent functional-safety practitioners.
+
 ### FMEA Worksheet
 
 Use **Add failure mode** to record:
@@ -116,7 +145,7 @@ The workspace is stored in browser `localStorage` under:
 safeguard-cobot-workspace-v1
 ```
 
-Use the top-bar download button to export all architecture, catalogue, HARA, FMEA, safety-goal, and requirement records as JSON. **New analysis** resets the browser workspace to the seeded cobot example.
+Use the top-bar download button to export all architecture, catalogue, AMR SIL, HARA, FMEA, safety-goal, and requirement records as JSON. **New analysis** resets the browser workspace to the seeded example.
 
 ## Test
 
@@ -126,7 +155,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies navigation, dialogs, FMEA editing, custom columns, catalogue entries, requirements, safety goals, the complete ISO 26262 S/E/C matrix, workspace migration, PlantUML component import, diagram rendering, reset, and JSON export.
+The suite verifies navigation, dialogs, FMEA editing, custom columns, catalogue entries, requirements, safety goals, AMR SIL risk-graph boundaries, the complete ISO 26262 S/E/C matrix, workspace migration, PlantUML component import, diagram rendering, reset, and JSON export.
 
 Compile-check the browser and server entry points:
 
