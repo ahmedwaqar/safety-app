@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#173f3a" />
+    <title>Safeguard | Cobot FMEA</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div><strong>Safeguard</strong><span>Cobot safety studio</span></div>
+      </div>
+      <nav id="main-nav">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
+        <button class="nav-item" data-view="fmea"><span class="nav-icon">≡</span>FMEA worksheet</button>
+        <button class="nav-item" data-view="hara"><span class="nav-icon">△</span>ISO 26262 HARA</button>
+        <button class="nav-item" data-view="hazards"><span class="nav-icon">◇</span>Hazard catalogue</button>
+        <button class="nav-item" data-view="situations"><span class="nav-icon">◎</span>Operational situations</button>
+        <button class="nav-item" data-view="requirements"><span class="nav-icon">✓</span>Safety requirements</button>
+        <button class="nav-item" data-view="architecture"><span class="nav-icon">⌘</span>Architecture</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="pulse"></span>
+        <div><strong>Local workspace</strong><span>Saved in this browser</span></div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Safety analysis workspace</p>
+          <h1 id="page-title">Overview</h1>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="export-btn" title="Export workspace">⇩</button>
+          <button class="button secondary" id="new-analysis-btn">New analysis</button>
+          <button class="button primary" data-open-row>Add FMEA row</button>
+        </div>
+      </header>
+
+      <section class="view active" id="overview-view">
+        <div class="hero">
+          <div>
+            <span class="section-kicker">Active analysis</span>
+            <h2>Collaborative robot cell<br /><em>Safety case</em></h2>
+            <p>Trace hazards through failure modes, operational context, mitigations, and verifiable safety requirements.</p>
+          </div>
+          <div class="hero-score">
+            <span>Residual risk</span>
+            <strong id="hero-score">42</strong>
+            <small>Risk priority sum</small>
+          </div>
+        </div>
+        <div class="metric-grid" id="metrics"></div>
+        <div class="overview-grid">
+          <section class="card risk-card">
+            <div class="card-header">
+              <div><p class="eyebrow">Prioritization</p><h3>Highest risk failure modes</h3></div>
+              <button class="text-btn" data-go="fmea">Open worksheet →</button>
+            </div>
+            <div id="priority-list" class="priority-list"></div>
+          </section>
+          <section class="card">
+            <div class="card-header">
+              <div><p class="eyebrow">Coverage</p><h3>Safety case health</h3></div>
+            </div>
+            <div id="coverage-list" class="coverage-list"></div>
+          </section>
+        </div>
+        <section class="card architecture-strip">
+          <div class="card-header">
+            <div><p class="eyebrow">PlantUML architecture</p><h3>System components in scope</h3></div>
+            <button class="text-btn" data-go="architecture">Manage architecture →</button>
+          </div>
+          <div class="component-row" id="overview-components"></div>
+        </section>
+      </section>
+
+      <section class="view" id="fmea-view">
+        <div class="section-toolbar">
+          <div class="search-wrap"><span>⌕</span><input id="fmea-search" placeholder="Search failure modes, effects, hazards..." /></div>
+          <div class="toolbar-actions">
+            <button class="button secondary" id="template-btn">Customize template</button>
+            <button class="button primary" data-open-row>Add failure mode</button>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-meta"><span><strong id="fmea-count">0</strong> failure modes</span><span>Score = severity × occurrence × detection</span></div>
+          <div class="table-scroll"><table><thead id="fmea-head"></thead><tbody id="fmea-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="view" id="hazards-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Controlled vocabulary</p><h2>Hazard catalogue</h2><p>Maintain reusable hazards and connect them to failure modes and requirements.</p></div>
+          <button class="button primary" data-open-catalog="hazards">Add hazard</button>
+        </div>
+        <div class="catalog-grid" id="hazards-grid"></div>
+      </section>
+
+      <section class="view" id="hara-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">ISO 26262-3 concept phase</p><h2>Hazard analysis &amp; risk assessment</h2><p>Define hazardous events from malfunctioning behaviour and operational situations. Classify severity, exposure, and controllability to derive the Automotive Safety Integrity Level.</p></div>
+          <button class="button primary" id="add-hara-btn">Add hazardous event</button>
+        </div>
+        <div class="hara-summary" id="hara-summary"></div>
+        <div class="table-card">
+          <div class="table-meta"><span><strong id="hara-count">0</strong> hazardous events</span><span>ASIL is derived from S / E / C classification</span></div>
+          <div class="table-scroll"><table class="hara-table"><thead><tr><th>Event</th><th>Hazard &amp; situation</th><th>Malfunctioning behaviour</th><th>S</th><th>E</th><th>C</th><th>ASIL</th><th>Safety goal</th><th></th></tr></thead><tbody id="hara-body"></tbody></table></div>
+        </div>
+        <div class="catalog-intro hara-goal-heading">
+          <div><p class="eyebrow">Functional safety concept</p><h2>Safety goals</h2><p>Capture top-level safety objectives and trace each goal to one or more classified hazardous events.</p></div>
+          <button class="button secondary" id="add-goal-btn">Add safety goal</button>
+        </div>
+        <div class="requirement-list" id="goal-list"></div>
+        <p class="standards-note">ISO 26262 applies to road-vehicle E/E systems. This workspace supports HARA records and traceability; it does not by itself establish standards compliance.</p>
+      </section>
+
+      <section class="view" id="situations-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Operational context</p><h2>Operational situations</h2><p>Capture the human, robot, and environment conditions considered by the analysis.</p></div>
+          <button class="button primary" data-open-catalog="situations">Add situation</button>
+        </div>
+        <div class="catalog-grid" id="situations-grid"></div>
+      </section>
+
+      <section class="view" id="requirements-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Mitigation & verification</p><h2>Safety requirements</h2><p>Specify controls, link their source hazards, and track verification status.</p></div>
+          <button class="button primary" id="add-requirement-btn">Add requirement</button>
+        </div>
+        <div class="requirement-list" id="requirement-list"></div>
+      </section>
+
+      <section class="view" id="architecture-view">
+        <div class="architecture-grid">
+          <section>
+            <div class="catalog-intro compact">
+              <div><p class="eyebrow">PlantUML integration</p><h2>System architecture</h2><p>Paste PlantUML source. Components are extracted and become available as references across the analysis.</p></div>
+            </div>
+            <div class="editor-card">
+              <div class="editor-top"><span>architecture.puml</span><div class="editor-actions"><button class="button secondary small" id="parse-btn">Import components</button><button class="button primary small" id="render-btn">Render diagram</button></div></div>
+              <textarea id="plantuml-source" spellcheck="false"></textarea>
+            </div>
+          </section>
+          <section class="component-panel">
+            <div class="card-header"><div><p class="eyebrow">Imported model</p><h3>Referenced components</h3></div><span class="count-badge" id="component-count">0</span></div>
+            <div id="component-list"></div>
+          </section>
+        </div>
+        <section class="diagram-card">
+          <div class="card-header"><div><p class="eyebrow">Local PlantUML renderer</p><h3>Architecture diagram</h3></div><span class="render-status" id="render-status">Ready to render</span></div>
+          <div class="diagram-preview" id="diagram-preview"><p>Select <strong>Render diagram</strong> to generate an SVG with the attached PlantUML JAR.</p></div>
+        </section>
+      </section>
+    </main>
+
+    <dialog id="row-dialog">
+      <form method="dialog" id="row-form">
+        <div class="dialog-header"><div><p class="eyebrow">Risk analysis</p><h2 id="row-dialog-title">Add failure mode</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label><span>Component</span><select name="component" required></select></label>
+          <label><span>Failure mode</span><input name="failureMode" required placeholder="e.g. Unexpected robot motion" /></label>
+          <label class="wide"><span>Potential effect</span><input name="effect" required placeholder="Describe the consequence" /></label>
+          <label><span>Linked hazard</span><select name="hazard"></select></label>
+          <label><span>Operational situation</span><select name="situation"></select></label>
+          <label><span>Severity <small>1–10</small></span><input type="number" name="severity" min="1" max="10" value="5" required /></label>
+          <label><span>Occurrence <small>1–10</small></span><input type="number" name="occurrence" min="1" max="10" value="3" required /></label>
+          <label><span>Detection <small>1–10</small></span><input type="number" name="detection" min="1" max="10" value="3" required /></label>
+          <label class="wide"><span>Recommended action</span><input name="action" placeholder="Risk reduction measure" /></label>
+          <div id="custom-row-fields" class="form-grid wide"></div>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save failure mode</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="catalog-dialog">
+      <form method="dialog" id="catalog-form">
+        <div class="dialog-header"><div><p class="eyebrow">Catalogue entry</p><h2 id="catalog-title">Add item</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="catalog" />
+        <div class="form-grid">
+          <label><span>Identifier</span><input name="id" required placeholder="e.g. H-05" /></label>
+          <label><span>Name</span><input name="name" required placeholder="Concise label" /></label>
+          <label class="wide"><span>Description</span><textarea name="description" required placeholder="Describe the catalogue entry"></textarea></label>
+          <label id="category-field"><span>Category</span><select name="category"><option>Mechanical</option><option>Electrical</option><option>Control system</option><option>Ergonomic</option><option>Operational</option></select></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Add entry</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="requirement-dialog">
+      <form method="dialog" id="requirement-form">
+        <div class="dialog-header"><div><p class="eyebrow">Safety control</p><h2>Add requirement</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <div class="form-grid">
+          <label><span>Identifier</span><input name="id" required placeholder="e.g. SR-05" /></label>
+          <label><span>Verification status</span><select name="status"><option>Draft</option><option>Planned</option><option>Verified</option></select></label>
+          <label class="wide"><span>Requirement statement</span><textarea name="text" required placeholder="The system shall..."></textarea></label>
+          <label><span>Source hazard</span><select name="hazard"></select></label>
+          <label><span>Allocated component</span><select name="component"></select></label>
+          <label class="wide"><span>Verification method</span><input name="verification" placeholder="e.g. Validation test VT-04" /></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Add requirement</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="template-dialog">
+      <form method="dialog" id="template-form">
+        <div class="dialog-header"><div><p class="eyebrow">Worksheet configuration</p><h2>Customize FMEA template</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <p class="dialog-copy">Add organization-specific columns to the worksheet. New fields are available on every failure mode.</p>
+        <div id="column-list"></div>
+        <div class="add-column"><input id="new-column" placeholder="New column label" /><button class="button secondary" id="add-column-btn" type="button">Add column</button></div>
+        <div class="dialog-actions"><button class="button primary" value="default">Done</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="hara-dialog">
+      <form method="dialog" id="hara-form">
+        <div class="dialog-header"><div><p class="eyebrow">ISO 26262 hazardous event</p><h2 id="hara-dialog-title">Add hazardous event</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label><span>Identifier</span><input name="eventId" required placeholder="e.g. HE-05" /></label>
+          <label><span>Linked hazard</span><select name="hazard" required></select></label>
+          <label><span>Operational situation</span><select name="situation" required></select></label>
+          <label><span>Linked safety goal</span><select name="safetyGoal"></select></label>
+          <label class="wide"><span>Malfunctioning behaviour</span><textarea name="malfunction" required placeholder="Describe the malfunctioning behaviour of the item"></textarea></label>
+          <label class="wide"><span>Potential harm or consequence</span><textarea name="consequence" required placeholder="Describe the potential harm in this operational situation"></textarea></label>
+          <label><span>Severity</span><select name="severity"><option value="S0">S0 · No injuries</option><option value="S1">S1 · Light and moderate injuries</option><option value="S2">S2 · Severe and life-threatening injuries</option><option value="S3">S3 · Life-threatening or fatal injuries</option></select></label>
+          <label><span>Exposure</span><select name="exposure"><option value="E0">E0 · Incredible</option><option value="E1">E1 · Very low probability</option><option value="E2">E2 · Low probability</option><option value="E3">E3 · Medium probability</option><option value="E4">E4 · High probability</option></select></label>
+          <label><span>Controllability</span><select name="controllability"><option value="C0">C0 · Controllable in general</option><option value="C1">C1 · Simply controllable</option><option value="C2">C2 · Normally controllable</option><option value="C3">C3 · Difficult or uncontrollable</option></select></label>
+          <div class="asil-preview"><span>Derived ASIL</span><strong id="asil-preview">QM</strong></div>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save hazardous event</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="goal-dialog">
+      <form method="dialog" id="goal-form">
+        <div class="dialog-header"><div><p class="eyebrow">ISO 26262 safety goal</p><h2 id="goal-dialog-title">Add safety goal</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="originalId" />
+        <div class="form-grid">
+          <label><span>Identifier</span><input name="id" required placeholder="e.g. SG-05" /></label>
+          <label><span>ASIL</span><select name="asil"><option>QM</option><option>ASIL A</option><option>ASIL B</option><option>ASIL C</option><option>ASIL D</option></select></label>
+          <label class="wide"><span>Safety goal</span><textarea name="text" required placeholder="Prevent or mitigate the hazardous behaviour..."></textarea></label>
+          <label><span>Safe state</span><input name="safeState" placeholder="e.g. Controlled stop" /></label>
+          <label><span>Fault tolerant time interval</span><input name="ftti" placeholder="e.g. 100 ms" /></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save safety goal</button></div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
