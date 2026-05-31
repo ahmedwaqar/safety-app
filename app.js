@@ -171,6 +171,13 @@ function createWorkspace(name, data = blankWorkspace()) {
   const workspace = { id: workspaceId(), name: requireValue(name, "Workspace name"), updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
   workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
 }
+function deleteActiveWorkspace() {
+  const workspace = activeWorkspace();
+  if (!confirm(`Delete workspace "${workspace.name}" from this browser? Save a project file first if you need to reopen it later.`)) return;
+  workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter(item => item.id !== workspace.id);
+  if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Untitled workspace", updatedAt: new Date().toISOString(), data: blankWorkspace() });
+  persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);
+}
 function projectEnvelope(workspace = activeWorkspace()) {
   return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { name: workspace.name, data: structuredClone(state) } };
 }
@@ -547,6 +554,7 @@ $("#save-workspace-btn").addEventListener("click", () => {
   setTimeout(() => { button.textContent = "Save workspace"; button.disabled = false; }, 1400);
 });
 $("#new-workspace-btn").addEventListener("click", () => { $("#workspace-form").reset(); $("#workspace-dialog").showModal(); });
+$("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#workspace-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
@@ -764,6 +772,7 @@ $("#render-btn").addEventListener("click", async () => {
   }
 });
 $("#export-btn").addEventListener("click", () => {
+  state.plantuml = $("#plantuml-source").value; persistState();
   const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
   const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.safeguard.json` });

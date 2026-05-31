@@ -110,6 +110,22 @@ try {
     assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === localStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save workspace did not preserve PlantUML editor text");
   });
 
+  await test("workspace manager deletes the active project and keeps a blank fallback", async () => {
+    await click("#new-workspace-btn");
+    await fill('#workspace-form [name="name"]', "Delete me");
+    await click("#workspace-dialog .dialog-actions .primary");
+    const before = await count("#workspace-select option");
+    await click("#delete-workspace-btn");
+    assert(await count("#workspace-select option") === before - 1, "workspace was not deleted");
+    assert(!await evaluate(`[...document.querySelectorAll("#workspace-select option")].some(option => option.textContent === "Delete me")`), "deleted workspace remains selectable");
+    await evaluate(`window.__workspaceSnapshot = structuredClone(workspaceRegistry); workspaceRegistry.workspaces = [activeWorkspace()]; persistRegistry();`);
+    await click("#delete-workspace-btn");
+    assert(await count("#workspace-select option") === 1, "deleting the final workspace did not create a blank fallback");
+    assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Untitled workspace", "blank fallback workspace is missing");
+    assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "blank fallback workspace contains architecture data");
+    await evaluate(`workspaceRegistry = structuredClone(window.__workspaceSnapshot); persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);`);
+  });
+
   await test("portable JSON workspace file opens as a new project", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {
@@ -511,10 +527,10 @@ try {
     assert(await count("#fmeda-body tr") === 3, "legacy workspace did not receive FMEDA data");
   });
 
-  await test("export button initiates JSON download", async () => {
+  await test("save project file initiates JSON download", async () => {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "export did not initiate expected portable JSON download");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save project file did not initiate expected portable JSON download");
     assert(await evaluate(`projectEnvelope().format`) === "safeguard-safety-workspace", "export envelope format is missing");
     assert(await evaluate(`projectEnvelope().version`) === 1, "export envelope version is missing");
   });

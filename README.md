@@ -20,7 +20,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
 | Custom FMEA templates | Add and remove organization-specific worksheet columns |
 | Safety requirements | Define mitigations, allocate them to architecture components, link source hazards, and track verification status |
-| Workspace data | Create and switch local projects, open or save portable JSON project files, and clear the active workspace |
+| Workspace data | Create, switch, and delete local projects; save or open portable project files on disk; and clear the active workspace |
 | Input guidance | Open contextual help for rating scales, failure-rate units, bounded fractions, FMEDA symbols, and project-file handling |
 
 ## Requirements
@@ -208,10 +208,11 @@ Safeguard supports multiple independent local workspaces. Use the top bar to:
 
 - Switch between saved browser workspaces
 - Select **Save workspace** to preserve the active project and current PlantUML editor text in browser storage
+- Select **Save project file** to download the active project to disk as `<workspace-name>.safeguard.json`
+- Select **Open project file** to reopen a previously saved project file as a new browser workspace
 - Select **New workspace** to create an independent blank project
+- Select **Delete workspace** to remove the active project from browser storage
 - Select **Reset workspace** to clear all data from only the active project
-- Select **Open JSON** to import a project file as a new local workspace
-- Select the download button to save the active project as `<workspace-name>.safeguard.json`
 - Select the **?** button to open input guidance
 
 Portable project files use a versioned JSON envelope:
@@ -255,7 +256,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, isolation, portable JSON import and export, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, custom columns, catalogue entries, requirements, safety goals, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, custom columns, catalogue entries, requirements, safety goals, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
 
 Compile-check the browser and server entry points:
 
