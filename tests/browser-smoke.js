@@ -83,8 +83,64 @@ try {
   await retry(async () => { assert(await count("#metrics .metric") === 4, "app did not render"); });
   await evaluate(`window.alert = message => window.__lastAlert = message; window.confirm = () => true;`);
 
+  await test("workspace manager creates, switches, and isolates local projects", async () => {
+    const original = await evaluate(`document.querySelector("#workspace-select").value`);
+    await click("#new-workspace-btn");
+    assert(await isOpen("#workspace-dialog"), "new-workspace dialog did not open");
+    await fill('#workspace-form [name="name"]', "Warehouse AMR project");
+    await click("#workspace-dialog .dialog-actions .primary");
+    assert(await count("#workspace-select option") === 2, "workspace was not created");
+    assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Warehouse AMR project", "new workspace did not become active");
+    assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "new workspace did not start with blank architecture");
+    assert(await count("#hazards-grid .catalog-card") === 0, "new workspace did not start with blank hazard catalogue");
+    await evaluate(`state.hazards.push({ id: "H-ISOLATED", name: "Isolated workspace hazard", category: "Operational", description: "Test-only project data" }); save();`);
+    await fill("#workspace-select", original);
+    assert(!await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-ISOLATED")`), "workspace state leaked into original project");
+    const second = await evaluate(`[...document.querySelectorAll("#workspace-select option")].find(x => x.textContent === "Warehouse AMR project").value`);
+    await fill("#workspace-select", second);
+    assert(await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-ISOLATED")`), "workspace switch did not restore project data");
+    await fill("#workspace-select", original);
+  });
+
+  await test("portable JSON workspace file opens as a new project", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`(() => {
+      const envelope = projectEnvelope();
+      envelope.workspace.name = "Imported AMR project";
+      envelope.workspace.data.hazards.push({ id: "H-IMPORTED", name: "Imported JSON hazard", category: "Operational", description: "Portable project test" });
+      const file = new File([JSON.stringify(envelope)], "imported.safeguard.json", { type: "application/json" });
+      const transfer = new DataTransfer(); transfer.items.add(file);
+      const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await retry(async () => { assert(await count("#workspace-select option") === before + 1, "JSON workspace was not imported"); });
+    assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Imported AMR project", "imported workspace did not become active");
+    assert(await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-IMPORTED")`), "imported workspace data is missing");
+  });
+
+  await test("portable JSON import rejects invalid typed values", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`(() => {
+      const envelope = projectEnvelope();
+      envelope.workspace.name = "Invalid imported project";
+      envelope.workspace.data.quantitative.components[0].diagnosticCoverage = 2;
+      const file = new File([JSON.stringify(envelope)], "invalid.safeguard.json", { type: "application/json" });
+      const transfer = new DataTransfer(); transfer.items.add(file);
+      const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await retry(async () => { assert(await evaluate(`window.__lastAlert.includes("Diagnostic coverage")`), "invalid JSON did not report diagnostic-coverage error"); });
+    assert(await count("#workspace-select option") === before, "invalid JSON workspace was imported");
+  });
+
+  await test("help option explains appropriate input values", async () => {
+    await click("#help-btn");
+    assert(await isOpen("#help-dialog"), "help dialog did not open");
+    assert(await evaluate(`document.querySelector("#help-dialog").textContent.includes("Fractions, diagnostic coverage, and beta factors")`), "numeric input guidance is missing");
+    await click("#help-dialog .dialog-actions .primary");
+    assert(!await isOpen("#help-dialog"), "help dialog did not close");
+  });
+
   await test("navigation buttons switch all application views", async () => {
-    for (const view of ["fmea", "hara", "sil", "hazards", "situations", "requirements", "architecture", "overview"]) {
+    for (const view of ["fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
     }
@@ -124,6 +180,18 @@ try {
     await fill("#fmea-search", "");
     await click("#fmea-body tr:last-child [data-delete-row]");
     assert(await count("#fmea-body tr") === before, "failure mode was not deleted");
+  });
+
+  await test("typed numeric validation rejects invalid FMEA values", async () => {
+    const before = await count("#fmea-body tr");
+    await click("[data-open-row]");
+    await fill('#row-form [name="failureMode"]', "Invalid rating test");
+    await fill('#row-form [name="effect"]', "Should not save");
+    await fill('#row-form [name="severity"]', "1.5");
+    await evaluate(`document.querySelector("#row-form").dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }))`);
+    assert(await count("#fmea-body tr") === before, "invalid decimal FMEA rating was saved");
+    assert(await evaluate(`window.__lastAlert.includes("Severity must be an integer")`), "invalid FMEA rating did not report a useful error");
+    await click("#row-dialog .dialog-close");
   });
 
   await test("custom template column add and remove buttons work", async () => {
@@ -308,6 +376,87 @@ try {
     await click("#sil-dialog .dialog-close");
   });
 
+  await test("quantitative safety calculator derives PFH and PFDavg", async () => {
+    await click('[data-view="quantitative"]');
+    await evaluate(`state.quantitative.components = []; save();`);
+    await click("#add-quant-component-btn");
+    assert(await isOpen("#quant-component-dialog"), "quantitative component dialog did not open");
+    await click("#quant-component-dialog .dialog-close");
+    assert(!await isOpen("#quant-component-dialog"), "quantitative component dialog close button failed");
+    await click("#add-quant-component-btn");
+    await fill('#quant-component-form [name="role"]', "Test obstacle detection");
+    await fill('#quant-component-form [name="lambdaTotal"]', "1e-6");
+    await fill('#quant-component-form [name="dangerousFraction"]', "0.5");
+    await fill('#quant-component-form [name="diagnosticCoverage"]', "0.8");
+    await fill('#quant-component-form [name="proofTestHours"]', "8760");
+    await click("#quant-component-dialog .dialog-actions .primary");
+    assert(await count("#quant-body tr") === 1, "quantitative component was not added");
+    assert(await evaluate(`document.querySelector("#quant-results").textContent.includes("1.00e-7")`), "PFH residual rate was not calculated");
+    await fill("#quant-mode", "low");
+    assert(await evaluate(`document.querySelector("#quant-results").textContent.includes("4.38e-4")`), "PFDavg was not calculated");
+    await click("#quant-body [data-edit-quant]");
+    await fill('#quant-component-form [name="channels"]', "2");
+    await fill('#quant-component-form [name="beta"]', "0.05");
+    await click("#quant-component-dialog .dialog-actions .primary");
+    assert(await evaluate(`document.querySelector("#quant-body").textContent.includes("β 0.05")`), "redundant channel beta factor was not displayed");
+    await click("#quant-body [data-delete-quant]");
+    assert(await count("#quant-body tr") === 0, "quantitative component was not deleted");
+  });
+
+  await test("quantitative safety guidance flags high-SIL architecture review", async () => {
+    await evaluate(`state.quantitative = structuredClone(seed.quantitative); save();`);
+    await evaluate(`state.quantitative.components.forEach(row => { row.lambdaTotal = 1e-9; }); save();`);
+    await fill("#quant-mode", "continuous");
+    await fill("#quant-target", "SIL 3");
+    await fill("#quant-architecture", "1oo1");
+    assert(await evaluate(`document.querySelector("#quant-guidance").textContent.includes("redundant-architecture review")`), "high-SIL redundancy guidance is missing");
+    await fill("#quant-architecture", "1oo2");
+    assert(!await evaluate(`document.querySelector("#quant-guidance").textContent.includes("needs an explicit redundant-architecture review")`), "redundant architecture selection did not update guidance");
+  });
+
+  await test("FMEDA evaluates symbolic rates and rolls up diagnostics", async () => {
+    await evaluate(`state.fmeda = structuredClone(seed.fmeda); save();`);
+    await click('[data-view="fmeda"]');
+    assert(await evaluate(`document.querySelector("#fmeda-summary").textContent.includes("8.00e-8")`), "seeded FMEDA λDU rollup is missing");
+    assert(await evaluate(`document.querySelector("#fmeda-summary").textContent.includes("90.0%")`), "seeded FMEDA diagnostic coverage is missing");
+    await click("#add-constant-btn");
+    assert(await isOpen("#constant-dialog"), "constant dialog did not open");
+    await fill('#constant-form [name="symbol"]', "lambda_brake");
+    await fill('#constant-form [name="value"]', "4e-7");
+    await fill('#constant-form [name="description"]', "Brake release failure rate");
+    await click("#constant-dialog .dialog-actions .primary");
+    assert(await evaluate(`document.querySelector("#constant-list").textContent.includes("lambda_brake")`), "symbolic constant was not added");
+    await click("#add-fmeda-btn");
+    assert(await isOpen("#fmeda-dialog"), "FMEDA dialog did not open");
+    await click("#fmeda-dialog .dialog-close");
+    assert(!await isOpen("#fmeda-dialog"), "FMEDA dialog close button failed");
+    await click("#add-fmeda-btn");
+    await fill('#fmeda-form [name="failureMode"]', "Brake does not release diagnostic stop");
+    await fill('#fmeda-form [name="localEffect"]', "Brake state mismatch");
+    await fill('#fmeda-form [name="endEffect"]', "AMR remains stopped");
+    await fill('#fmeda-form [name="classification"]', "safe");
+    await fill('#fmeda-form [name="expression"]', "lambda_brake * (1 + 0.5)");
+    assert(await evaluate(`document.querySelector("#expression-preview").textContent`) === "6.00e-7", "symbolic expression preview is incorrect");
+    await click("#fmeda-dialog .dialog-actions .primary");
+    assert(await count("#fmeda-body tr") === 4, "FMEDA row was not added");
+    await click("#fmeda-body tr:last-child [data-edit-fmeda]");
+    await fill('#fmeda-form [name="expression"]', "unknown_symbol * 2");
+    assert(await evaluate(`document.querySelector("#expression-preview").textContent`) === "Invalid", "unknown symbol was not rejected");
+    await fill('#fmeda-form [name="expression"]', "lambda_brake");
+    await click("#fmeda-dialog .dialog-actions .primary");
+    await click("#fmeda-body tr:last-child [data-delete-fmeda]");
+    assert(await count("#fmeda-body tr") === 3, "FMEDA row was not deleted");
+    await click('[data-delete-constant="lambda_brake"]');
+    assert(!await evaluate(`document.querySelector("#constant-list").textContent.includes("lambda_brake")`), "unused symbolic constant was not deleted");
+  });
+
+  await test("FMEDA λDU handoff updates quantitative safety", async () => {
+    await click("#sync-fmeda-btn");
+    await click('[data-view="quantitative"]');
+    assert(await evaluate(`document.querySelector("#quant-body").textContent.includes("SCAN")`), "FMEDA handoff did not preserve architecture component");
+    assert(await evaluate(`document.querySelector("#quant-body").textContent.includes("8.00e-8")`), "FMEDA handoff did not update scanner λDU rate");
+  });
+
   await test("PlantUML import updates referenced components", async () => {
     await click('[data-view="architecture"]');
     await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
@@ -323,24 +472,32 @@ try {
     assert(await evaluate(`document.querySelector("#diagram-preview img").alt`) === "Rendered PlantUML architecture diagram", "rendered diagram alt text is missing");
   });
 
-  await test("new analysis reset button restores seeded data", async () => {
+  await test("reset workspace clears all preloaded worksheet data", async () => {
     await click("#new-analysis-btn");
-    assert(await evaluate(`document.querySelector("#component-count").textContent`) === "7", "reset did not restore architecture");
+    assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "reset did not clear architecture components");
     await click('[data-view="fmea"]');
-    assert(await count("#fmea-body tr") === 4, "reset did not restore FMEA rows");
+    assert(await count("#fmea-body tr") === 0, "reset did not clear FMEA rows");
+    assert(await count("#hara-body tr") === 0, "reset did not clear HARA rows");
+    assert(await count("#sil-body tr") === 0, "reset did not clear SIL assessments");
+    assert(await count("#quant-body tr") === 0, "reset did not clear quantitative components");
+    assert(await count("#fmeda-body tr") === 0, "reset did not clear FMEDA rows");
   });
 
   await test("existing browser workspaces migrate to include new analysis data", async () => {
-    await evaluate(`(() => { const workspace = JSON.parse(localStorage.getItem("safeguard-cobot-workspace-v1")); delete workspace.hara; delete workspace.safetyGoals; delete workspace.silAssessments; localStorage.setItem("safeguard-cobot-workspace-v1", JSON.stringify(workspace)); location.reload(); })()`);
+    await evaluate(`(() => { const workspace = JSON.parse(localStorage.getItem("safeguard-cobot-workspace-v1")); delete workspace.hara; delete workspace.safetyGoals; delete workspace.silAssessments; delete workspace.quantitative; delete workspace.fmeda; localStorage.removeItem("safeguard-workspaces-v1"); localStorage.removeItem("safeguard-active-workspace-v1"); localStorage.setItem("safeguard-cobot-workspace-v1", JSON.stringify(workspace)); location.reload(); })()`);
     await retry(async () => { assert(await count("#hara-body tr") === 2, "legacy workspace did not receive HARA seed data"); });
     assert(await count("#goal-list .requirement") === 2, "legacy workspace did not receive safety goals");
     assert(await count("#sil-body tr") === 1, "legacy workspace did not receive AMR SIL assessment data");
+    assert(await count("#quant-body tr") === 3, "legacy workspace did not receive quantitative safety data");
+    assert(await count("#fmeda-body tr") === 3, "legacy workspace did not receive FMEDA data");
   });
 
   await test("export button initiates JSON download", async () => {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`window.__download`) === "safeguard-cobot-analysis.json", "export did not initiate expected download");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "export did not initiate expected portable JSON download");
+    assert(await evaluate(`projectEnvelope().format`) === "safeguard-safety-workspace", "export envelope format is missing");
+    assert(await evaluate(`projectEnvelope().version`) === 1, "export envelope version is missing");
   });
 
   assert(browserErrors.length === 0, `browser reported exceptions:\n${browserErrors.join("\n")}`);

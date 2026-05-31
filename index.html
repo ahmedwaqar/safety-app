@@ -22,6 +22,8 @@
         <button class="nav-item" data-view="situations"><span class="nav-icon">◎</span>Operational situations</button>
         <button class="nav-item" data-view="hazards"><span class="nav-icon">◇</span>Hazard catalogue</button>
         <button class="nav-item" data-view="sil"><span class="nav-icon">▱</span>AMR SIL assessment</button>
+        <button class="nav-item" data-view="quantitative"><span class="nav-icon">∑</span>Quantitative safety</button>
+        <button class="nav-item" data-view="fmeda"><span class="nav-icon">ƒ</span>FMEDA worksheet</button>
         <button class="nav-item" data-view="hara"><span class="nav-icon">△</span>ISO 26262 HARA</button>
         <button class="nav-item" data-view="fmea"><span class="nav-icon">≡</span>FMEA worksheet</button>
         <button class="nav-item" data-view="requirements"><span class="nav-icon">✓</span>Safety requirements</button>
@@ -39,8 +41,13 @@
           <h1 id="page-title">Overview</h1>
         </div>
         <div class="topbar-actions">
-          <button class="icon-btn" id="export-btn" title="Export workspace">⇩</button>
-          <button class="button secondary" id="new-analysis-btn">New analysis</button>
+          <select class="workspace-select" id="workspace-select" title="Switch workspace"></select>
+          <button class="button secondary" id="import-workspace-btn">Open JSON</button>
+          <input type="file" id="workspace-file-input" accept=".json,application/json" hidden />
+          <button class="icon-btn" id="export-btn" title="Save workspace JSON">⇩</button>
+          <button class="button secondary" id="new-workspace-btn">New workspace</button>
+          <button class="button secondary" id="new-analysis-btn">Reset workspace</button>
+          <button class="icon-btn" id="help-btn" title="Input guidance">?</button>
           <button class="button primary" data-open-row>Add FMEA row</button>
         </div>
       </header>
@@ -134,6 +141,51 @@
           <div class="table-scroll"><table class="hara-table"><thead><tr><th>Safety function</th><th>Hazard &amp; situation</th><th>Risk graph</th><th>Target SIL</th><th>Safe state</th><th>Validation evidence</th><th></th></tr></thead><tbody id="sil-body"></tbody></table></div>
         </div>
         <p class="standards-note">Use the result as a documented target estimate for engineering review. The final required integrity level and applicable standard set must be confirmed by a competent functional-safety practitioner for the specific AMR and operating zone.</p>
+      </section>
+
+      <section class="view" id="quantitative-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">IEC 61508-style early estimate</p><h2>Quantitative safety calculation</h2><p>Connect architecture components to a safety function, estimate residual dangerous failure rates, and compare PFH or PFDavg with the selected target SIL.</p></div>
+          <button class="button primary" id="add-quant-component-btn">Add component</button>
+        </div>
+        <section class="card quant-settings">
+          <div class="form-grid">
+            <label><span>Safety function</span><input id="quant-function" placeholder="e.g. Protective stop on obstacle detection" /></label>
+            <label><span>Target SIL</span><select id="quant-target"><option>SIL 1</option><option>SIL 2</option><option>SIL 3</option><option>SIL 4</option></select></label>
+            <label><span>Operating mode</span><select id="quant-mode"><option value="continuous">High-demand / continuous · PFH</option><option value="low">Low-demand · PFDavg</option></select></label>
+            <label><span>Architecture review</span><select id="quant-architecture"><option value="1oo1">1oo1 · Single channel</option><option value="1oo2">1oo2 · Redundant channels</option></select></label>
+          </div>
+        </section>
+        <div class="quant-result-grid" id="quant-results"></div>
+        <section class="card quant-guidance" id="quant-guidance"></section>
+        <div class="table-card">
+          <div class="table-meta"><span><strong id="quant-count">0</strong> architecture-linked components</span><span>Rates use failures per hour</span></div>
+          <div class="table-scroll"><table class="quant-table"><thead><tr><th>Component</th><th>λ total</th><th>Dangerous fraction</th><th>λ dangerous</th><th>Diagnostic coverage</th><th>λ residual dangerous</th><th>Proof test interval</th><th>Channels</th><th></th></tr></thead><tbody id="quant-body"></tbody></table></div>
+        </div>
+        <p class="standards-note">This is an early random-hardware estimate for architecture discussion. A real safety case also needs systematic-capability evidence, architectural constraints, hardware fault tolerance, safe failure fraction, common-cause analysis, independence arguments, mission-time assumptions, and validation by competent practitioners.</p>
+      </section>
+
+      <section class="view" id="fmeda-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Failure modes, effects &amp; diagnostic analysis</p><h2>FMEDA worksheet</h2><p>Model architecture-linked hardware failure modes with symbolic rate expressions. Roll up safe, detected dangerous, and undetected dangerous rates for early safety-function analysis.</p></div>
+          <div class="toolbar-actions"><button class="button secondary" id="sync-fmeda-btn">Sync λDU to quantitative safety</button><button class="button primary" id="add-fmeda-btn">Add failure mode</button></div>
+        </div>
+        <div class="fmeda-grid">
+          <section class="card">
+            <div class="card-header"><div><p class="eyebrow">Symbol table</p><h3>Named failure-rate constants</h3></div><button class="button secondary small" id="add-constant-btn">Add constant</button></div>
+            <div class="constant-list" id="constant-list"></div>
+            <p class="standards-note">Expressions accept named constants, numbers, parentheses, and the operators <code>+</code>, <code>-</code>, <code>*</code>, and <code>/</code>.</p>
+          </section>
+          <section class="card">
+            <div class="card-header"><div><p class="eyebrow">FMEDA rollup</p><h3>Random-hardware summary</h3></div><span class="count-badge" id="fmeda-count">0</span></div>
+            <div class="fmeda-summary" id="fmeda-summary"></div>
+          </section>
+        </div>
+        <div class="table-card">
+          <div class="table-meta"><span>Architecture-linked hardware failure modes</span><span>Rates use failures per hour</span></div>
+          <div class="table-scroll"><table class="fmeda-table"><thead><tr><th>Component</th><th>Failure mode</th><th>Local effect</th><th>End effect</th><th>Classification</th><th>Diagnostic measure</th><th>Rate expression</th><th>Evaluated λ</th><th></th></tr></thead><tbody id="fmeda-body"></tbody></table></div>
+        </div>
+        <p class="standards-note">This worksheet supports early FMEDA bookkeeping. Confirm source data, failure-mode distributions, diagnostic assumptions, dependent failures, mission profile, and architectural constraints with qualified practitioners and the applicable safety standards.</p>
       </section>
 
       <section class="view" id="situations-view">
@@ -288,6 +340,80 @@
           <label class="wide"><span>Validation evidence</span><input name="evidence" placeholder="e.g. Stopping-distance validation report" /></label>
         </div>
         <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save SIL assessment</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="quant-component-dialog">
+      <form method="dialog" id="quant-component-form">
+        <div class="dialog-header"><div><p class="eyebrow">Architecture-linked reliability input</p><h2 id="quant-component-title">Add component rate</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label><span>Architecture component</span><select name="component" required></select></label>
+          <label><span>Component role</span><input name="role" required placeholder="e.g. Obstacle detection" /></label>
+          <label><span>Total failure rate λ <small>1/h</small></span><input type="number" name="lambdaTotal" min="0" step="any" required placeholder="e.g. 1e-6" /></label>
+          <label><span>Dangerous failure fraction <small>0-1</small></span><input type="number" name="dangerousFraction" min="0" max="1" step="any" required placeholder="e.g. 0.4" /></label>
+          <label><span>Diagnostic coverage <small>0-1</small></span><input type="number" name="diagnosticCoverage" min="0" max="1" step="any" required placeholder="e.g. 0.9" /></label>
+          <label><span>Proof-test interval <small>hours</small></span><input type="number" name="proofTestHours" min="0" step="any" required placeholder="e.g. 8760" /></label>
+          <label><span>Channels</span><select name="channels"><option value="1">1 · Single channel</option><option value="2">2 · Redundant channels</option></select></label>
+          <label><span>Common-cause beta <small>0-1</small></span><input type="number" name="beta" min="0" max="1" step="any" value="0.05" required /></label>
+        </div>
+        <p class="dialog-copy">For two channels, the simplified estimate combines an independent dual-channel term with a beta-factor common-cause term. Confirm assumptions with a competent reliability engineer.</p>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save component rate</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="constant-dialog">
+      <form method="dialog" id="constant-form">
+        <div class="dialog-header"><div><p class="eyebrow">Symbolic calculation input</p><h2>Add failure-rate constant</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <div class="form-grid">
+          <label><span>Symbol</span><input name="symbol" required pattern="[A-Za-z_][A-Za-z0-9_]*" placeholder="e.g. lambda_sensor" /></label>
+          <label><span>Value <small>1/h</small></span><input type="number" name="value" min="0" step="any" required placeholder="e.g. 2e-6" /></label>
+          <label class="wide"><span>Description</span><input name="description" required placeholder="e.g. Safety scanner total failure rate" /></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save constant</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="fmeda-dialog">
+      <form method="dialog" id="fmeda-form">
+        <div class="dialog-header"><div><p class="eyebrow">Architecture-linked FMEDA entry</p><h2 id="fmeda-dialog-title">Add FMEDA failure mode</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label><span>Architecture component</span><select name="component" required></select></label>
+          <label><span>Classification</span><select name="classification"><option value="safe">Safe failure · λS</option><option value="dangerous_detected">Dangerous detected · λDD</option><option value="dangerous_undetected">Dangerous undetected · λDU</option><option value="no_effect">No effect · λNE</option></select></label>
+          <label class="wide"><span>Failure mode</span><input name="failureMode" required placeholder="e.g. Scanner output frozen clear" /></label>
+          <label><span>Local effect</span><input name="localEffect" required placeholder="Effect on the component" /></label>
+          <label><span>End effect</span><input name="endEffect" required placeholder="Effect on the safety function" /></label>
+          <label class="wide"><span>Diagnostic measure</span><input name="diagnostic" placeholder="e.g. Cross-check and timeout monitor" /></label>
+          <label class="wide"><span>Failure-rate expression <small>1/h</small></span><input name="expression" required placeholder="e.g. lambda_scanner * frac_dangerous * (1 - dc_scanner)" /></label>
+        </div>
+        <div class="expression-preview"><span>Evaluated rate</span><strong id="expression-preview">0.00e+0</strong></div>
+        <p class="dialog-copy" id="expression-error"></p>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save FMEDA row</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="workspace-dialog">
+      <form method="dialog" id="workspace-form">
+        <div class="dialog-header"><div><p class="eyebrow">Project workspace</p><h2>Create workspace</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <p class="dialog-copy">Create an independent blank project. Switch projects from the top bar and save portable JSON files for cross-platform sharing.</p>
+        <label><span>Workspace name</span><input name="name" required placeholder="e.g. Warehouse AMR safety case" /></label>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Create workspace</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="help-dialog">
+      <form method="dialog">
+        <div class="dialog-header"><div><p class="eyebrow">Input guidance</p><h2>Choosing appropriate values</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <div class="help-sections">
+          <section><h3>Start with architecture</h3><p>Import PlantUML components before creating component-linked FMEA, FMEDA, quantitative, or requirement records. Use stable aliases such as <code>SCAN</code> or <code>PLC</code>.</p></section>
+          <section><h3>FMEA ratings</h3><p>Severity, occurrence, and detection use integer values from <code>1</code> to <code>10</code>. Document your organization-specific rating scale and apply it consistently.</p></section>
+          <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
+          <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>
+          <section><h3>FMEDA symbols</h3><p>Use names such as <code>lambda_scanner</code>. Expressions accept constants, numbers, parentheses, and <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>.</p></section>
+          <section><h3>Portable JSON</h3><p>Use <strong>Open JSON</strong> and the download button to move complete projects between browsers and operating systems.</p></section>
+        </div>
+        <div class="dialog-actions"><button class="button primary" type="button" data-close-dialog>Close</button></div>
       </form>
     </dialog>
 

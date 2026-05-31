@@ -1,4 +1,8 @@
 const STORAGE_KEY = "safeguard-cobot-workspace-v1";
+const WORKSPACES_KEY = "safeguard-workspaces-v1";
+const ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
+const PROJECT_FORMAT = "safeguard-safety-workspace";
+const PROJECT_VERSION = 1;
 
 const seed = {
   plantuml: `@startuml
@@ -53,6 +57,30 @@ HMI --> CTRL : task selection
   silAssessments: [
     { id: crypto.randomUUID(), assessmentId: "SIL-01", safetyFunction: "Protective stop on obstacle detection", hazard: "H-03", situation: "OS-01", hazardousEvent: "The AMR continues moving after a person enters its travel path, creating a collision or crushing hazard.", consequence: "C3", frequency: "F2", avoidance: "P2", demand: "W3", safeState: "Controlled protective stop", evidence: "Stopping-distance and protective-field validation" }
   ],
+  quantitative: {
+    safetyFunction: "Protective stop on obstacle detection",
+    targetSil: "SIL 2",
+    mode: "continuous",
+    architecture: "1oo1",
+    components: [
+      { id: crypto.randomUUID(), component: "SCAN", role: "Obstacle detection", lambdaTotal: 2e-6, dangerousFraction: 0.4, diagnosticCoverage: 0.9, proofTestHours: 8760, channels: 1, beta: 0.05 },
+      { id: crypto.randomUUID(), component: "PLC", role: "Safety logic", lambdaTotal: 1e-6, dangerousFraction: 0.3, diagnosticCoverage: 0.95, proofTestHours: 8760, channels: 1, beta: 0.05 },
+      { id: crypto.randomUUID(), component: "CTRL", role: "Safe stop execution", lambdaTotal: 1.5e-6, dangerousFraction: 0.35, diagnosticCoverage: 0.9, proofTestHours: 8760, channels: 1, beta: 0.05 }
+    ]
+  },
+  fmeda: {
+    constants: [
+      { symbol: "lambda_scanner", value: 2e-6, description: "Safety scanner total failure rate" },
+      { symbol: "frac_safe", value: 0.35, description: "Scanner safe-failure fraction" },
+      { symbol: "frac_dangerous", value: 0.4, description: "Scanner dangerous-failure fraction" },
+      { symbol: "dc_scanner", value: 0.9, description: "Scanner diagnostic coverage" }
+    ],
+    rows: [
+      { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen occupied", localEffect: "Protective field reports an obstacle continuously", endEffect: "AMR enters a safe stop", classification: "safe", diagnostic: "Operator observation and scanner diagnostics", expression: "lambda_scanner * frac_safe" },
+      { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen clear detected by timeout", localEffect: "Protective-field intrusion may be missed until diagnostic response", endEffect: "Diagnostic initiates safe stop", classification: "dangerous_detected", diagnostic: "Cross-check and timeout monitor", expression: "lambda_scanner * frac_dangerous * dc_scanner" },
+      { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen clear not detected", localEffect: "Protective-field intrusion is not reported", endEffect: "Protective stop may fail on demand", classification: "dangerous_undetected", diagnostic: "Residual failure after scanner diagnostics", expression: "lambda_scanner * frac_dangerous * (1 - dc_scanner)" }
+    ]
+  },
   customColumns: [{ key: "owner", label: "Owner" }],
   fmea: [
     { id: crypto.randomUUID(), component: "SCAN", failureMode: "Protective field not detected", effect: "Robot continues moving while operator enters shared workspace", hazard: "H-03", situation: "OS-01", severity: 9, occurrence: 2, detection: 3, action: "Add cyclic diagnostic monitoring", custom: { owner: "Controls" } },
@@ -61,7 +89,15 @@ HMI --> CTRL : task selection
     { id: crypto.randomUUID(), component: "ESTOP", failureMode: "Emergency-stop contact fails open", effect: "Emergency stop demand does not reach safety PLC", hazard: "H-03", situation: "OS-03", severity: 9, occurrence: 1, detection: 2, action: "Use dual-channel monitored circuit", custom: { owner: "Electrical" } }
   ]
 };
+function blankWorkspace() {
+  return {
+    plantuml: "@startuml\n@enduml", components: [], hazards: [], situations: [], requirements: [], safetyGoals: [], hara: [], silAssessments: [],
+    quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
+    fmeda: { constants: [], rows: [] }, customColumns: [], fmea: []
+  };
+}
 
+let workspaceRegistry;
 let state = load();
 let diagramUrl;
 const $ = (selector, parent = document) => parent.querySelector(selector);
@@ -72,15 +108,79 @@ const rpn = row => Number(row.severity) * Number(row.occurrence) * Number(row.de
 const riskClass = score => score >= 100 ? "high" : score >= 40 ? "medium" : "low";
 const asilClass = asil => `asil-${asil.replace("ASIL ", "").toLowerCase()}`;
 
-function load() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  const workspace = saved ? JSON.parse(saved) : structuredClone(seed);
-  workspace.hara ??= structuredClone(seed.hara);
-  workspace.safetyGoals ??= structuredClone(seed.safetyGoals);
-  workspace.silAssessments ??= structuredClone(seed.silAssessments);
+function migrateWorkspace(workspace, defaults = blankWorkspace()) {
+  for (const [key, value] of Object.entries(defaults)) workspace[key] ??= structuredClone(value);
   return workspace;
 }
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll(); }
+function validateNumber(value, label, { min = -Infinity, max = Infinity, integer = false } = {}) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max || (integer && !Number.isInteger(number))) throw new Error(`${label} must be ${integer ? "an integer " : ""}between ${min} and ${max}.`);
+  return number;
+}
+function requireValue(value, label) { const text = String(value ?? "").trim(); if (!text) throw new Error(`${label} is required.`); return text; }
+function requireIdentifier(value, label) { const text = requireValue(value, label); if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(text)) throw new Error(`${label} must start with a letter and use only letters, numbers, ".", "_" or "-".`); return text; }
+function requireSymbol(value, label) { const text = requireValue(value, label); if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(text)) throw new Error(`${label} must use letters, numbers, or "_" and cannot start with a number.`); return text; }
+function requireEnum(value, label, allowed) { if (!allowed.includes(value)) throw new Error(`${label} must be one of: ${allowed.join(", ")}.`); return value; }
+function validateWorkspaceData(data) {
+  if (!data || typeof data !== "object") throw new Error("Workspace data must be a JSON object.");
+  for (const key of ["components", "hazards", "situations", "requirements", "safetyGoals", "hara", "silAssessments", "fmea"]) if (data[key] !== undefined && !Array.isArray(data[key])) throw new Error(`Workspace field "${key}" must be an array.`);
+  if (data.quantitative !== undefined && (!data.quantitative || typeof data.quantitative !== "object" || !Array.isArray(data.quantitative.components))) throw new Error('Workspace field "quantitative.components" must be an array.');
+  if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows))) throw new Error('Workspace FMEDA fields must be arrays.');
+  data.components?.forEach(item => requireIdentifier(item.id, "Component identifier"));
+  data.hazards?.forEach(item => requireIdentifier(item.id, "Hazard identifier"));
+  data.situations?.forEach(item => requireIdentifier(item.id, "Situation identifier"));
+  data.fmea?.forEach(row => { validateNumber(row.severity, "FMEA severity", { min: 1, max: 10, integer: true }); validateNumber(row.occurrence, "FMEA occurrence", { min: 1, max: 10, integer: true }); validateNumber(row.detection, "FMEA detection", { min: 1, max: 10, integer: true }); });
+  data.hara?.forEach(row => { requireEnum(row.severity, "HARA severity", ["S0", "S1", "S2", "S3"]); requireEnum(row.exposure, "HARA exposure", ["E0", "E1", "E2", "E3", "E4"]); requireEnum(row.controllability, "HARA controllability", ["C0", "C1", "C2", "C3"]); });
+  data.silAssessments?.forEach(row => { requireEnum(row.consequence, "SIL consequence", ["C1", "C2", "C3", "C4"]); requireEnum(row.frequency, "SIL frequency", ["F1", "F2"]); requireEnum(row.avoidance, "SIL avoidance", ["P1", "P2"]); requireEnum(row.demand, "SIL demand", ["W1", "W2", "W3"]); });
+  if (data.quantitative) { requireEnum(data.quantitative.targetSil, "Target SIL", ["SIL 1", "SIL 2", "SIL 3", "SIL 4"]); requireEnum(data.quantitative.mode, "Quantitative mode", ["continuous", "low"]); requireEnum(data.quantitative.architecture, "Quantitative architecture", ["1oo1", "1oo2"]); }
+  data.quantitative?.components?.forEach(row => { validateNumber(row.lambdaTotal, "Total failure rate", { min: 0 }); validateNumber(row.dangerousFraction, "Dangerous fraction", { min: 0, max: 1 }); validateNumber(row.diagnosticCoverage, "Diagnostic coverage", { min: 0, max: 1 }); validateNumber(row.proofTestHours, "Proof-test interval", { min: Number.EPSILON }); validateNumber(row.channels, "Channels", { min: 1, max: 2, integer: true }); validateNumber(row.beta, "Common-cause beta", { min: 0, max: 1 }); });
+  data.fmeda?.constants?.forEach(item => { requireSymbol(item.symbol, "FMEDA symbol"); validateNumber(item.value, "FMEDA constant", { min: 0 }); });
+  data.fmeda?.rows?.forEach(row => requireEnum(row.classification, "FMEDA classification", ["safe", "dangerous_detected", "dangerous_undetected", "no_effect"]));
+  return migrateWorkspace(data);
+}
+function handleFormError(error) { alert(error.message); }
+function workspaceId() { return `workspace-${crypto.randomUUID()}`; }
+function load() {
+  const storedRegistry = localStorage.getItem(WORKSPACES_KEY);
+  workspaceRegistry = storedRegistry ? JSON.parse(storedRegistry) : { version: PROJECT_VERSION, workspaces: [] };
+  if (!workspaceRegistry.workspaces.length) {
+    const legacy = localStorage.getItem(STORAGE_KEY);
+    workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Cobot safety case", updatedAt: new Date().toISOString(), data: migrateWorkspace(legacy ? JSON.parse(legacy) : structuredClone(seed), seed) });
+  }
+  let activeId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+  if (!workspaceRegistry.workspaces.some(workspace => workspace.id === activeId)) activeId = workspaceRegistry.workspaces[0].id;
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, activeId);
+  persistRegistry();
+  return migrateWorkspace(structuredClone(activeWorkspace().data));
+}
+function activeWorkspace() {
+  const activeId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+  return workspaceRegistry.workspaces.find(workspace => workspace.id === activeId) || workspaceRegistry.workspaces[0];
+}
+function persistRegistry() { localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaceRegistry)); }
+function persistState() {
+  const workspace = activeWorkspace(); workspace.data = structuredClone(state); workspace.updatedAt = new Date().toISOString();
+  persistRegistry(); localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function save() { persistState(); renderAll(); }
+function switchWorkspace(id) {
+  if (!workspaceRegistry.workspaces.some(workspace => workspace.id === id)) return;
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, id); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
+}
+function createWorkspace(name, data = blankWorkspace()) {
+  const workspace = { id: workspaceId(), name: requireValue(name, "Workspace name"), updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
+  workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
+}
+function projectEnvelope(workspace = activeWorkspace()) {
+  return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { name: workspace.name, data: structuredClone(state) } };
+}
+function parseProject(text) {
+  const parsed = JSON.parse(text);
+  const data = parsed.format === PROJECT_FORMAT ? parsed.workspace?.data : parsed;
+  const name = parsed.format === PROJECT_FORMAT ? parsed.workspace?.name : "Imported safety workspace";
+  if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Safeguard workspace.");
+  return { name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
+}
 function options(items, selected = "", optional = false) {
   return `${optional ? '<option value="">Not linked</option>' : ""}${items.map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.id)} · ${esc(x.name)}</option>`).join("")}`;
 }
@@ -101,13 +201,72 @@ function deriveSil(consequence, frequency, avoidance, demand) {
   return level ? `SIL ${level}` : "No SIL";
 }
 function silClass(sil) { return sil === "No SIL" ? "asil-qm" : `sil-${sil.slice(-1)}`; }
+const silBands = {
+  continuous: { "SIL 1": [1e-6, 1e-5], "SIL 2": [1e-7, 1e-6], "SIL 3": [1e-8, 1e-7], "SIL 4": [1e-9, 1e-8] },
+  low: { "SIL 1": [1e-2, 1e-1], "SIL 2": [1e-3, 1e-2], "SIL 3": [1e-4, 1e-3], "SIL 4": [1e-5, 1e-4] }
+};
+function componentRates(row) {
+  const lambdaDangerous = Number(row.lambdaTotal) * Number(row.dangerousFraction);
+  const singleResidual = lambdaDangerous * (1 - Number(row.diagnosticCoverage));
+  const beta = Number(row.beta);
+  const residualDangerous = Number(row.channels) === 2 ? beta * singleResidual + (1 - beta) * singleResidual * singleResidual * 24 : singleResidual;
+  return { lambdaDangerous, residualDangerous, pfdavg: residualDangerous * Number(row.proofTestHours) / 2 };
+}
+function quantitativeTotals() {
+  return state.quantitative.components.reduce((total, row) => {
+    const rates = componentRates(row);
+    total.lambdaTotal += Number(row.lambdaTotal); total.lambdaDangerous += rates.lambdaDangerous; total.residualDangerous += rates.residualDangerous; total.pfdavg += rates.pfdavg;
+    return total;
+  }, { lambdaTotal: 0, lambdaDangerous: 0, residualDangerous: 0, pfdavg: 0 });
+}
+function scientific(value) { return Number(value).toExponential(2); }
+function quantitativeValue(totals = quantitativeTotals()) { return state.quantitative.mode === "low" ? totals.pfdavg : totals.residualDangerous; }
+function quantitativeMeetsTarget(value = quantitativeValue()) {
+  const band = silBands[state.quantitative.mode][state.quantitative.targetSil];
+  return value < band[1];
+}
+function evaluateExpression(expression) {
+  const symbols = Object.fromEntries(state.fmeda.constants.map(item => [item.symbol, Number(item.value)]));
+  const tokens = expression.match(/[A-Za-z_][A-Za-z0-9_]*|(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|[()+\-*/]/gi) || [];
+  if (tokens.join("").toLowerCase() !== expression.replace(/\s+/g, "").toLowerCase()) throw new Error("Expression contains unsupported characters.");
+  let index = 0;
+  function parseExpression() {
+    let value = parseTerm();
+    while (tokens[index] === "+" || tokens[index] === "-") { const operator = tokens[index++]; const right = parseTerm(); value = operator === "+" ? value + right : value - right; }
+    return value;
+  }
+  function parseTerm() {
+    let value = parseFactor();
+    while (tokens[index] === "*" || tokens[index] === "/") { const operator = tokens[index++]; const right = parseFactor(); if (operator === "/" && right === 0) throw new Error("Division by zero is not allowed."); value = operator === "*" ? value * right : value / right; }
+    return value;
+  }
+  function parseFactor() {
+    const token = tokens[index++];
+    if (token === "-") return -parseFactor();
+    if (token === "(") { const value = parseExpression(); if (tokens[index++] !== ")") throw new Error("Missing closing parenthesis."); return value; }
+    if (/^(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(token || "")) return Number(token);
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token || "")) { if (!(token in symbols)) throw new Error(`Unknown symbol: ${token}`); return symbols[token]; }
+    throw new Error("Expected a number, symbol, or parenthesis.");
+  }
+  const result = parseExpression();
+  if (index !== tokens.length) throw new Error("Expression could not be fully parsed.");
+  if (!Number.isFinite(result) || result < 0) throw new Error("Expression must evaluate to a non-negative finite rate.");
+  return result;
+}
+function fmedaTotals() {
+  const totals = { safe: 0, dangerous_detected: 0, dangerous_undetected: 0, no_effect: 0, total: 0 };
+  state.fmeda.rows.forEach(row => { const rate = evaluateExpression(row.expression); totals[row.classification] += rate; totals.total += rate; });
+  totals.diagnosticCoverage = totals.dangerous_detected + totals.dangerous_undetected ? totals.dangerous_detected / (totals.dangerous_detected + totals.dangerous_undetected) : 0;
+  totals.safeFailureFraction = totals.total ? (totals.safe + totals.dangerous_detected) / totals.total : 0;
+  return totals;
+}
 function goalBy(id) { return state.safetyGoals.find(goal => goal.id === id); }
 
 function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = ({ fmea: "FMEA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#page-title").textContent = ({ fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
 }
 
 function renderMetrics() {
@@ -172,6 +331,43 @@ function renderSil() {
   }).join("");
 }
 
+function renderQuantitative() {
+  const quant = state.quantitative; const totals = quantitativeTotals(); const result = quantitativeValue(totals); const band = silBands[quant.mode][quant.targetSil]; const meets = quantitativeMeetsTarget(result);
+  $("#quant-function").value = quant.safetyFunction; $("#quant-target").value = quant.targetSil; $("#quant-mode").value = quant.mode; $("#quant-architecture").value = quant.architecture;
+  $("#quant-count").textContent = quant.components.length;
+  $("#quant-results").innerHTML = [
+    ["λ total", scientific(totals.lambdaTotal), "Combined random failure rate / h"],
+    ["λ dangerous", scientific(totals.lambdaDangerous), "Before diagnostic coverage / h"],
+    ["λ residual dangerous", scientific(totals.residualDangerous), "Residual dangerous failure rate / h"],
+    [quant.mode === "low" ? "PFDavg" : "PFH", scientific(result), quant.mode === "low" ? "Average probability of failure on demand" : "Probability of dangerous failure per hour"]
+  ].map(([label, value, note]) => `<div class="quant-result"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`).join("");
+  const highIntegrity = Number(quant.targetSil.slice(-1)) >= 3;
+  const redundant = quant.architecture === "1oo2" || quant.components.some(row => Number(row.channels) === 2);
+  const recommendation = !meets ? "The random-hardware estimate does not meet the selected target band. Review diagnostics, component rates, proof-test interval, and redundant architecture options." : highIntegrity && !redundant ? "The numerical estimate is within the selected band, but the high target SIL needs an explicit redundant-architecture review. Evaluate hardware fault tolerance, safe failure fraction, independence, and common-cause failures." : "The numerical estimate is within the selected target band. Continue with architectural constraints, common-cause analysis, systematic capability, and validation evidence.";
+  $("#quant-guidance").innerHTML = `<div class="card-header"><div><p class="eyebrow">Architecture guidance</p><h3>${meets ? "Target band check passed" : "Target band check needs attention"}</h3></div><span class="status ${meets ? "verified" : "draft"}">${esc(quant.targetSil)}</span></div><p>${esc(recommendation)}</p><span class="requirement-meta">Selected band: ${scientific(band[0])} ≤ ${quant.mode === "low" ? "PFDavg" : "PFH"} &lt; ${scientific(band[1])} · Architecture: ${esc(quant.architecture)}</span>`;
+  $("#quant-body").innerHTML = quant.components.map(row => {
+    const rates = componentRates(row);
+    return `<tr><td><strong>${esc(row.component)} · ${esc(named("components", row.component))}</strong><span class="subtext">${esc(row.role)}</span></td><td>${scientific(row.lambdaTotal)}</td><td>${Number(row.dangerousFraction).toFixed(2)}</td><td>${scientific(rates.lambdaDangerous)}</td><td>${(Number(row.diagnosticCoverage) * 100).toFixed(1)}%</td><td>${scientific(rates.residualDangerous)}</td><td>${Number(row.proofTestHours).toLocaleString()} h</td><td>${Number(row.channels) === 2 ? `2 · β ${Number(row.beta).toFixed(2)}` : "1"}</td><td><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-quant="${row.id}">✎</button><button class="mini-btn" title="Delete" data-delete-quant="${row.id}">×</button></div></td></tr>`;
+  }).join("");
+}
+
+function renderFmeda() {
+  const labels = { safe: "Safe · λS", dangerous_detected: "Dangerous detected · λDD", dangerous_undetected: "Dangerous undetected · λDU", no_effect: "No effect · λNE" };
+  $("#constant-list").innerHTML = state.fmeda.constants.map(item => `<div class="constant-entry"><div><strong>${esc(item.symbol)}</strong><span>${esc(item.description)}</span></div><code>${scientific(item.value)}</code><button class="mini-btn" title="Delete" data-delete-constant="${esc(item.symbol)}">×</button></div>`).join("");
+  let totals;
+  try { totals = fmedaTotals(); } catch (error) { totals = { safe: 0, dangerous_detected: 0, dangerous_undetected: 0, total: 0, diagnosticCoverage: 0, safeFailureFraction: 0 }; }
+  $("#fmeda-count").textContent = state.fmeda.rows.length;
+  $("#fmeda-summary").innerHTML = [
+    ["λS", scientific(totals.safe), "Safe failures / h"], ["λDD", scientific(totals.dangerous_detected), "Detected dangerous / h"], ["λDU", scientific(totals.dangerous_undetected), "Undetected dangerous / h"],
+    ["DC", `${(totals.diagnosticCoverage * 100).toFixed(1)}%`, "Dangerous detected / dangerous total"], ["SFF", `${(totals.safeFailureFraction * 100).toFixed(1)}%`, "(λS + λDD) / λ total"]
+  ].map(([label, value, note]) => `<div class="fmeda-summary-row"><span>${label}</span><strong>${value}</strong><small>${note}</small></div>`).join("");
+  $("#fmeda-body").innerHTML = state.fmeda.rows.map(row => {
+    let value; let error = "";
+    try { value = scientific(evaluateExpression(row.expression)); } catch (issue) { value = "Invalid"; error = issue.message; }
+    return `<tr><td><strong>${esc(row.component)} · ${esc(named("components", row.component))}</strong></td><td>${esc(row.failureMode)}</td><td>${esc(row.localEffect)}</td><td>${esc(row.endEffect)}</td><td><span class="category">${esc(labels[row.classification])}</span></td><td>${esc(row.diagnostic || "—")}</td><td><code>${esc(row.expression)}</code>${error ? `<span class="subtext">${esc(error)}</span>` : ""}</td><td><strong>${esc(value)}</strong></td><td><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-fmeda="${row.id}">✎</button><button class="mini-btn" title="Delete" data-delete-fmeda="${row.id}">×</button></div></td></tr>`;
+  }).join("");
+}
+
 function renderHara() {
   $("#hara-count").textContent = state.hara.length;
   $("#hara-summary").innerHTML = ["QM", "ASIL A", "ASIL B", "ASIL C", "ASIL D"].map(asil => `<div class="hara-stat"><strong>${state.hara.filter(row => deriveAsil(row.severity, row.exposure, row.controllability) === asil).length}</strong><span>${asil} events</span></div>`).join("");
@@ -204,7 +400,11 @@ function renderArchitecture() {
   $("#component-count").textContent = state.components.length;
   $("#component-list").innerHTML = state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
 }
-function renderAll() { renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderArchitecture(); }
+function renderWorkspaceControls() {
+  const active = activeWorkspace();
+  $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
+}
+function renderAll() { renderWorkspaceControls(); renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
 
 function fillRowForm(row = {}) {
   const form = $("#row-form");
@@ -263,8 +463,40 @@ function updateSilPreview() {
   const form = $("#sil-form");
   $("#sil-preview").textContent = deriveSil(form.elements.consequence.value, form.elements.frequency.value, form.elements.avoidance.value, form.elements.demand.value);
 }
+function fillQuantitativeForm(row = {}) {
+  const form = $("#quant-component-form"); form.reset();
+  $("#quant-component-title").textContent = row.id ? "Edit component rate" : "Add component rate";
+  form.elements.id.value = row.id || ""; form.elements.component.innerHTML = options(state.components, row.component);
+  ["role", "lambdaTotal", "dangerousFraction", "diagnosticCoverage", "proofTestHours", "channels", "beta"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
+  $("#quant-component-dialog").showModal();
+}
+function fillFmedaForm(row = {}) {
+  const form = $("#fmeda-form"); form.reset();
+  $("#fmeda-dialog-title").textContent = row.id ? "Edit FMEDA failure mode" : "Add FMEDA failure mode";
+  form.elements.id.value = row.id || ""; form.elements.component.innerHTML = options(state.components, row.component);
+  ["failureMode", "localEffect", "endEffect", "classification", "diagnostic", "expression"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
+  updateExpressionPreview(); $("#fmeda-dialog").showModal();
+}
+function updateExpressionPreview() {
+  try { $("#expression-preview").textContent = scientific(evaluateExpression($("#fmeda-form").elements.expression.value)); $("#expression-error").textContent = ""; }
+  catch (error) { $("#expression-preview").textContent = "Invalid"; $("#expression-error").textContent = error.message; }
+}
 
 $("#main-nav").addEventListener("click", event => { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); });
+$("#workspace-select").addEventListener("change", event => switchWorkspace(event.target.value));
+$("#new-workspace-btn").addEventListener("click", () => { $("#workspace-form").reset(); $("#workspace-dialog").showModal(); });
+$("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
+$("#workspace-form").addEventListener("submit", event => {
+  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { createWorkspace(data.name); $("#workspace-dialog").close(); } catch (error) { handleFormError(error); }
+});
+$("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
+$("#workspace-file-input").addEventListener("change", async event => {
+  const file = event.target.files[0]; if (!file) return;
+  try { const project = parseProject(await file.text()); createWorkspace(project.name, project.data); alert(`Workspace "${project.name}" opened.`); }
+  catch (error) { alert(error.message); }
+  finally { event.target.value = ""; }
+});
 document.addEventListener("click", event => {
   const close = event.target.closest("[data-close-dialog]"); if (close) close.closest("dialog").close();
   const go = event.target.closest("[data-go]"); if (go) showView(go.dataset.go);
@@ -291,14 +523,24 @@ document.addEventListener("click", event => {
   }
   const editSil = event.target.closest("[data-edit-sil]"); if (editSil) fillSilForm(state.silAssessments.find(x => x.id === editSil.dataset.editSil));
   const removeSil = event.target.closest("[data-delete-sil]"); if (removeSil && confirm("Delete this SIL assessment?")) { state.silAssessments = state.silAssessments.filter(x => x.id !== removeSil.dataset.deleteSil); save(); }
+  const editQuant = event.target.closest("[data-edit-quant]"); if (editQuant) fillQuantitativeForm(state.quantitative.components.find(x => x.id === editQuant.dataset.editQuant));
+  const removeQuant = event.target.closest("[data-delete-quant]"); if (removeQuant && confirm("Delete this component rate?")) { state.quantitative.components = state.quantitative.components.filter(x => x.id !== removeQuant.dataset.deleteQuant); save(); }
+  const editFmeda = event.target.closest("[data-edit-fmeda]"); if (editFmeda) fillFmedaForm(state.fmeda.rows.find(x => x.id === editFmeda.dataset.editFmeda));
+  const removeFmeda = event.target.closest("[data-delete-fmeda]"); if (removeFmeda && confirm("Delete this FMEDA row?")) { state.fmeda.rows = state.fmeda.rows.filter(x => x.id !== removeFmeda.dataset.deleteFmeda); save(); }
+  const removeConstant = event.target.closest("[data-delete-constant]");
+  if (removeConstant) {
+    const symbol = removeConstant.dataset.deleteConstant; const used = state.fmeda.rows.some(row => new RegExp(`\\b${symbol}\\b`).test(row.expression));
+    if (used) alert("This constant is referenced by an FMEDA expression and cannot be deleted."); else if (confirm("Delete this constant?")) { state.fmeda.constants = state.fmeda.constants.filter(item => item.symbol !== symbol); save(); }
+  }
 });
 
 $("#row-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#row-dialog").close(); return; }
   const data = Object.fromEntries(new FormData(event.target));
+  let row;
+  try { row = { id: data.id || crypto.randomUUID(), component: requireValue(data.component, "Component"), failureMode: requireValue(data.failureMode, "Failure mode"), effect: requireValue(data.effect, "Potential effect"), hazard: data.hazard, situation: data.situation, severity: validateNumber(data.severity, "Severity", { min: 1, max: 10, integer: true }), occurrence: validateNumber(data.occurrence, "Occurrence", { min: 1, max: 10, integer: true }), detection: validateNumber(data.detection, "Detection", { min: 1, max: 10, integer: true }), action: data.action, custom: {} }; } catch (error) { return handleFormError(error); }
   const existing = state.fmea.find(x => x.id === data.id);
-  const row = { id: data.id || crypto.randomUUID(), component: data.component, failureMode: data.failureMode, effect: data.effect, hazard: data.hazard, situation: data.situation, severity: Number(data.severity), occurrence: Number(data.occurrence), detection: Number(data.detection), action: data.action, custom: {} };
   state.customColumns.forEach(x => row.custom[x.key] = data[`custom_${x.key}`] || "");
   if (existing) Object.assign(existing, row); else state.fmea.push(row);
   $("#row-dialog").close(); save();
@@ -307,8 +549,10 @@ $("#catalog-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#catalog-dialog").close(); return; }
   const data = Object.fromEntries(new FormData(event.target)); const group = data.catalog;
-  if (state[group].some(x => x.id === data.id)) return alert("That identifier already exists.");
-  state[group].push({ id: data.id, name: data.name, description: data.description, category: group === "hazards" ? data.category : "Operational context" });
+  let id, name, description;
+  try { id = requireIdentifier(data.id, "Identifier"); name = requireValue(data.name, "Name"); description = requireValue(data.description, "Description"); } catch (error) { return handleFormError(error); }
+  if (state[group].some(x => x.id === id)) return alert("That identifier already exists.");
+  state[group].push({ id, name, description, category: group === "hazards" ? data.category : "Operational context" });
   $("#catalog-dialog").close(); save();
 });
 $("#add-requirement-btn").addEventListener("click", () => {
@@ -320,6 +564,7 @@ $("#requirement-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#requirement-dialog").close(); return; }
   const data = Object.fromEntries(new FormData(event.target));
+  try { data.id = requireIdentifier(data.id, "Requirement identifier"); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
   if (state.requirements.some(x => x.id === data.id)) return alert("That identifier already exists.");
   state.requirements.push(data); $("#requirement-dialog").close(); save();
 });
@@ -336,6 +581,7 @@ $("#add-goal-btn").addEventListener("click", () => fillGoalForm());
 $("#hara-form").addEventListener("change", updateAsilPreview);
 $("#hara-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { data.eventId = requireIdentifier(data.eventId, "Hazardous-event identifier"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.malfunction = requireValue(data.malfunction, "Malfunctioning behaviour"); data.consequence = requireValue(data.consequence, "Consequence"); } catch (error) { return handleFormError(error); }
   if (state.hara.some(row => row.eventId === data.eventId && row.id !== data.id)) return alert("That hazardous-event identifier already exists.");
   const existing = state.hara.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), eventId: data.eventId, hazard: data.hazard, situation: data.situation, malfunction: data.malfunction, consequence: data.consequence, severity: data.severity, exposure: data.exposure, controllability: data.controllability, safetyGoal: data.safetyGoal };
@@ -344,6 +590,7 @@ $("#hara-form").addEventListener("submit", event => {
 });
 $("#goal-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { data.id = requireIdentifier(data.id, "Safety-goal identifier"); data.text = requireValue(data.text, "Safety goal"); } catch (error) { return handleFormError(error); }
   if (state.safetyGoals.some(goal => goal.id === data.id && goal.id !== data.originalId)) return alert("That safety-goal identifier already exists.");
   const existing = goalBy(data.originalId);
   const goal = { id: data.id, text: data.text, asil: data.asil, safeState: data.safeState, ftti: data.ftti };
@@ -357,11 +604,53 @@ $("#add-sil-btn").addEventListener("click", () => fillSilForm());
 $("#sil-form").addEventListener("change", updateSilPreview);
 $("#sil-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { data.assessmentId = requireIdentifier(data.assessmentId, "SIL-assessment identifier"); data.safetyFunction = requireValue(data.safetyFunction, "Safety function"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.hazardousEvent = requireValue(data.hazardousEvent, "Hazardous event"); } catch (error) { return handleFormError(error); }
   if (state.silAssessments.some(row => row.assessmentId === data.assessmentId && row.id !== data.id)) return alert("That SIL-assessment identifier already exists.");
   const existing = state.silAssessments.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), assessmentId: data.assessmentId, safetyFunction: data.safetyFunction, hazard: data.hazard, situation: data.situation, hazardousEvent: data.hazardousEvent, consequence: data.consequence, frequency: data.frequency, avoidance: data.avoidance, demand: data.demand, safeState: data.safeState, evidence: data.evidence };
   if (existing) Object.assign(existing, row); else state.silAssessments.push(row);
   $("#sil-dialog").close(); save();
+});
+$("#add-quant-component-btn").addEventListener("click", () => fillQuantitativeForm());
+["quant-function", "quant-target", "quant-mode", "quant-architecture"].forEach(id => $(`#${id}`).addEventListener("change", event => {
+  const keys = { "quant-function": "safetyFunction", "quant-target": "targetSil", "quant-mode": "mode", "quant-architecture": "architecture" };
+  state.quantitative[keys[id]] = event.target.value; save();
+}));
+$("#quant-function").addEventListener("input", event => { state.quantitative.safetyFunction = event.target.value; persistState(); });
+$("#quant-component-form").addEventListener("submit", event => {
+  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  const existing = state.quantitative.components.find(row => row.id === data.id);
+  let row;
+  try { row = { id: data.id || crypto.randomUUID(), component: requireValue(data.component, "Architecture component"), role: requireValue(data.role, "Component role"), lambdaTotal: validateNumber(data.lambdaTotal, "Total failure rate", { min: 0 }), dangerousFraction: validateNumber(data.dangerousFraction, "Dangerous fraction", { min: 0, max: 1 }), diagnosticCoverage: validateNumber(data.diagnosticCoverage, "Diagnostic coverage", { min: 0, max: 1 }), proofTestHours: validateNumber(data.proofTestHours, "Proof-test interval", { min: Number.EPSILON }), channels: validateNumber(data.channels, "Channels", { min: 1, max: 2, integer: true }), beta: validateNumber(data.beta, "Common-cause beta", { min: 0, max: 1 }) }; } catch (error) { return handleFormError(error); }
+  if (existing) Object.assign(existing, row); else state.quantitative.components.push(row);
+  $("#quant-component-dialog").close(); save();
+});
+$("#add-constant-btn").addEventListener("click", () => { $("#constant-form").reset(); $("#constant-dialog").showModal(); });
+$("#constant-form").addEventListener("submit", event => {
+  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { data.symbol = requireSymbol(data.symbol, "Symbol"); data.description = requireValue(data.description, "Description"); data.value = validateNumber(data.value, "Constant value", { min: 0 }); } catch (error) { return handleFormError(error); }
+  if (state.fmeda.constants.some(item => item.symbol === data.symbol)) return alert("That symbolic constant already exists.");
+  state.fmeda.constants.push({ symbol: data.symbol, value: data.value, description: data.description }); $("#constant-dialog").close(); save();
+});
+$("#add-fmeda-btn").addEventListener("click", () => fillFmedaForm());
+$("#fmeda-form").elements.expression.addEventListener("input", updateExpressionPreview);
+$("#fmeda-form").addEventListener("submit", event => {
+  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  try { data.component = requireValue(data.component, "Architecture component"); data.failureMode = requireValue(data.failureMode, "Failure mode"); data.localEffect = requireValue(data.localEffect, "Local effect"); data.endEffect = requireValue(data.endEffect, "End effect"); data.expression = requireValue(data.expression, "Failure-rate expression"); evaluateExpression(data.expression); } catch (error) { $("#expression-error").textContent = error.message; return; }
+  const existing = state.fmeda.rows.find(row => row.id === data.id);
+  const row = { id: data.id || crypto.randomUUID(), component: data.component, failureMode: data.failureMode, localEffect: data.localEffect, endEffect: data.endEffect, classification: data.classification, diagnostic: data.diagnostic, expression: data.expression };
+  if (existing) Object.assign(existing, row); else state.fmeda.rows.push(row);
+  $("#fmeda-dialog").close(); save();
+});
+$("#sync-fmeda-btn").addEventListener("click", () => {
+  const byComponent = new Map();
+  state.fmeda.rows.filter(row => row.classification === "dangerous_undetected").forEach(row => byComponent.set(row.component, (byComponent.get(row.component) || 0) + evaluateExpression(row.expression)));
+  for (const [component, rate] of byComponent) {
+    const existing = state.quantitative.components.find(row => row.component === component);
+    const update = { lambdaTotal: rate, dangerousFraction: 1, diagnosticCoverage: 0 };
+    if (existing) Object.assign(existing, update); else state.quantitative.components.push({ id: crypto.randomUUID(), component, role: "FMEDA λDU handoff", ...update, proofTestHours: 8760, channels: 1, beta: 0.05 });
+  }
+  save(); alert(`${byComponent.size} FMEDA component rate${byComponent.size === 1 ? "" : "s"} synced to quantitative safety.`);
 });
 $("#parse-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value;
@@ -376,7 +665,7 @@ $("#parse-btn").addEventListener("click", () => {
 });
 $("#render-btn").addEventListener("click", async () => {
   const button = $("#render-btn"); const status = $("#render-status"); const preview = $("#diagram-preview");
-  state.plantuml = $("#plantuml-source").value; localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  state.plantuml = $("#plantuml-source").value; persistState();
   button.disabled = true; status.className = "render-status"; status.textContent = "Rendering...";
   try {
     const response = await fetch("/api/plantuml/render", { method: "POST", headers: { "content-type": "text/plain" }, body: state.plantuml });
@@ -395,12 +684,13 @@ $("#render-btn").addEventListener("click", async () => {
   }
 });
 $("#export-btn").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "safeguard-cobot-analysis.json" });
+  const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
+  const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.safeguard.json` });
   link.click(); URL.revokeObjectURL(link.href);
 });
 $("#new-analysis-btn").addEventListener("click", () => {
-  if (confirm("Reset the workspace to the starter cobot safety analysis?")) { state = structuredClone(seed); save(); }
+  if (confirm("Clear all data from the active workspace?")) { state = blankWorkspace(); save(); }
 });
 
 renderAll();

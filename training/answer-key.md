@@ -78,3 +78,66 @@ A good submission:
 6. RPN helps prioritize failure modes using severity, occurrence, and detection ratings.
 7. It cannot be verified objectively. A requirement should define observable, testable behaviour.
 8. No. The app provides a documented engineering estimate. Applicable standards, accepted methods, evidence, and competent review are still required.
+
+## FMEDA Follow-Up
+
+### Task 1: Complete The Scanner Allocation
+
+```text
+Unallocated fraction = 1 - 0.35 - 0.4 = 0.25
+```
+
+A suitable constant is:
+
+```text
+frac_no_effect = 0.25
+```
+
+The row expression is:
+
+```text
+lambda_scanner * frac_no_effect
+```
+
+No-effect classifications require justification because the same physical failure may affect another safety function or operating condition.
+
+### Task 2: Improve Diagnostic Coverage
+
+With `dc_scanner = 0.95`:
+
+```text
+λDD = 2e-6 * 0.4 * 0.95 = 7.6e-7 / h
+λDU = 2e-6 * 0.4 * (1 - 0.95) = 4e-8 / h
+```
+
+The residual dangerous rate is halved, but compliance still depends on architecture, common-cause analysis, systematic capability, validation, and applicable constraints.
+
+### Task 3: Missing Analysis
+
+Valid answers include:
+
+- Confirm source failure-rate data and operating environment.
+- Validate diagnostic response time and effectiveness.
+- Analyze dependent and common-cause failures.
+- Evaluate hardware fault tolerance and architectural constraints.
+- Review proof-test assumptions.
+- Demonstrate systematic capability.
+- Validate the complete safety function under realistic payload, floor, speed, and route conditions.
+
+### Task 4: Architecture Review
+
+One possible answer:
+
+- Add an independent protective sensing channel with separate processing.
+- Consider contamination or environmental obstruction as a common-cause failure.
+- Use diverse sensing principles, separate power paths, independent diagnostics, or physical separation where justified.
+- A second sensor does not automatically solve the problem because shared power, software, mounting location, environment, or design errors may defeat both channels.
+
+### FMEDA Knowledge Check
+
+1. `λDD` failures are dangerous but detected by diagnostics. `λDU` failures are dangerous and remain undetected.
+2. `λDU` contributes to the residual probability that the safety function is unavailable or fails dangerously.
+3. Diagnostic coverage measures the detected fraction of dangerous failures.
+4. SFF includes safe failures and detected dangerous failures relative to the total considered failure rate.
+5. Descriptions and sources make assumptions auditable and maintainable.
+6. No. It is an engineering worksheet that supports, but does not replace, competent analysis and review.
