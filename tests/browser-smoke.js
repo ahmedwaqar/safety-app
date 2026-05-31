@@ -102,6 +102,14 @@ try {
     await fill("#workspace-select", original);
   });
 
+  await test("save workspace preserves current PlantUML editor changes", async () => {
+    await click('[data-view="architecture"]');
+    await fill("#plantuml-source", "@startuml\ntitle Explicit save test\n@enduml");
+    await click("#save-workspace-btn");
+    assert(await evaluate(`document.querySelector("#save-workspace-btn").textContent`) === "Workspace saved", "save workspace button did not confirm the save");
+    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === localStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save workspace did not preserve PlantUML editor text");
+  });
+
   await test("portable JSON workspace file opens as a new project", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {
@@ -463,6 +471,17 @@ try {
     await click("#parse-btn");
     assert(await count("#component-list .component-item") === 2, "PlantUML import did not update components");
     assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "PlantUML alias is missing");
+  });
+
+  await test("PlantUML editor autocompletes keywords and snippets", async () => {
+    await fill("#plantuml-source", "comp");
+    assert(!await evaluate(`document.querySelector("#plantuml-completions").hidden`), "PlantUML completion menu did not open");
+    assert(await evaluate(`document.querySelector("#plantuml-completions").textContent.includes("component")`), "component completion is missing");
+    await evaluate(`document.querySelector("#plantuml-source").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))`);
+    assert(await evaluate(`document.querySelector("#plantuml-source").value`) === 'component "" as ALIAS', "PlantUML snippet was not inserted");
+    assert(await evaluate(`document.querySelector("#plantuml-source").selectionStart`) === 11, "PlantUML snippet cursor was not placed inside the component name");
+    assert(await evaluate(`document.querySelector("#plantuml-completions").hidden`), "PlantUML completion menu did not close after insertion");
+    await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
   });
 
   await test("PlantUML render button displays generated diagram", async () => {

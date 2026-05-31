@@ -42,9 +42,10 @@
         </div>
         <div class="topbar-actions">
           <select class="workspace-select" id="workspace-select" title="Switch workspace"></select>
+          <button class="button secondary" id="save-workspace-btn">Save workspace</button>
           <button class="button secondary" id="import-workspace-btn">Open JSON</button>
           <input type="file" id="workspace-file-input" accept=".json,application/json" hidden />
-          <button class="icon-btn" id="export-btn" title="Save workspace JSON">⇩</button>
+          <button class="icon-btn" id="export-btn" title="Download workspace JSON">⇩</button>
           <button class="button secondary" id="new-workspace-btn">New workspace</button>
           <button class="button secondary" id="new-analysis-btn">Reset workspace</button>
           <button class="icon-btn" id="help-btn" title="Input guidance">?</button>
@@ -212,7 +213,10 @@
             </div>
             <div class="editor-card">
               <div class="editor-top"><span>architecture.puml</span><div class="editor-actions"><button class="button secondary small" id="parse-btn">Import components</button><button class="button primary small" id="render-btn">Render diagram</button></div></div>
-              <textarea id="plantuml-source" spellcheck="false"></textarea>
+              <div class="plantuml-editor">
+                <textarea id="plantuml-source" spellcheck="false" autocomplete="off" aria-autocomplete="list" aria-controls="plantuml-completions" aria-expanded="false"></textarea>
+                <div class="completion-menu" id="plantuml-completions" role="listbox" aria-label="PlantUML completions" hidden></div>
+              </div>
             </div>
           </section>
           <section class="component-panel">
@@ -411,7 +415,7 @@
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
           <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>
           <section><h3>FMEDA symbols</h3><p>Use names such as <code>lambda_scanner</code>. Expressions accept constants, numbers, parentheses, and <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>.</p></section>
-          <section><h3>Portable JSON</h3><p>Use <strong>Open JSON</strong> and the download button to move complete projects between browsers and operating systems.</p></section>
+          <section><h3>Workspace storage</h3><p>Use <strong>Save workspace</strong> to preserve the active project in this browser. Use <strong>Open JSON</strong> and the download button to move complete projects between browsers and operating systems.</p></section>
         </div>
         <div class="dialog-actions"><button class="button primary" type="button" data-close-dialog>Close</button></div>
       </form>

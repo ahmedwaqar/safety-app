@@ -205,6 +205,62 @@ const silBands = {
   continuous: { "SIL 1": [1e-6, 1e-5], "SIL 2": [1e-7, 1e-6], "SIL 3": [1e-8, 1e-7], "SIL 4": [1e-9, 1e-8] },
   low: { "SIL 1": [1e-2, 1e-1], "SIL 2": [1e-3, 1e-2], "SIL 3": [1e-4, 1e-3], "SIL 4": [1e-5, 1e-4] }
 };
+const plantumlCompletions = [
+  ["@startuml", "@startuml\n$0\n@enduml", "diagram wrapper"],
+  ["@enduml", "@enduml", "diagram wrapper"],
+  ["title", "title $0", "diagram title"],
+  ["component", 'component "$0" as ALIAS', "component"],
+  ["node", 'node "$0" as ALIAS', "node"],
+  ["database", 'database "$0" as ALIAS', "database"],
+  ["queue", 'queue "$0" as ALIAS', "queue"],
+  ["cloud", 'cloud "$0" as ALIAS', "cloud"],
+  ["rectangle", 'rectangle "$0" as ALIAS', "rectangle"],
+  ["artifact", 'artifact "$0" as ALIAS', "artifact"],
+  ["package", 'package "$0" {\n}', "package"],
+  ["frame", 'frame "$0" {\n}', "frame"],
+  ["actor", 'actor "$0" as ALIAS', "actor"],
+  ["interface", 'interface "$0" as ALIAS', "interface"],
+  ["note", "note right of ALIAS\n  $0\nend note", "note"],
+  ["skinparam", "skinparam $0", "styling"],
+  ["left to right direction", "left to right direction", "layout"],
+  ["hide stereotype", "hide stereotype", "styling"],
+  ["legend", "legend\n  $0\nendlegend", "legend"]
+].map(([label, insert, detail]) => ({ label, insert, detail }));
+let plantumlMatches = [];
+let plantumlCompletionIndex = 0;
+let plantumlCompletionRange;
+
+function currentPlantumlToken(editor = $("#plantuml-source")) {
+  const beforeCursor = editor.value.slice(0, editor.selectionStart);
+  const match = beforeCursor.match(/(?:^|\s)([@A-Za-z][A-Za-z ]*)$/);
+  if (!match) return null;
+  const text = match[1];
+  return { text, start: editor.selectionStart - text.length, end: editor.selectionStart };
+}
+function closePlantumlCompletions() {
+  const editor = $("#plantuml-source"); const menu = $("#plantuml-completions");
+  plantumlMatches = []; plantumlCompletionRange = null; menu.hidden = true; menu.replaceChildren();
+  editor.setAttribute("aria-expanded", "false"); editor.removeAttribute("aria-activedescendant");
+}
+function renderPlantumlCompletions() {
+  const editor = $("#plantuml-source"); const menu = $("#plantuml-completions"); const token = currentPlantumlToken(editor);
+  if (!token?.text) return closePlantumlCompletions();
+  const query = token.text.toLowerCase();
+  plantumlMatches = plantumlCompletions.filter(item => item.label.startsWith(query)).slice(0, 7);
+  if (!plantumlMatches.length) return closePlantumlCompletions();
+  plantumlCompletionRange = token; plantumlCompletionIndex = Math.min(plantumlCompletionIndex, plantumlMatches.length - 1);
+  menu.innerHTML = plantumlMatches.map((item, index) => `<button type="button" class="completion-item ${index === plantumlCompletionIndex ? "active" : ""}" id="plantuml-completion-${index}" role="option" aria-selected="${index === plantumlCompletionIndex}" data-completion-index="${index}"><strong>${esc(item.label)}</strong><span>${esc(item.detail)}</span></button>`).join("");
+  menu.hidden = false; editor.setAttribute("aria-expanded", "true"); editor.setAttribute("aria-activedescendant", `plantuml-completion-${plantumlCompletionIndex}`);
+}
+function insertPlantumlCompletion(index = plantumlCompletionIndex) {
+  const editor = $("#plantuml-source"); const item = plantumlMatches[index];
+  if (!item || !plantumlCompletionRange) return;
+  const marker = item.insert.indexOf("$0"); const inserted = item.insert.replace("$0", "");
+  editor.setRangeText(inserted, plantumlCompletionRange.start, plantumlCompletionRange.end, "end");
+  const cursor = plantumlCompletionRange.start + (marker === -1 ? inserted.length : marker);
+  editor.setSelectionRange(cursor, cursor); editor.focus(); closePlantumlCompletions();
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
 function componentRates(row) {
   const lambdaDangerous = Number(row.lambdaTotal) * Number(row.dangerousFraction);
   const singleResidual = lambdaDangerous * (1 - Number(row.diagnosticCoverage));
@@ -484,6 +540,12 @@ function updateExpressionPreview() {
 
 $("#main-nav").addEventListener("click", event => { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); });
 $("#workspace-select").addEventListener("change", event => switchWorkspace(event.target.value));
+$("#save-workspace-btn").addEventListener("click", () => {
+  state.plantuml = $("#plantuml-source").value;
+  persistState();
+  const button = $("#save-workspace-btn"); button.textContent = "Workspace saved"; button.disabled = true;
+  setTimeout(() => { button.textContent = "Save workspace"; button.disabled = false; }, 1400);
+});
 $("#new-workspace-btn").addEventListener("click", () => { $("#workspace-form").reset(); $("#workspace-dialog").showModal(); });
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#workspace-form").addEventListener("submit", event => {
@@ -642,6 +704,24 @@ $("#fmeda-form").addEventListener("submit", event => {
   if (existing) Object.assign(existing, row); else state.fmeda.rows.push(row);
   $("#fmeda-dialog").close(); save();
 });
+$("#plantuml-source").addEventListener("input", () => { plantumlCompletionIndex = 0; renderPlantumlCompletions(); });
+$("#plantuml-source").addEventListener("keydown", event => {
+  if ($("#plantuml-completions").hidden) return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    plantumlCompletionIndex = (plantumlCompletionIndex + (event.key === "ArrowDown" ? 1 : -1) + plantumlMatches.length) % plantumlMatches.length;
+    renderPlantumlCompletions();
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    event.preventDefault(); insertPlantumlCompletion();
+  } else if (event.key === "Escape") {
+    event.preventDefault(); closePlantumlCompletions();
+  }
+});
+$("#plantuml-completions").addEventListener("mousedown", event => {
+  const item = event.target.closest("[data-completion-index]");
+  if (item) { event.preventDefault(); insertPlantumlCompletion(Number(item.dataset.completionIndex)); }
+});
+$("#plantuml-source").addEventListener("blur", () => setTimeout(closePlantumlCompletions));
 $("#sync-fmeda-btn").addEventListener("click", () => {
   const byComponent = new Map();
   state.fmeda.rows.filter(row => row.classification === "dangerous_undetected").forEach(row => byComponent.set(row.component, (byComponent.get(row.component) || 0) + evaluateExpression(row.expression)));

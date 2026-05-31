@@ -79,6 +79,7 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 
 Paste PlantUML into the editor and select:
 
+- Use the autocomplete menu while typing common PlantUML keywords. Select a snippet with `ArrowUp` / `ArrowDown` and insert it with `Enter` or `Tab`.
 - **Render diagram** to generate an SVG preview with the attached JAR.
 - **Import components** to extract references for FMEA rows and safety requirements.
 
@@ -206,6 +207,7 @@ Use **Add requirement** to specify the control statement, source hazard, allocat
 Safeguard supports multiple independent local workspaces. Use the top bar to:
 
 - Switch between saved browser workspaces
+- Select **Save workspace** to preserve the active project and current PlantUML editor text in browser storage
 - Select **New workspace** to create an independent blank project
 - Select **Reset workspace** to clear all data from only the active project
 - Select **Open JSON** to import a project file as a new local workspace
