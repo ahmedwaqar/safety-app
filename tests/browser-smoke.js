@@ -85,10 +85,7 @@ try {
 
   await test("workspace manager creates, switches, and isolates local projects", async () => {
     const original = await evaluate(`document.querySelector("#workspace-select").value`);
-    await click("#new-workspace-btn");
-    assert(await isOpen("#workspace-dialog"), "new-workspace dialog did not open");
-    await fill('#workspace-form [name="name"]', "Warehouse AMR project");
-    await click("#workspace-dialog .dialog-actions .primary");
+    await evaluate(`createWorkspace("Warehouse AMR project")`);
     assert(await count("#workspace-select option") === 2, "workspace was not created");
     assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Warehouse AMR project", "new workspace did not become active");
     assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "new workspace did not start with blank architecture");
@@ -102,18 +99,27 @@ try {
     await fill("#workspace-select", original);
   });
 
-  await test("save workspace preserves current PlantUML editor changes", async () => {
+  await test("file actions are grouped in a dropdown menu", async () => {
+    assert(await evaluate(`document.querySelector("#workspace-menu-btn").textContent`) === "File ▾", "file menu has the wrong label");
+    assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu should start closed");
+    await click("#workspace-menu-btn");
+    assert(!await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu did not open");
+    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Save,Delete", "file menu does not contain the simple file actions");
+    await evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "Escape did not close the file menu");
+  });
+
+  await test("save preserves current PlantUML editor changes", async () => {
     await click('[data-view="architecture"]');
     await fill("#plantuml-source", "@startuml\ntitle Explicit save test\n@enduml");
-    await click("#save-workspace-btn");
-    assert(await evaluate(`document.querySelector("#save-workspace-btn").textContent`) === "Workspace saved", "save workspace button did not confirm the save");
-    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === localStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save workspace did not preserve PlantUML editor text");
+    await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
+    await click("#export-btn");
+    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === localStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save did not preserve PlantUML editor text");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save did not download the project file");
   });
 
   await test("workspace manager deletes the active project and keeps a blank fallback", async () => {
-    await click("#new-workspace-btn");
-    await fill('#workspace-form [name="name"]', "Delete me");
-    await click("#workspace-dialog .dialog-actions .primary");
+    await evaluate(`createWorkspace("Delete me")`);
     const before = await count("#workspace-select option");
     await click("#delete-workspace-btn");
     assert(await count("#workspace-select option") === before - 1, "workspace was not deleted");
@@ -507,8 +513,8 @@ try {
     assert(await evaluate(`document.querySelector("#diagram-preview img").alt`) === "Rendered PlantUML architecture diagram", "rendered diagram alt text is missing");
   });
 
-  await test("reset workspace clears all preloaded worksheet data", async () => {
-    await click("#new-analysis-btn");
+  await test("blank workspace clears all preloaded worksheet data", async () => {
+    await evaluate(`state = blankWorkspace(); save();`);
     assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "reset did not clear architecture components");
     await click('[data-view="fmea"]');
     assert(await count("#fmea-body tr") === 0, "reset did not clear FMEA rows");
@@ -527,7 +533,7 @@ try {
     assert(await count("#fmeda-body tr") === 3, "legacy workspace did not receive FMEDA data");
   });
 
-  await test("save project file initiates JSON download", async () => {
+  await test("save initiates JSON download", async () => {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
     assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save project file did not initiate expected portable JSON download");

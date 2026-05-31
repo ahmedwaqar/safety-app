@@ -42,13 +42,15 @@
         </div>
         <div class="topbar-actions">
           <select class="workspace-select" id="workspace-select" title="Switch workspace"></select>
-          <button class="button secondary" id="save-workspace-btn">Save workspace</button>
-          <button class="button secondary" id="export-btn">Save project file</button>
-          <button class="button secondary" id="import-workspace-btn">Open project file</button>
+          <div class="workspace-menu-wrap">
+            <button class="button secondary workspace-menu-toggle" id="workspace-menu-btn" type="button" aria-expanded="false" aria-controls="workspace-menu">File ▾</button>
+            <div class="workspace-menu" id="workspace-menu" hidden>
+              <button type="button" id="import-workspace-btn">Open</button>
+              <button type="button" id="export-btn">Save</button>
+              <button type="button" id="delete-workspace-btn">Delete</button>
+            </div>
+          </div>
           <input type="file" id="workspace-file-input" accept=".json,application/json" hidden />
-          <button class="button secondary" id="new-workspace-btn">New workspace</button>
-          <button class="button secondary" id="delete-workspace-btn">Delete workspace</button>
-          <button class="button secondary" id="new-analysis-btn">Reset workspace</button>
           <button class="icon-btn" id="help-btn" title="Input guidance">?</button>
           <button class="button primary" data-open-row>Add FMEA row</button>
         </div>
@@ -398,15 +400,6 @@
       </form>
     </dialog>
 
-    <dialog id="workspace-dialog">
-      <form method="dialog" id="workspace-form">
-        <div class="dialog-header"><div><p class="eyebrow">Project workspace</p><h2>Create workspace</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
-        <p class="dialog-copy">Create an independent blank project. Switch projects from the top bar and save portable JSON files for cross-platform sharing.</p>
-        <label><span>Workspace name</span><input name="name" required placeholder="e.g. Warehouse AMR safety case" /></label>
-        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Create workspace</button></div>
-      </form>
-    </dialog>
-
     <dialog id="help-dialog">
       <form method="dialog">
         <div class="dialog-header"><div><p class="eyebrow">Input guidance</p><h2>Choosing appropriate values</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
@@ -416,7 +409,7 @@
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
           <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>
           <section><h3>FMEDA symbols</h3><p>Use names such as <code>lambda_scanner</code>. Expressions accept constants, numbers, parentheses, and <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>.</p></section>
-          <section><h3>Workspace storage</h3><p>Use <strong>Save workspace</strong> to preserve the active project in this browser. Use <strong>Save project file</strong> and <strong>Open project file</strong> to store complete projects on disk and reopen them later.</p></section>
+          <section><h3>Project files</h3><p>Use the <strong>File</strong> menu to <strong>Open</strong>, <strong>Save</strong>, or <strong>Delete</strong> a project. Saving preserves the project in this browser and downloads a portable file to disk.</p></section>
         </div>
         <div class="dialog-actions"><button class="button primary" type="button" data-close-dialog>Close</button></div>
       </form>

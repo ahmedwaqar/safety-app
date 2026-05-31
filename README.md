@@ -2,7 +2,7 @@
 
 Safeguard is a lightweight web app for collaborative-robot and autonomous-mobile-robot (AMR) safety analysis. It keeps architecture, operational context, hazards, AMR SIL assessments, ISO 26262 hazard analysis and risk assessment (HARA), FMEA records, and safety requirements in one traceable browser workspace.
 
-The initial browser workspace ships with an example cobot-cell safety case so the workflow is visible immediately after startup. New workspaces and reset workspaces are blank.
+The initial browser workspace ships with an example cobot-cell safety case so the workflow is visible immediately after startup. Deleting the final browser workspace creates a blank replacement.
 
 ## Feature Snapshot
 
@@ -20,7 +20,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
 | Custom FMEA templates | Add and remove organization-specific worksheet columns |
 | Safety requirements | Define mitigations, allocate them to architecture components, link source hazards, and track verification status |
-| Workspace data | Create, switch, and delete local projects; save or open portable project files on disk; and clear the active workspace |
+| Workspace data | Switch and delete local projects, and save or open portable project files on disk |
 | Input guidance | Open contextual help for rating scales, failure-rate units, bounded fractions, FMEDA symbols, and project-file handling |
 
 ## Requirements
@@ -204,15 +204,11 @@ Use **Add requirement** to specify the control statement, source hazard, allocat
 
 ## Workspaces And Portable Project Files
 
-Safeguard supports multiple independent local workspaces. Use the top bar to:
+Safeguard supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
 
-- Switch between saved browser workspaces
-- Select **Save workspace** to preserve the active project and current PlantUML editor text in browser storage
-- Select **Save project file** to download the active project to disk as `<workspace-name>.safeguard.json`
-- Select **Open project file** to reopen a previously saved project file as a new browser workspace
-- Select **New workspace** to create an independent blank project
-- Select **Delete workspace** to remove the active project from browser storage
-- Select **Reset workspace** to clear all data from only the active project
+- Select **Open** to reopen a saved project file as a browser workspace
+- Select **Save** to preserve the active project in browser storage and download `<workspace-name>.safeguard.json`
+- Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
 
 Portable project files use a versioned JSON envelope:

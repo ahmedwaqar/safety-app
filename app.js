@@ -173,7 +173,7 @@ function createWorkspace(name, data = blankWorkspace()) {
 }
 function deleteActiveWorkspace() {
   const workspace = activeWorkspace();
-  if (!confirm(`Delete workspace "${workspace.name}" from this browser? Save a project file first if you need to reopen it later.`)) return;
+  if (!confirm(`Delete workspace "${workspace.name}" from this browser? Select Save first if you need to reopen it later.`)) return;
   workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter(item => item.id !== workspace.id);
   if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Untitled workspace", updatedAt: new Date().toISOString(), data: blankWorkspace() });
   persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);
@@ -544,22 +544,21 @@ function updateExpressionPreview() {
   try { $("#expression-preview").textContent = scientific(evaluateExpression($("#fmeda-form").elements.expression.value)); $("#expression-error").textContent = ""; }
   catch (error) { $("#expression-preview").textContent = "Invalid"; $("#expression-error").textContent = error.message; }
 }
+function closeWorkspaceMenu() {
+  $("#workspace-menu").hidden = true; $("#workspace-menu-btn").setAttribute("aria-expanded", "false");
+}
 
 $("#main-nav").addEventListener("click", event => { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); });
 $("#workspace-select").addEventListener("change", event => switchWorkspace(event.target.value));
-$("#save-workspace-btn").addEventListener("click", () => {
-  state.plantuml = $("#plantuml-source").value;
-  persistState();
-  const button = $("#save-workspace-btn"); button.textContent = "Workspace saved"; button.disabled = true;
-  setTimeout(() => { button.textContent = "Save workspace"; button.disabled = false; }, 1400);
+$("#workspace-menu-btn").addEventListener("click", () => {
+  const menu = $("#workspace-menu"); menu.hidden = !menu.hidden;
+  $("#workspace-menu-btn").setAttribute("aria-expanded", String(!menu.hidden));
 });
-$("#new-workspace-btn").addEventListener("click", () => { $("#workspace-form").reset(); $("#workspace-dialog").showModal(); });
+$("#workspace-menu").addEventListener("click", event => { if (event.target.closest("button")) closeWorkspaceMenu(); });
+document.addEventListener("click", event => { if (!event.target.closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
+document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
-$("#workspace-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
-  try { createWorkspace(data.name); $("#workspace-dialog").close(); } catch (error) { handleFormError(error); }
-});
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
   const file = event.target.files[0]; if (!file) return;
@@ -778,8 +777,4 @@ $("#export-btn").addEventListener("click", () => {
   const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.safeguard.json` });
   link.click(); URL.revokeObjectURL(link.href);
 });
-$("#new-analysis-btn").addEventListener("click", () => {
-  if (confirm("Clear all data from the active workspace?")) { state = blankWorkspace(); save(); }
-});
-
 renderAll();
