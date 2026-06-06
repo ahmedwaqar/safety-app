@@ -161,6 +161,20 @@ try {
     assert(await count("#workspace-select option") === before, "invalid JSON workspace was imported");
   });
 
+  await test("portable JSON import rejects duplicate identifiers", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`(() => {
+      const envelope = projectEnvelope();
+      envelope.workspace.name = "Duplicate-ID imported project";
+      envelope.workspace.data.hazards.push({ ...envelope.workspace.data.hazards[0], id: envelope.workspace.data.hazards[0].id.toLowerCase() });
+      const file = new File([JSON.stringify(envelope)], "duplicate-id.safeguard.json", { type: "application/json" });
+      const transfer = new DataTransfer(); transfer.items.add(file);
+      const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await retry(async () => { assert(await evaluate(`window.__lastAlert.includes("Hazard identifier") && window.__lastAlert.includes("duplicated")`), "duplicate JSON identifier did not report a useful error"); });
+    assert(await count("#workspace-select option") === before, "workspace with duplicate identifiers was imported");
+  });
+
   await test("help option explains appropriate input values", async () => {
     await click("#help-btn");
     assert(await isOpen("#help-dialog"), "help dialog did not open");
@@ -250,6 +264,20 @@ try {
     assert(await count("#hazards-grid .catalog-card") === before + 1, "hazard was not added");
     await click('[data-delete-catalog="hazards:H-TEST"]');
     assert(await count("#hazards-grid .catalog-card") === before, "hazard was not deleted");
+  });
+
+  await test("ID fields reject case-insensitive duplicates", async () => {
+    await click('[data-view="hazards"]');
+    const before = await count("#hazards-grid .catalog-card");
+    await click('[data-open-catalog="hazards"]');
+    await fill('#catalog-form [name="id"]', "h-01");
+    await fill('#catalog-form [name="name"]', "Duplicate hazard");
+    await fill('#catalog-form [name="description"]', "This entry must not be saved.");
+    await click("#catalog-dialog .dialog-actions .primary");
+    assert(await count("#hazards-grid .catalog-card") === before, "case-insensitive duplicate hazard ID was saved");
+    assert(await evaluate(`window.__lastAlert.includes('Identifier "h-01" already exists')`), "duplicate ID did not report a useful error");
+    assert(await isOpen("#catalog-dialog"), "duplicate ID unexpectedly closed the form");
+    await click("#catalog-dialog .dialog-close");
   });
 
   await test("operational situation add button works", async () => {

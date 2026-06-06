@@ -236,6 +236,7 @@ Safeguard validates typed values before saving records and checks imported JSON 
 Key rules:
 
 - Identifiers start with a letter and use letters, numbers, `.`, `_`, or `-`.
+- Identifiers must be unique within their record type; comparisons are case-insensitive.
 - FMEA severity, occurrence, and detection ratings are integers from `1` to `10`.
 - Failure rates are finite non-negative values in failures per hour.
 - Dangerous fractions, diagnostic coverage, and beta factors are between `0` and `1`.

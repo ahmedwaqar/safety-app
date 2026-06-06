@@ -121,14 +121,32 @@ function requireValue(value, label) { const text = String(value ?? "").trim(); i
 function requireIdentifier(value, label) { const text = requireValue(value, label); if (!/^[A-Za-z][A-Za-z0-9_.-]*$/.test(text)) throw new Error(`${label} must start with a letter and use only letters, numbers, ".", "_" or "-".`); return text; }
 function requireSymbol(value, label) { const text = requireValue(value, label); if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(text)) throw new Error(`${label} must use letters, numbers, or "_" and cannot start with a number.`); return text; }
 function requireEnum(value, label, allowed) { if (!allowed.includes(value)) throw new Error(`${label} must be one of: ${allowed.join(", ")}.`); return value; }
+function sameIdentifier(left, right) { return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase(); }
+function requireUniqueIdentifier(items, value, label, { field = "id", ignoreField, ignoreValue } = {}) {
+  if (items.some(item => sameIdentifier(item[field], value) && (!ignoreField || !sameIdentifier(item[ignoreField], ignoreValue)))) throw new Error(`${label} "${value}" already exists.`);
+  return value;
+}
+function validateIdentifierCollection(items, field, label) {
+  const seen = new Set();
+  items?.forEach(item => {
+    const identifier = requireIdentifier(item[field], label);
+    const normalized = identifier.toLowerCase();
+    if (seen.has(normalized)) throw new Error(`${label} "${identifier}" is duplicated.`);
+    seen.add(normalized);
+  });
+}
 function validateWorkspaceData(data) {
   if (!data || typeof data !== "object") throw new Error("Workspace data must be a JSON object.");
   for (const key of ["components", "hazards", "situations", "requirements", "safetyGoals", "hara", "silAssessments", "fmea"]) if (data[key] !== undefined && !Array.isArray(data[key])) throw new Error(`Workspace field "${key}" must be an array.`);
   if (data.quantitative !== undefined && (!data.quantitative || typeof data.quantitative !== "object" || !Array.isArray(data.quantitative.components))) throw new Error('Workspace field "quantitative.components" must be an array.');
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows))) throw new Error('Workspace FMEDA fields must be arrays.');
-  data.components?.forEach(item => requireIdentifier(item.id, "Component identifier"));
-  data.hazards?.forEach(item => requireIdentifier(item.id, "Hazard identifier"));
-  data.situations?.forEach(item => requireIdentifier(item.id, "Situation identifier"));
+  validateIdentifierCollection(data.components, "id", "Component identifier");
+  validateIdentifierCollection(data.hazards, "id", "Hazard identifier");
+  validateIdentifierCollection(data.situations, "id", "Situation identifier");
+  validateIdentifierCollection(data.requirements, "id", "Requirement identifier");
+  validateIdentifierCollection(data.safetyGoals, "id", "Safety-goal identifier");
+  validateIdentifierCollection(data.hara, "eventId", "Hazardous-event identifier");
+  validateIdentifierCollection(data.silAssessments, "assessmentId", "SIL-assessment identifier");
   data.fmea?.forEach(row => { validateNumber(row.severity, "FMEA severity", { min: 1, max: 10, integer: true }); validateNumber(row.occurrence, "FMEA occurrence", { min: 1, max: 10, integer: true }); validateNumber(row.detection, "FMEA detection", { min: 1, max: 10, integer: true }); });
   data.hara?.forEach(row => { requireEnum(row.severity, "HARA severity", ["S0", "S1", "S2", "S3"]); requireEnum(row.exposure, "HARA exposure", ["E0", "E1", "E2", "E3", "E4"]); requireEnum(row.controllability, "HARA controllability", ["C0", "C1", "C2", "C3"]); });
   data.silAssessments?.forEach(row => { requireEnum(row.consequence, "SIL consequence", ["C1", "C2", "C3", "C4"]); requireEnum(row.frequency, "SIL frequency", ["F1", "F2"]); requireEnum(row.avoidance, "SIL avoidance", ["P1", "P2"]); requireEnum(row.demand, "SIL demand", ["W1", "W2", "W3"]); });
@@ -620,8 +638,7 @@ $("#catalog-form").addEventListener("submit", event => {
   if (event.submitter?.value === "cancel") { $("#catalog-dialog").close(); return; }
   const data = Object.fromEntries(new FormData(event.target)); const group = data.catalog;
   let id, name, description;
-  try { id = requireIdentifier(data.id, "Identifier"); name = requireValue(data.name, "Name"); description = requireValue(data.description, "Description"); } catch (error) { return handleFormError(error); }
-  if (state[group].some(x => x.id === id)) return alert("That identifier already exists.");
+  try { id = requireUniqueIdentifier(state[group], requireIdentifier(data.id, "Identifier"), "Identifier"); name = requireValue(data.name, "Name"); description = requireValue(data.description, "Description"); } catch (error) { return handleFormError(error); }
   state[group].push({ id, name, description, category: group === "hazards" ? data.category : "Operational context" });
   $("#catalog-dialog").close(); save();
 });
@@ -634,8 +651,7 @@ $("#requirement-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#requirement-dialog").close(); return; }
   const data = Object.fromEntries(new FormData(event.target));
-  try { data.id = requireIdentifier(data.id, "Requirement identifier"); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
-  if (state.requirements.some(x => x.id === data.id)) return alert("That identifier already exists.");
+  try { data.id = requireUniqueIdentifier(state.requirements, requireIdentifier(data.id, "Requirement identifier"), "Requirement identifier"); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
   state.requirements.push(data); $("#requirement-dialog").close(); save();
 });
 $("#template-btn").addEventListener("click", () => { renderColumns(); $("#template-dialog").showModal(); });
@@ -651,8 +667,7 @@ $("#add-goal-btn").addEventListener("click", () => fillGoalForm());
 $("#hara-form").addEventListener("change", updateAsilPreview);
 $("#hara-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
-  try { data.eventId = requireIdentifier(data.eventId, "Hazardous-event identifier"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.malfunction = requireValue(data.malfunction, "Malfunctioning behaviour"); data.consequence = requireValue(data.consequence, "Consequence"); } catch (error) { return handleFormError(error); }
-  if (state.hara.some(row => row.eventId === data.eventId && row.id !== data.id)) return alert("That hazardous-event identifier already exists.");
+  try { data.eventId = requireUniqueIdentifier(state.hara, requireIdentifier(data.eventId, "Hazardous-event identifier"), "Hazardous-event identifier", { field: "eventId", ignoreField: "id", ignoreValue: data.id }); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.malfunction = requireValue(data.malfunction, "Malfunctioning behaviour"); data.consequence = requireValue(data.consequence, "Consequence"); } catch (error) { return handleFormError(error); }
   const existing = state.hara.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), eventId: data.eventId, hazard: data.hazard, situation: data.situation, malfunction: data.malfunction, consequence: data.consequence, severity: data.severity, exposure: data.exposure, controllability: data.controllability, safetyGoal: data.safetyGoal };
   if (existing) Object.assign(existing, row); else state.hara.push(row);
@@ -660,8 +675,7 @@ $("#hara-form").addEventListener("submit", event => {
 });
 $("#goal-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
-  try { data.id = requireIdentifier(data.id, "Safety-goal identifier"); data.text = requireValue(data.text, "Safety goal"); } catch (error) { return handleFormError(error); }
-  if (state.safetyGoals.some(goal => goal.id === data.id && goal.id !== data.originalId)) return alert("That safety-goal identifier already exists.");
+  try { data.id = requireUniqueIdentifier(state.safetyGoals, requireIdentifier(data.id, "Safety-goal identifier"), "Safety-goal identifier", { ignoreField: "id", ignoreValue: data.originalId }); data.text = requireValue(data.text, "Safety goal"); } catch (error) { return handleFormError(error); }
   const existing = goalBy(data.originalId);
   const goal = { id: data.id, text: data.text, asil: data.asil, safeState: data.safeState, ftti: data.ftti };
   if (existing) {
@@ -674,8 +688,7 @@ $("#add-sil-btn").addEventListener("click", () => fillSilForm());
 $("#sil-form").addEventListener("change", updateSilPreview);
 $("#sil-form").addEventListener("submit", event => {
   event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
-  try { data.assessmentId = requireIdentifier(data.assessmentId, "SIL-assessment identifier"); data.safetyFunction = requireValue(data.safetyFunction, "Safety function"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.hazardousEvent = requireValue(data.hazardousEvent, "Hazardous event"); } catch (error) { return handleFormError(error); }
-  if (state.silAssessments.some(row => row.assessmentId === data.assessmentId && row.id !== data.id)) return alert("That SIL-assessment identifier already exists.");
+  try { data.assessmentId = requireUniqueIdentifier(state.silAssessments, requireIdentifier(data.assessmentId, "SIL-assessment identifier"), "SIL-assessment identifier", { field: "assessmentId", ignoreField: "id", ignoreValue: data.id }); data.safetyFunction = requireValue(data.safetyFunction, "Safety function"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.hazardousEvent = requireValue(data.hazardousEvent, "Hazardous event"); } catch (error) { return handleFormError(error); }
   const existing = state.silAssessments.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), assessmentId: data.assessmentId, safetyFunction: data.safetyFunction, hazard: data.hazard, situation: data.situation, hazardousEvent: data.hazardousEvent, consequence: data.consequence, frequency: data.frequency, avoidance: data.avoidance, demand: data.demand, safeState: data.safeState, evidence: data.evidence };
   if (existing) Object.assign(existing, row); else state.silAssessments.push(row);
@@ -746,7 +759,8 @@ $("#parse-btn").addEventListener("click", () => {
   const pattern = /^\s*(?:component|node|database|queue|cloud|rectangle|artifact|package|frame)\s+(?:"([^"]+)"|([^\s{]+))(?:\s+as\s+([A-Za-z0-9_.-]+))?/gim;
   for (const match of state.plantuml.matchAll(pattern)) {
     const name = match[1] || match[2]; const id = match[3] || name.replace(/\W+/g, "_").toUpperCase();
-    if (!seen.has(id)) { components.push({ id, name }); seen.add(id); }
+    const normalizedId = id.toLowerCase();
+    if (!seen.has(normalizedId)) { components.push({ id, name }); seen.add(normalizedId); }
   }
   if (!components.length) return alert("No PlantUML components found. Use declarations such as: component \"Robot arm\" as ARM");
   state.components = components; save(); alert(`${components.length} architecture components imported.`);
