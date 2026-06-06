@@ -173,6 +173,7 @@ try {
     for (const view of ["fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
+      assert(await evaluate(`document.querySelector("#add-fmea-row-btn").hidden`) === (view !== "fmea"), `Add FMEA row visibility was incorrect in ${view} view`);
     }
   });
 

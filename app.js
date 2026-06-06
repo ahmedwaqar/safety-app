@@ -330,6 +330,7 @@ function showView(name) {
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
   $("#page-title").textContent = ({ fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#add-fmea-row-btn").hidden = name !== "fmea";
 }
 
 function renderMetrics() {
