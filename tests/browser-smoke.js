@@ -99,6 +99,17 @@ try {
     await fill("#workspace-select", original);
   });
 
+  await test("projects can open in independent browser tabs", async () => {
+    await evaluate(`window.open = (url, target, features) => { window.__openedTab = { url: String(url), target, features }; };`);
+    const activeId = await evaluate(`document.querySelector("#workspace-select").value`);
+    await click("#workspace-menu-btn");
+    await click("#open-workspace-tab-btn");
+    const opened = await evaluate(`window.__openedTab`);
+    assert(new URL(opened.url).searchParams.get("workspace") === activeId, "new tab URL did not preserve the active project");
+    assert(opened.target === "_blank" && opened.features.includes("noopener"), "project did not open in an isolated browser tab");
+    assert(await evaluate(`sessionStorage.getItem("safeguard-active-workspace-v1")`) === activeId, "active project is not stored per tab");
+  });
+
   await test("workspace manager rejects duplicate project names", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`try { createWorkspace("warehouse amr PROJECT"); } catch (error) { window.__lastAlert = error.message; }`);
@@ -111,7 +122,7 @@ try {
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu should start closed");
     await click("#workspace-menu-btn");
     assert(!await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu did not open");
-    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Save,Delete", "file menu does not contain the simple file actions");
+    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Open in new tab,Save,Delete", "file menu does not contain the project actions");
     await evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "Escape did not close the file menu");
   });
@@ -121,7 +132,7 @@ try {
     await fill("#plantuml-source", "@startuml\ntitle Explicit save test\n@enduml");
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === localStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save did not preserve PlantUML editor text");
+    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === sessionStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save did not preserve PlantUML editor text");
     assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save did not download the project file");
   });
 

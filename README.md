@@ -207,6 +207,7 @@ Use **Add requirement** to specify the control statement, source hazard, allocat
 Safeguard supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
 
 - Select **Open** to reopen a saved project file as a browser workspace
+- Select **Open in new tab** to work with the active project alongside other projects
 - Select **Save** to preserve the active project in browser storage and download `<workspace-name>.safeguard.json`
 - Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
@@ -227,7 +228,7 @@ Portable project files use a versioned JSON envelope:
 
 The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, and requirements. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
-Local workspace metadata is stored in browser `localStorage`. The previous single-workspace storage key remains supported for backward-compatible migration.
+Local workspace metadata is stored in browser `localStorage`, while each tab keeps its active-project selection in `sessionStorage`. The previous single-workspace storage key remains supported for backward-compatible migration.
 
 ## Input Validation
 

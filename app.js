@@ -158,6 +158,19 @@ function validateWorkspaceData(data) {
 }
 function handleFormError(error) { alert(error.message); }
 function workspaceId() { return `workspace-${crypto.randomUUID()}`; }
+function requestedWorkspaceId() { return new URLSearchParams(location.search).get("workspace"); }
+function activeWorkspaceId() { return sessionStorage.getItem(ACTIVE_WORKSPACE_KEY) || localStorage.getItem(ACTIVE_WORKSPACE_KEY); }
+function setActiveWorkspaceId(id, updateUrl = true) {
+  sessionStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
+  localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
+  if (updateUrl && location.protocol !== "file:") {
+    const url = new URL(location.href); url.searchParams.set("workspace", id); history.replaceState(null, "", url);
+  }
+}
+function refreshWorkspaceRegistry() {
+  const stored = localStorage.getItem(WORKSPACES_KEY);
+  if (stored) workspaceRegistry = JSON.parse(stored);
+}
 function load() {
   const storedRegistry = localStorage.getItem(WORKSPACES_KEY);
   workspaceRegistry = storedRegistry ? JSON.parse(storedRegistry) : { version: PROJECT_VERSION, workspaces: [] };
@@ -165,37 +178,50 @@ function load() {
     const legacy = localStorage.getItem(STORAGE_KEY);
     workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Cobot safety case", updatedAt: new Date().toISOString(), data: migrateWorkspace(legacy ? JSON.parse(legacy) : structuredClone(seed), seed) });
   }
-  let activeId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+  let activeId = requestedWorkspaceId() || activeWorkspaceId();
   if (!workspaceRegistry.workspaces.some(workspace => workspace.id === activeId)) activeId = workspaceRegistry.workspaces[0].id;
-  localStorage.setItem(ACTIVE_WORKSPACE_KEY, activeId);
+  setActiveWorkspaceId(activeId);
   persistRegistry();
   return migrateWorkspace(structuredClone(activeWorkspace().data));
 }
 function activeWorkspace() {
-  const activeId = localStorage.getItem(ACTIVE_WORKSPACE_KEY);
+  const activeId = activeWorkspaceId();
   return workspaceRegistry.workspaces.find(workspace => workspace.id === activeId) || workspaceRegistry.workspaces[0];
 }
 function persistRegistry() { localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaceRegistry)); }
 function persistState() {
-  const workspace = activeWorkspace(); workspace.data = structuredClone(state); workspace.updatedAt = new Date().toISOString();
+  const activeId = activeWorkspaceId();
+  refreshWorkspaceRegistry();
+  const workspace = workspaceRegistry.workspaces.find(item => item.id === activeId);
+  if (!workspace) return;
+  workspace.data = structuredClone(state); workspace.updatedAt = new Date().toISOString();
   persistRegistry(); localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 function save() { persistState(); renderAll(); }
 function switchWorkspace(id) {
+  refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some(workspace => workspace.id === id)) return;
-  localStorage.setItem(ACTIVE_WORKSPACE_KEY, id); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
+  setActiveWorkspaceId(id); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
 }
 function createWorkspace(name, data = blankWorkspace()) {
+  refreshWorkspaceRegistry();
   const workspaceName = requireUniqueIdentifier(workspaceRegistry.workspaces, requireValue(name, "Workspace name"), "Project name", { field: "name" });
   const workspace = { id: workspaceId(), name: workspaceName, updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
   workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
 }
 function deleteActiveWorkspace() {
+  refreshWorkspaceRegistry();
   const workspace = activeWorkspace();
   if (!confirm(`Delete workspace "${workspace.name}" from this browser? Select Save first if you need to reopen it later.`)) return;
   workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter(item => item.id !== workspace.id);
   if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Untitled workspace", updatedAt: new Date().toISOString(), data: blankWorkspace() });
   persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);
+}
+function openActiveWorkspaceInNewTab() {
+  persistState();
+  const url = new URL(location.href);
+  url.searchParams.set("workspace", activeWorkspace().id);
+  window.open(url, "_blank", "noopener");
 }
 function projectEnvelope(workspace = activeWorkspace()) {
   return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { name: workspace.name, data: structuredClone(state) } };
@@ -486,6 +512,7 @@ function renderArchitecture() {
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
+  document.title = `${active.name} | Safeguard`;
 }
 function renderAll() { renderWorkspaceControls(); renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
 
@@ -578,6 +605,7 @@ $("#workspace-menu").addEventListener("click", event => { if (event.target.close
 document.addEventListener("click", event => { if (!event.target.closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
+$("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
@@ -585,6 +613,15 @@ $("#workspace-file-input").addEventListener("change", async event => {
   try { const project = parseProject(await file.text()); createWorkspace(project.name, project.data); alert(`Workspace "${project.name}" opened.`); }
   catch (error) { alert(error.message); }
   finally { event.target.value = ""; }
+});
+window.addEventListener("storage", event => {
+  if (event.key !== WORKSPACES_KEY) return;
+  refreshWorkspaceRegistry();
+  if (!workspaceRegistry.workspaces.some(workspace => workspace.id === activeWorkspaceId())) {
+    setActiveWorkspaceId(workspaceRegistry.workspaces[0].id);
+    state = migrateWorkspace(structuredClone(activeWorkspace().data));
+    renderAll();
+  } else renderWorkspaceControls();
 });
 document.addEventListener("click", event => {
   const close = event.target.closest("[data-close-dialog]"); if (close) close.closest("dialog").close();
