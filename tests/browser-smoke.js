@@ -110,6 +110,15 @@ try {
     assert(await evaluate(`sessionStorage.getItem("safeguard-active-workspace-v1")`) === activeId, "active project is not stored per tab");
   });
 
+  await test("close workspace exits the tab without deleting the project", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`window.close = () => { window.__closeRequested = true; };`);
+    await click("#workspace-menu-btn");
+    await click("#close-workspace-btn");
+    assert(await evaluate(`window.__closeRequested`), "close workspace did not request tab closure");
+    assert(await count("#workspace-select option") === before, "close workspace deleted a stored project");
+  });
+
   await test("workspace manager rejects duplicate project names", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`try { createWorkspace("warehouse amr PROJECT"); } catch (error) { window.__lastAlert = error.message; }`);
@@ -122,7 +131,7 @@ try {
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu should start closed");
     await click("#workspace-menu-btn");
     assert(!await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu did not open");
-    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Open in new tab,Save,Delete", "file menu does not contain the project actions");
+    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Open in new tab,Save,Close workspace,Delete", "file menu does not contain the project actions");
     await evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "Escape did not close the file menu");
   });

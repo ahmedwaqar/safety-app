@@ -223,6 +223,13 @@ function openActiveWorkspaceInNewTab() {
   url.searchParams.set("workspace", activeWorkspace().id);
   window.open(url, "_blank", "noopener");
 }
+function closeActiveWorkspace() {
+  persistState();
+  window.close();
+  setTimeout(() => {
+    if (!window.closed) alert("This browser cannot close a tab it did not open. Close this tab manually; the project remains saved.");
+  }, 100);
+}
 function projectEnvelope(workspace = activeWorkspace()) {
   return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { name: workspace.name, data: structuredClone(state) } };
 }
@@ -606,6 +613,7 @@ document.addEventListener("click", event => { if (!event.target.closest(".worksp
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
+$("#close-workspace-btn").addEventListener("click", closeActiveWorkspace);
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
