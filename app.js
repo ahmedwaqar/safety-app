@@ -186,7 +186,8 @@ function switchWorkspace(id) {
   localStorage.setItem(ACTIVE_WORKSPACE_KEY, id); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
 }
 function createWorkspace(name, data = blankWorkspace()) {
-  const workspace = { id: workspaceId(), name: requireValue(name, "Workspace name"), updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
+  const workspaceName = requireUniqueIdentifier(workspaceRegistry.workspaces, requireValue(name, "Workspace name"), "Project name", { field: "name" });
+  const workspace = { id: workspaceId(), name: workspaceName, updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
   workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
 }
 function deleteActiveWorkspace() {

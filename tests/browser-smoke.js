@@ -99,6 +99,13 @@ try {
     await fill("#workspace-select", original);
   });
 
+  await test("workspace manager rejects duplicate project names", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`try { createWorkspace("warehouse amr PROJECT"); } catch (error) { window.__lastAlert = error.message; }`);
+    assert(await count("#workspace-select option") === before, "case-insensitive duplicate project name was created");
+    assert(await evaluate(`window.__lastAlert.includes('Project name "warehouse amr PROJECT" already exists')`), "duplicate project name did not report a useful error");
+  });
+
   await test("file actions are grouped in a dropdown menu", async () => {
     assert(await evaluate(`document.querySelector("#workspace-menu-btn").textContent`) === "File ▾", "file menu has the wrong label");
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu should start closed");
@@ -145,6 +152,19 @@ try {
     await retry(async () => { assert(await count("#workspace-select option") === before + 1, "JSON workspace was not imported"); });
     assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Imported AMR project", "imported workspace did not become active");
     assert(await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-IMPORTED")`), "imported workspace data is missing");
+  });
+
+  await test("portable JSON import rejects an existing project name", async () => {
+    const before = await count("#workspace-select option");
+    await evaluate(`(() => {
+      const envelope = projectEnvelope();
+      envelope.workspace.name = "imported amr PROJECT";
+      const file = new File([JSON.stringify(envelope)], "duplicate-project-name.safeguard.json", { type: "application/json" });
+      const transfer = new DataTransfer(); transfer.items.add(file);
+      const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await retry(async () => { assert(await evaluate(`window.__lastAlert.includes("Project name") && window.__lastAlert.includes("already exists")`), "duplicate imported project name did not report a useful error"); });
+    assert(await count("#workspace-select option") === before, "workspace with duplicate project name was imported");
   });
 
   await test("portable JSON import rejects invalid typed values", async () => {
