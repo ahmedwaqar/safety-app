@@ -18,6 +18,7 @@
       </div>
       <nav id="main-nav">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
+        <button class="nav-item" data-view="workflow"><span class="nav-icon">↳</span>Engineering workflow</button>
         <button class="nav-item" data-view="architecture"><span class="nav-icon">⌘</span>Architecture</button>
         <button class="nav-item" data-view="situations"><span class="nav-icon">◎</span>Operational situations</button>
         <button class="nav-item" data-view="hazards"><span class="nav-icon">◇</span>Hazard catalogue</button>
@@ -94,6 +95,16 @@
           </div>
           <div class="component-row" id="overview-components"></div>
         </section>
+      </section>
+
+      <section class="view" id="workflow-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Design before assurance</p><h2>Engineering workflow</h2><p>Plan disciplined engineering activities, place safety checkpoints where design decisions are made, and connect each gate to analysis and evidence.</p></div>
+          <div class="toolbar-actions"><button class="button secondary" id="add-workflow-phase-btn">Add phase</button><button class="button primary" id="add-workflow-activity-btn">Add activity</button></div>
+        </div>
+        <div class="workflow-summary" id="workflow-summary"></div>
+        <section class="card workflow-guidance" id="workflow-guidance"></section>
+        <div class="workflow-board" id="workflow-board"></div>
       </section>
 
       <section class="view" id="fmea-view">
@@ -399,6 +410,39 @@
         <div class="expression-preview"><span>Evaluated rate</span><strong id="expression-preview">0.00e+0</strong></div>
         <p class="dialog-copy" id="expression-error"></p>
         <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save FMEDA row</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="workflow-phase-dialog">
+      <form method="dialog" id="workflow-phase-form">
+        <div class="dialog-header"><div><p class="eyebrow">Workflow structure</p><h2>Add engineering phase</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <div class="form-grid">
+          <label><span>Phase name</span><input name="name" required placeholder="e.g. Concept design" /></label>
+          <label><span>Purpose</span><input name="purpose" required placeholder="What should this phase establish?" /></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Add phase</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="workflow-activity-dialog">
+      <form method="dialog" id="workflow-activity-form">
+        <div class="dialog-header"><div><p class="eyebrow">Engineering activity</p><h2 id="workflow-activity-title">Add activity</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <input type="hidden" name="id" />
+        <div class="form-grid">
+          <label><span>Phase</span><select name="phaseId" required></select></label>
+          <label><span>Owner</span><input name="owner" placeholder="e.g. System architect" /></label>
+          <label class="wide"><span>Activity</span><input name="title" required placeholder="e.g. Define system boundary" /></label>
+          <label class="wide"><span>Objective</span><textarea name="objective" required placeholder="What engineering decision or output should this activity produce?"></textarea></label>
+          <label><span>Inputs</span><input name="inputs" placeholder="Models, stakeholder needs, assumptions" /></label>
+          <label><span>Outputs</span><input name="outputs" placeholder="Architecture, decision record, requirements" /></label>
+          <label class="wide"><span>Safety checkpoint</span><textarea name="safetyCheckpoint" placeholder="What safety question must be considered at this point?"></textarea></label>
+          <label><span>Linked analysis</span><select name="analysis"><option value="">No linked analysis</option><option value="architecture">Architecture</option><option value="situations">Operational situations</option><option value="hazards">Hazard catalogue</option><option value="hara">HARA</option><option value="sil">SIL assessment</option><option value="fmea">FMEA</option><option value="fmeda">FMEDA</option><option value="quantitative">Quantitative safety</option><option value="requirements">Safety requirements</option></select></label>
+          <label><span>Status</span><select name="status"><option>Not started</option><option>In progress</option><option>Complete</option></select></label>
+          <label class="wide"><span>Standard or assurance objective</span><input name="standardReference" placeholder="e.g. IEC 61508-1 clause 7.1 or internal design-review objective" /></label>
+          <label class="wide"><span>Completion criteria</span><input name="completionCriteria" placeholder="Conditions required before this activity is complete" /></label>
+          <label class="wide"><span>Evidence</span><input name="evidence" placeholder="Review record, test report, model, calculation, or decision rationale" /></label>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save activity</button></div>
       </form>
     </dialog>
 

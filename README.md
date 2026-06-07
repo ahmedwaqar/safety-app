@@ -9,6 +9,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | Workspace | Capabilities |
 | --- | --- |
 | Overview | Safety-case metrics, residual-risk summary, high-priority failure modes, analysis coverage, and architecture components in scope |
+| Engineering workflow | Configure development phases and activities, insert safety checkpoints, define gate criteria, record evidence, assign owners, and launch linked analyses |
 | Architecture | Paste PlantUML source, render an SVG diagram locally, and import component aliases as reusable references |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
 | Hazard catalogue | Maintain reusable hazards and view linked analysis references |
@@ -60,20 +61,34 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 
 ## Suggested Workflow
 
-1. Open **Architecture**, paste or update the PlantUML model, and select **Render diagram**.
-2. Select **Import components** so PlantUML aliases become available as references in the analysis.
-3. Add the relevant **Operational situations**.
-4. Maintain the reusable **Hazard catalogue**.
-5. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
-6. For an AMR application, use **AMR SIL assessment** to estimate the target SIL for each safety function.
-7. Add **Safety goals** for the classified hazardous events.
-8. Use **Quantitative safety** to add component failure-rate assumptions and compare PFH or PFDavg with the target SIL.
-9. Use the **FMEDA worksheet** to classify hardware failure modes and evaluate symbolic rate expressions.
-10. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
-11. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
-12. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
+1. Open **Engineering workflow** to plan phases, activities, safety checkpoints, gates, and evidence.
+2. Open **Architecture**, paste or update the PlantUML model, and select **Render diagram**.
+3. Select **Import components** so PlantUML aliases become available as references in the analysis.
+4. Add the relevant **Operational situations**.
+5. Maintain the reusable **Hazard catalogue**.
+6. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
+7. For an AMR application, use **AMR SIL assessment** to estimate the target SIL for each safety function.
+8. Add **Safety goals** for the classified hazardous events.
+9. Use **Quantitative safety** to add component failure-rate assumptions and compare PFH or PFDavg with the target SIL.
+10. Use the **FMEDA worksheet** to classify hardware failure modes and evaluate symbolic rate expressions.
+11. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
+12. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
+13. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
 
 ## Using Each Workspace
+
+### Engineering Workflow
+
+The workflow starts with a generic critical-systems template covering definition, exploration, architecture, specification, verification, and assurance.
+
+- Add phases and activities to reflect the project's development lifecycle.
+- Add safety checkpoints where engineering decisions can introduce or reduce risk.
+- Link activities to architecture, hazard analysis, FMEA, FMEDA, SIL, quantitative analysis, or requirements.
+- Map activities to applicable standards clauses or internal assurance objectives.
+- Define completion criteria and record evidence before treating a gate as ready.
+- Use owners and activity status to make open engineering work visible.
+
+Safety is treated as a continuous engineering lens rather than a single downstream review phase.
 
 ### Architecture
 

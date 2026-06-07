@@ -234,11 +234,45 @@ try {
   });
 
   await test("navigation buttons switch all application views", async () => {
-    for (const view of ["fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
+    for (const view of ["workflow", "fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
       assert(await evaluate(`document.querySelector("#add-fmea-row-btn").hidden`) === (view !== "fmea"), `Add FMEA row visibility was incorrect in ${view} view`);
     }
+  });
+
+  await test("engineering workflow manages phases, safety gates, evidence, and analysis links", async () => {
+    await click('[data-view="workflow"]');
+    const phaseCount = await count("#workflow-board .workflow-phase");
+    const activityCount = await count("#workflow-board .workflow-activity");
+    await click("#add-workflow-phase-btn");
+    await fill('#workflow-phase-form [name="name"]', "Release");
+    await fill('#workflow-phase-form [name="purpose"]', "Confirm readiness for controlled deployment.");
+    await click("#workflow-phase-dialog .dialog-actions .primary");
+    assert(await count("#workflow-board .workflow-phase") === phaseCount + 1, "workflow phase was not added");
+    await click("#add-workflow-activity-btn");
+    await fill('#workflow-activity-form [name="phaseId"]', await evaluate(`state.workflow.phases.find(phase => phase.name === "Release").id`));
+    await fill('#workflow-activity-form [name="title"]', "Review residual risk");
+    await fill('#workflow-activity-form [name="objective"]', "Confirm release decisions are supported by engineering evidence.");
+    await fill('#workflow-activity-form [name="safetyCheckpoint"]', "Are residual risks accepted by authorized reviewers?");
+    await fill('#workflow-activity-form [name="analysis"]', "requirements");
+    await fill('#workflow-activity-form [name="standardReference"]', "Internal release assurance objective");
+    await fill('#workflow-activity-form [name="completionCriteria"]', "All release-blocking concerns are resolved.");
+    await fill('#workflow-activity-form [name="status"]', "Complete");
+    await click("#workflow-activity-dialog .dialog-actions .primary");
+    assert(await count("#workflow-board .workflow-activity") === activityCount + 1, "workflow activity was not added");
+    assert(await evaluate(`document.querySelector("#workflow-guidance").textContent.includes("1 gate gap")`), "missing evidence did not create a workflow gate gap");
+    await click("#workflow-board .workflow-phase:last-child [data-edit-workflow-activity]");
+    await fill('#workflow-activity-form [name="evidence"]', "Residual risk review RR-01");
+    await click("#workflow-activity-dialog .dialog-actions .primary");
+    assert(!await evaluate(`document.querySelector("#workflow-guidance").textContent.includes("1 gate gap")`), "workflow evidence did not close the gate gap");
+    await click("#workflow-board .workflow-phase:last-child [data-open-workflow-analysis]");
+    assert(await evaluate(`document.querySelector("#requirements-view").classList.contains("active")`), "workflow analysis link did not open its worksheet");
+    await click('[data-view="workflow"]');
+    await click("#workflow-board .workflow-phase:last-child [data-delete-workflow-activity]");
+    assert(await count("#workflow-board .workflow-activity") === activityCount, "workflow activity was not deleted");
+    await click("#workflow-board .workflow-phase:last-child [data-delete-workflow-phase]");
+    assert(await count("#workflow-board .workflow-phase") === phaseCount, "empty workflow phase was not deleted");
   });
 
   await test("overview shortcuts navigate to worksheets", async () => {

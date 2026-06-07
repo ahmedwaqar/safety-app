@@ -5,6 +5,29 @@ const PROJECT_FORMAT = "praxis-studio-workspace";
 const LEGACY_PROJECT_FORMAT = "safeguard-safety-workspace";
 const PROJECT_VERSION = 1;
 
+function engineeringWorkflowTemplate() {
+  const phases = [
+    { id: crypto.randomUUID(), name: "Define", purpose: "Establish purpose, boundaries, stakeholders, lifecycle, and applicable obligations." },
+    { id: crypto.randomUUID(), name: "Explore", purpose: "Understand operating contexts, hazards, misuse, assumptions, and unacceptable outcomes." },
+    { id: crypto.randomUUID(), name: "Architect", purpose: "Develop system structure, interfaces, safety functions, and risk-reduction strategies." },
+    { id: crypto.randomUUID(), name: "Specify", purpose: "Derive requirements, allocations, acceptance criteria, and verification methods." },
+    { id: crypto.randomUUID(), name: "Verify and assure", purpose: "Confirm implementation, validate assumptions, close risks, and assemble evidence." }
+  ];
+  const activity = (phase, title, objective, safetyCheckpoint, analysis, completionCriteria) => ({
+    id: crypto.randomUUID(), phaseId: phases[phase].id, title, objective, owner: "", inputs: "", outputs: "", safetyCheckpoint, analysis, standardReference: "", completionCriteria, evidence: "", status: "Not started"
+  });
+  return {
+    phases,
+    activities: [
+      activity(0, "Define system purpose and boundary", "Agree what the system must achieve, what is inside its boundary, and which lifecycle stages are in scope.", "Could an omitted interface, operating mode, person, or lifecycle activity introduce unacceptable risk?", "architecture", "System purpose, boundary, interfaces, stakeholders, and lifecycle scope are reviewed."),
+      activity(1, "Identify operating situations and hazards", "Explore normal operation, degraded modes, foreseeable misuse, maintenance, and environmental conditions.", "Which combinations of system behavior and operating context could cause harm?", "hazards", "Relevant operating situations and hazards are recorded with supporting assumptions."),
+      activity(2, "Select risk-reduction architecture", "Compare design alternatives and allocate safety functions before detailed implementation.", "Can the hazard be eliminated by design? Are safety mechanisms independent and capable of reaching a safe state?", "fmea", "Architecture decisions address identified hazards and record rejected alternatives."),
+      activity(3, "Derive verifiable requirements", "Translate design decisions and risk controls into allocated, testable requirements.", "Does every risk control have measurable behavior, timing, integrity, and verification criteria?", "requirements", "Requirements trace to hazards, architecture, and planned verification evidence."),
+      activity(4, "Review evidence and residual risk", "Confirm analyses, tests, assumptions, and traceability support release decisions.", "Are any hazards uncontrolled, assumptions unvalidated, requirements unverified, or changes not impact-assessed?", "requirements", "Open safety concerns are resolved or explicitly accepted by authorized reviewers.")
+    ]
+  };
+}
+
 const seed = {
   plantuml: `@startuml
 title Collaborative robot cell
@@ -82,6 +105,7 @@ HMI --> CTRL : task selection
       { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen clear not detected", localEffect: "Protective-field intrusion is not reported", endEffect: "Protective stop may fail on demand", classification: "dangerous_undetected", diagnostic: "Residual failure after scanner diagnostics", expression: "lambda_scanner * frac_dangerous * (1 - dc_scanner)" }
     ]
   },
+  workflow: engineeringWorkflowTemplate(),
   customColumns: [{ key: "owner", label: "Owner" }],
   fmea: [
     { id: crypto.randomUUID(), component: "SCAN", failureMode: "Protective field not detected", effect: "Robot continues moving while operator enters shared workspace", hazard: "H-03", situation: "OS-01", severity: 9, occurrence: 2, detection: 3, action: "Add cyclic diagnostic monitoring", custom: { owner: "Controls" } },
@@ -94,7 +118,7 @@ function blankWorkspace() {
   return {
     plantuml: "@startuml\n@enduml", components: [], hazards: [], situations: [], requirements: [], safetyGoals: [], hara: [], silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
-    fmeda: { constants: [], rows: [] }, customColumns: [], fmea: []
+    fmeda: { constants: [], rows: [] }, workflow: engineeringWorkflowTemplate(), customColumns: [], fmea: []
   };
 }
 
@@ -141,6 +165,7 @@ function validateWorkspaceData(data) {
   for (const key of ["components", "hazards", "situations", "requirements", "safetyGoals", "hara", "silAssessments", "fmea"]) if (data[key] !== undefined && !Array.isArray(data[key])) throw new Error(`Workspace field "${key}" must be an array.`);
   if (data.quantitative !== undefined && (!data.quantitative || typeof data.quantitative !== "object" || !Array.isArray(data.quantitative.components))) throw new Error('Workspace field "quantitative.components" must be an array.');
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows))) throw new Error('Workspace FMEDA fields must be arrays.');
+  if (data.workflow !== undefined && (!data.workflow || typeof data.workflow !== "object" || !Array.isArray(data.workflow.phases) || !Array.isArray(data.workflow.activities))) throw new Error("Workspace workflow phases and activities must be arrays.");
   validateIdentifierCollection(data.components, "id", "Component identifier");
   validateIdentifierCollection(data.hazards, "id", "Hazard identifier");
   validateIdentifierCollection(data.situations, "id", "Situation identifier");
@@ -155,6 +180,7 @@ function validateWorkspaceData(data) {
   data.quantitative?.components?.forEach(row => { validateNumber(row.lambdaTotal, "Total failure rate", { min: 0 }); validateNumber(row.dangerousFraction, "Dangerous fraction", { min: 0, max: 1 }); validateNumber(row.diagnosticCoverage, "Diagnostic coverage", { min: 0, max: 1 }); validateNumber(row.proofTestHours, "Proof-test interval", { min: Number.EPSILON }); validateNumber(row.channels, "Channels", { min: 1, max: 2, integer: true }); validateNumber(row.beta, "Common-cause beta", { min: 0, max: 1 }); });
   data.fmeda?.constants?.forEach(item => { requireSymbol(item.symbol, "FMEDA symbol"); validateNumber(item.value, "FMEDA constant", { min: 0 }); });
   data.fmeda?.rows?.forEach(row => requireEnum(row.classification, "FMEDA classification", ["safe", "dangerous_detected", "dangerous_undetected", "no_effect"]));
+  data.workflow?.activities?.forEach(activity => requireEnum(activity.status, "Workflow activity status", ["Not started", "In progress", "Complete"]));
   return migrateWorkspace(data);
 }
 function handleFormError(error) { alert(error.message); }
@@ -420,7 +446,7 @@ function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = ({ fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#page-title").textContent = ({ workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
 }
 
@@ -550,6 +576,39 @@ function renderRequirements() {
   </article>`).join("");
 }
 
+function workflowGateReady(activity) {
+  return activity.status === "Complete" && (!activity.safetyCheckpoint || String(activity.evidence || "").trim()) && String(activity.completionCriteria || "").trim();
+}
+function renderWorkflow() {
+  const activities = state.workflow.activities;
+  const completed = activities.filter(activity => activity.status === "Complete").length;
+  const safetyChecks = activities.filter(activity => String(activity.safetyCheckpoint || "").trim()).length;
+  const ready = activities.filter(workflowGateReady).length;
+  const gaps = activities.filter(activity => activity.status === "Complete" && !workflowGateReady(activity)).length;
+  $("#workflow-summary").innerHTML = [
+    [state.workflow.phases.length, "Engineering phases"], [activities.length, "Activities"], [safetyChecks, "Safety checkpoints"], [ready, "Gates ready"]
+  ].map(([value, label]) => `<div class="workflow-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+  const percent = activities.length ? Math.round(completed / activities.length * 100) : 0;
+  $("#workflow-guidance").innerHTML = `<div class="card-header"><div><p class="eyebrow">Workflow health</p><h3>${percent}% complete · ${gaps} gate gap${gaps === 1 ? "" : "s"}</h3></div><span class="status ${gaps ? "planned" : completed === activities.length && activities.length ? "verified" : "draft"}">${gaps ? "Needs evidence" : "On track"}</span></div><p>Complete an activity only when its engineering output and completion criteria are satisfied. A completed safety checkpoint also needs recorded evidence before its gate is ready.</p>`;
+  $("#workflow-board").innerHTML = state.workflow.phases.map((phase, phaseIndex) => {
+    const phaseActivities = activities.filter(activity => activity.phaseId === phase.id);
+    const phaseReady = phaseActivities.length && phaseActivities.every(workflowGateReady);
+    return `<section class="workflow-phase">
+      <div class="workflow-phase-header"><div><p class="eyebrow">Phase ${phaseIndex + 1}</p><h3>${esc(phase.name)}</h3><p>${esc(phase.purpose)}</p></div><div class="workflow-phase-actions"><span class="status ${phaseReady ? "verified" : "draft"}">${phaseReady ? "Gate ready" : `${phaseActivities.filter(activity => activity.status === "Complete").length}/${phaseActivities.length} complete`}</span><button class="mini-btn" title="Delete phase" data-delete-workflow-phase="${phase.id}">×</button></div></div>
+      <div class="workflow-activity-list">${phaseActivities.length ? phaseActivities.map(activity => {
+        const ready = workflowGateReady(activity);
+        const statusClass = activity.status === "Complete" ? "verified" : activity.status === "In progress" ? "planned" : "draft";
+        return `<article class="workflow-activity">
+          <input class="workflow-check" type="checkbox" title="Mark complete" data-toggle-workflow-activity="${activity.id}" ${activity.status === "Complete" ? "checked" : ""} />
+          <div><h3>${esc(activity.title)}</h3><p>${esc(activity.objective)}</p><div class="workflow-meta"><span class="status ${statusClass}">${esc(activity.status)}</span>${activity.owner ? `<span class="tag">${esc(activity.owner)}</span>` : ""}${activity.analysis ? `<span class="tag">${esc(activity.analysis.toUpperCase())}</span>` : ""}${activity.standardReference ? `<span class="tag">${esc(activity.standardReference)}</span>` : ""}</div></div>
+          <div class="workflow-checkpoint"><strong>Safety checkpoint</strong><p>${esc(activity.safetyCheckpoint || "No checkpoint defined. Review whether this decision can affect risk.")}</p></div>
+          <div class="workflow-row-actions"><div class="workflow-evidence ${activity.status === "Complete" && !ready ? "missing" : ""}"><strong>${ready ? "Gate evidence ready" : "Gate requirements"}</strong>${esc(activity.evidence || activity.completionCriteria || "Add completion criteria and evidence.")}</div>${activity.analysis ? `<button class="button secondary small" data-open-workflow-analysis="${activity.analysis}">Open analysis</button>` : ""}<div class="row-actions"><button class="mini-btn" title="Edit" data-edit-workflow-activity="${activity.id}">✎</button><button class="mini-btn" title="Delete" data-delete-workflow-activity="${activity.id}">×</button></div></div>
+        </article>`;
+      }).join("") : '<p class="workflow-empty">No activities in this phase yet.</p>'}</div>
+    </section>`;
+  }).join("");
+}
+
 function renderArchitecture() {
   $("#plantuml-source").value = state.plantuml;
   $("#component-count").textContent = state.components.length;
@@ -560,7 +619,7 @@ function renderWorkspaceControls() {
   $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
   document.title = `${active.name} | Praxis Studio`;
 }
-function renderAll() { renderWorkspaceControls(); renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
+function renderAll() { renderWorkspaceControls(); renderMetrics(); renderWorkflow(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
 
 function fillRowForm(row = {}) {
   const form = $("#row-form");
@@ -573,6 +632,14 @@ function fillRowForm(row = {}) {
   ["failureMode", "effect", "severity", "occurrence", "detection", "action"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
   $("#custom-row-fields").innerHTML = state.customColumns.map(column => `<label><span>${esc(column.label)}</span><input name="custom_${esc(column.key)}" value="${esc(row.custom?.[column.key] || "")}" /></label>`).join("");
   $("#row-dialog").showModal();
+}
+function fillWorkflowActivityForm(activity = {}) {
+  const form = $("#workflow-activity-form"); form.reset();
+  $("#workflow-activity-title").textContent = activity.id ? "Edit activity" : "Add activity";
+  form.elements.id.value = activity.id || "";
+  form.elements.phaseId.innerHTML = state.workflow.phases.map(phase => `<option value="${esc(phase.id)}">${esc(phase.name)}</option>`).join("");
+  ["phaseId", "owner", "title", "objective", "inputs", "outputs", "safetyCheckpoint", "analysis", "status", "standardReference", "completionCriteria", "evidence"].forEach(key => { if (activity[key] !== undefined) form.elements[key].value = activity[key]; });
+  $("#workflow-activity-dialog").showModal();
 }
 
 function openCatalog(group) {
@@ -653,6 +720,11 @@ document.addEventListener("keydown", event => { if (event.key === "Escape") clos
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
 $("#close-workspace-btn").addEventListener("click", closeActiveWorkspace);
+$("#add-workflow-phase-btn").addEventListener("click", () => { $("#workflow-phase-form").reset(); $("#workflow-phase-dialog").showModal(); });
+$("#add-workflow-activity-btn").addEventListener("click", () => {
+  if (!state.workflow.phases.length) return alert("Add an engineering phase before creating an activity.");
+  fillWorkflowActivityForm();
+});
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
@@ -673,6 +745,21 @@ window.addEventListener("storage", event => {
 document.addEventListener("click", event => {
   const close = event.target.closest("[data-close-dialog]"); if (close) close.closest("dialog").close();
   const go = event.target.closest("[data-go]"); if (go) showView(go.dataset.go);
+  const workflowAnalysis = event.target.closest("[data-open-workflow-analysis]"); if (workflowAnalysis) showView(workflowAnalysis.dataset.openWorkflowAnalysis);
+  const editWorkflow = event.target.closest("[data-edit-workflow-activity]"); if (editWorkflow) fillWorkflowActivityForm(state.workflow.activities.find(activity => activity.id === editWorkflow.dataset.editWorkflowActivity));
+  const toggleWorkflow = event.target.closest("[data-toggle-workflow-activity]");
+  if (toggleWorkflow) {
+    const activity = state.workflow.activities.find(item => item.id === toggleWorkflow.dataset.toggleWorkflowActivity);
+    if (activity) { activity.status = toggleWorkflow.checked ? "Complete" : "In progress"; save(); }
+  }
+  const removeWorkflow = event.target.closest("[data-delete-workflow-activity]");
+  if (removeWorkflow && confirm("Delete this workflow activity?")) { state.workflow.activities = state.workflow.activities.filter(activity => activity.id !== removeWorkflow.dataset.deleteWorkflowActivity); save(); }
+  const removeWorkflowPhase = event.target.closest("[data-delete-workflow-phase]");
+  if (removeWorkflowPhase) {
+    const used = state.workflow.activities.some(activity => activity.phaseId === removeWorkflowPhase.dataset.deleteWorkflowPhase);
+    if (used) alert("Move or delete this phase's activities before deleting the phase.");
+    else if (confirm("Delete this engineering phase?")) { state.workflow.phases = state.workflow.phases.filter(phase => phase.id !== removeWorkflowPhase.dataset.deleteWorkflowPhase); save(); }
+  }
   if (event.target.closest("[data-open-row]")) fillRowForm();
   const catalog = event.target.closest("[data-open-catalog]"); if (catalog) openCatalog(catalog.dataset.openCatalog);
   const edit = event.target.closest("[data-edit-row]"); if (edit) fillRowForm(state.fmea.find(x => x.id === edit.dataset.editRow));
@@ -705,6 +792,38 @@ document.addEventListener("click", event => {
     const symbol = removeConstant.dataset.deleteConstant; const used = state.fmeda.rows.some(row => new RegExp(`\\b${symbol}\\b`).test(row.expression));
     if (used) alert("This constant is referenced by an FMEDA expression and cannot be deleted."); else if (confirm("Delete this constant?")) { state.fmeda.constants = state.fmeda.constants.filter(item => item.symbol !== symbol); save(); }
   }
+});
+
+$("#workflow-phase-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  try {
+    data.name = requireUniqueIdentifier(state.workflow.phases, requireValue(data.name, "Phase name"), "Phase name", { field: "name" });
+    data.purpose = requireValue(data.purpose, "Phase purpose");
+  } catch (error) { return handleFormError(error); }
+  state.workflow.phases.push({ id: crypto.randomUUID(), name: data.name, purpose: data.purpose });
+  $("#workflow-phase-dialog").close(); save();
+});
+$("#workflow-activity-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  let activity;
+  try {
+    activity = {
+      id: data.id || crypto.randomUUID(),
+      phaseId: requireValue(data.phaseId, "Engineering phase"),
+      title: requireValue(data.title, "Activity"),
+      objective: requireValue(data.objective, "Objective"),
+      owner: data.owner.trim(), inputs: data.inputs.trim(), outputs: data.outputs.trim(),
+      safetyCheckpoint: data.safetyCheckpoint.trim(), analysis: data.analysis,
+      standardReference: data.standardReference.trim(),
+      completionCriteria: data.completionCriteria.trim(), evidence: data.evidence.trim(),
+      status: requireEnum(data.status, "Activity status", ["Not started", "In progress", "Complete"])
+    };
+  } catch (error) { return handleFormError(error); }
+  const existing = state.workflow.activities.find(item => item.id === data.id);
+  if (existing) Object.assign(existing, activity); else state.workflow.activities.push(activity);
+  $("#workflow-activity-dialog").close(); save();
 });
 
 $("#row-form").addEventListener("submit", event => {
