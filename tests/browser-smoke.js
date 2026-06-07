@@ -183,6 +183,28 @@ try {
     assert(await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-IMPORTED")`), "imported workspace data is missing");
   });
 
+  await test("robotic cell training project is a complete importable workspace", async () => {
+    const summary = await evaluate(`(async () => {
+      const project = parseProject(await (await fetch("/training/examples/palletizing-cell.praxis.json")).text());
+      return {
+        name: project.name,
+        phases: project.data.workflow.phases.length,
+        activities: project.data.workflow.activities.length,
+        components: project.data.components.length,
+        situations: project.data.situations.length,
+        hazards: project.data.hazards.length,
+        requirements: project.data.requirements.length,
+        sil: project.data.silAssessments.length,
+        fmea: project.data.fmea.length,
+        fmeda: project.data.fmeda.rows.length
+      };
+    })()`);
+    assert(summary.name === "Palletizing Cell Training Project", "training project name is incorrect");
+    assert(summary.phases >= 6 && summary.activities >= 12, "training project workflow is incomplete");
+    assert(summary.components >= 12 && summary.situations >= 8 && summary.hazards >= 8, "training project system context is incomplete");
+    assert(summary.requirements >= 7 && summary.sil >= 3 && summary.fmea >= 6 && summary.fmeda >= 5, "training project analyses are incomplete");
+  });
+
   await test("portable JSON import activates an existing project without duplicating it", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {

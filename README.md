@@ -35,10 +35,13 @@ The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](ven
 
 ## Beginner Training
 
-New to AMR safety analysis? Start with the hands-on [`AMR Robot Safety Training`](training/README.md). It includes:
+For an industry-style learning path, use the [`Robotic Cell Engineering Practicum`](training/robotic-cell-practicum.md) with its completed [`palletizing-cell.praxis.json`](training/examples/palletizing-cell.praxis.json) project.
+
+The shorter [`AMR Robot Safety Training`](training/README.md) remains available as an introductory course. Training assets include:
 
 - Five beginner modules
 - A runnable warehouse-AMR PlantUML example
+- A detailed palletizing-cell project covering workflow, architecture, hazards, safety functions, FMEA, FMEDA, requirements, validation, and change impact
 - Working SIL, FMEA, and safety-requirement examples
 - Student tasks and a capstone assessment
 - A separate instructor answer key
