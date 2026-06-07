@@ -238,6 +238,12 @@ function createWorkspace(name, data = blankWorkspace()) {
   const workspace = { id: workspaceId(), name: workspaceName, updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
   workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
 }
+function createNewWorkspace() {
+  const name = prompt("Name the new workspace:");
+  if (name === null) return;
+  try { createWorkspace(name); }
+  catch (error) { alert(error.message); }
+}
 function matchingWorkspace(items, project) {
   return items.find(workspace => (project.id && workspace.id === project.id) || sameIdentifier(workspace.name, project.name));
 }
@@ -717,6 +723,7 @@ $("#workspace-menu-btn").addEventListener("click", () => {
 $("#workspace-menu").addEventListener("click", event => { if (event.target.closest("button")) closeWorkspaceMenu(); });
 document.addEventListener("click", event => { if (!event.target.closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
+$("#new-workspace-btn").addEventListener("click", createNewWorkspace);
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
 $("#close-workspace-btn").addEventListener("click", closeActiveWorkspace);

@@ -104,6 +104,19 @@ try {
     await fill("#workspace-select", original);
   });
 
+  await test("File > New creates and activates a blank named workspace", async () => {
+    const original = await evaluate(`document.querySelector("#workspace-select").value`);
+    const before = await count("#workspace-select option");
+    await evaluate(`window.prompt = () => "Packaging line project";`);
+    await click("#workspace-menu-btn");
+    await click("#new-workspace-btn");
+    assert(await count("#workspace-select option") === before + 1, "New did not create a workspace");
+    assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === "Packaging line project", "New workspace did not become active");
+    assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "New workspace did not start blank");
+    assert(await count("#hazards-grid .catalog-card") === 0, "New workspace inherited hazard data");
+    await fill("#workspace-select", original);
+  });
+
   await test("projects can open in independent browser tabs", async () => {
     await evaluate(`window.open = (url, target, features) => { window.__openedTab = { url: String(url), target, features }; };`);
     const activeId = await evaluate(`document.querySelector("#workspace-select").value`);
@@ -139,7 +152,7 @@ try {
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu should start closed");
     await click("#workspace-menu-btn");
     assert(!await evaluate(`document.querySelector("#workspace-menu").hidden`), "file menu did not open");
-    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "Open,Open in new tab,Save,Close workspace,Delete", "file menu does not contain the project actions");
+    assert(await evaluate(`[...document.querySelectorAll("#workspace-menu button")].map(button => button.textContent).join(",")`) === "New,Open,Open in new tab,Save,Close workspace,Delete", "file menu does not contain the project actions");
     await evaluate(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "Escape did not close the file menu");
   });

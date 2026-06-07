@@ -224,6 +224,7 @@ Use **Add requirement** to specify the control statement, source hazard, allocat
 
 Praxis Studio supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
 
+- Select **New** to name and create a blank browser workspace
 - Select **Open** to reopen a saved project file as a browser workspace
 - Select **Open in new tab** to work with the active project alongside other projects
 - Select **Save** to preserve the active project in browser storage and download `<workspace-name>.praxis.json`
