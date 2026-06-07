@@ -1,17 +1,20 @@
 import { spawn } from "bun";
 import { join } from "path";
 import { buildApp } from "../scripts/build-app.ts";
+import { ProjectService } from "../services/project-service.ts";
 
 const root = join(import.meta.dir, "..");
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const debugPort = 9333;
 const profile = `/tmp/safeguard-chrome-${Date.now()}`;
 const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".md": "text/markdown" };
+const projectService = new ProjectService(`/tmp/praxis-project-service-${Date.now()}.json`);
 
 const server = Bun.serve({
   port: 0,
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/api/projects") return projectService.handle(request);
     if (url.pathname === "/api/plantuml/render") {
       const source = await request.text();
       if (!source.includes("@startuml")) return new Response("Invalid PlantUML", { status: 400 });
@@ -131,16 +134,31 @@ try {
     assert(await evaluate(`sessionStorage.getItem("safeguard-active-workspace-v1")`) === activeId, "active project is not stored per tab");
   });
 
-  await test("close workspace removes the project from the switcher and allows reopening", async () => {
+  await test("close workspace affects only the current tab and allows reopening", async () => {
     const before = await count("#workspace-select option");
+    const globalBefore = await evaluate(`workspaceRegistry.workspaces.length`);
+    const closedId = await evaluate(`document.querySelector("#workspace-select").value`);
     const closedName = await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`);
     await click("#workspace-menu-btn");
     await click("#close-workspace-btn");
     assert(await count("#workspace-select option") === before - 1, "close workspace did not remove the project from the switcher");
-    assert(await evaluate(`workspaceRegistry.closedWorkspaces.some(workspace => workspace.name === ${JSON.stringify(closedName)})`), "closed project was not preserved");
+    assert(await evaluate(`workspaceRegistry.workspaces.length`) === globalBefore, "close workspace removed the project from the shared registry");
+    assert(!await evaluate(`JSON.parse(sessionStorage.getItem("praxis-open-workspaces-v1")).includes(${JSON.stringify(closedId)})`), "closed project remains open in the current tab");
+    assert(await evaluate(`workspaceRegistry.workspaces.some(workspace => workspace.id === ${JSON.stringify(closedId)})`), "closed project is unavailable to other tabs");
     await evaluate(`openProject({ name: ${JSON.stringify(closedName)}, data: blankWorkspace() })`);
     assert(await count("#workspace-select option") === before, "reopening a closed project did not restore it");
     assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === closedName, "reopened project did not become active");
+  });
+
+  await test("project service mirrors the browser workspace registry", async () => {
+    const registry = await retry(async () => {
+      const response = await fetch(`http://localhost:${server.port}/api/projects`);
+      assert(response.ok, "project service GET failed");
+      const data = await response.json();
+      assert(data.workspaces.some(workspace => workspace.name === "Warehouse AMR project"), "project service has not received browser projects");
+      return data;
+    });
+    assert(registry.version === 1, "project service registry version is missing");
   });
 
   await test("workspace manager rejects duplicate project names", async () => {

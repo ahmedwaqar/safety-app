@@ -238,7 +238,7 @@ Praxis Studio supports multiple independent local workspaces. Use the top-bar wo
 - Select **Open** to reopen a saved project file as a browser workspace
 - Select **Open in new tab** to work with the active project alongside other projects
 - Select **Save** to preserve the active project in browser storage and download `<workspace-name>.praxis.json`
-- Select **Close workspace** to remove the project from the workspace selector without deleting its stored data; opening it again restores the existing project
+- Select **Close workspace** to remove the project from the current tab only; other tabs and stored project data are unaffected
 - Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
 
@@ -258,7 +258,7 @@ Portable project files use a versioned JSON envelope:
 
 The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, and requirements. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
-Local workspace metadata is stored in browser `localStorage`, while each tab keeps its active-project selection in `sessionStorage`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
+Project data is cached in browser `localStorage`, while each tab keeps its own open-project list and active-project selection in `sessionStorage`. In server mode, the browser registry is also mirrored through the `/api/projects` project service to `.praxis-data/projects.json`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
 
 ## Input Validation
 
@@ -305,6 +305,8 @@ app/
   praxis-studio.browser.js
                          Generated browser artifact for direct index.html use
 scripts/build-app.ts      Shared TypeScript-to-JavaScript browser build
+services/project-service.ts
+                         Project registry persistence microservice
 server.js                Lightweight server and local PlantUML SVG endpoint
 tests/browser-smoke.js   Headless Chrome interaction suite
 vendor/plantuml.jar      Attached PlantUML renderer

@@ -1,10 +1,12 @@
 import { join, normalize } from "path";
 import { buildApp } from "./scripts/build-app.ts";
+import { ProjectService } from "./services/project-service.ts";
 
 const root = import.meta.dir;
 const port = Number(process.env.PORT || 8080);
 const jar = join(root, "vendor", "plantuml.jar");
 const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".md": "text/markdown", ".svg": "image/svg+xml" };
+const projectService = new ProjectService();
 
 export async function renderPlantUml(source) {
   const process = Bun.spawn(["java", "-Djava.awt.headless=true", "-jar", jar, "-tsvg", "-pipe"], {
@@ -22,6 +24,7 @@ export function startServer(serverPort = port) {
     port: serverPort,
     async fetch(request) {
       const url = new URL(request.url);
+      if (url.pathname === "/api/projects") return projectService.handle(request);
       if (url.pathname === "/api/plantuml/render") {
         if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
         try {

@@ -4,6 +4,7 @@
 var STORAGE_KEY = "safeguard-cobot-workspace-v1";
 var WORKSPACES_KEY = "safeguard-workspaces-v1";
 var ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
+var TAB_WORKSPACES_KEY = "praxis-open-workspaces-v1";
 var PROJECT_FORMAT = "praxis-studio-workspace";
 var LEGACY_PROJECT_FORMAT = "safeguard-safety-workspace";
 var PROJECT_VERSION = 1;
@@ -151,6 +152,7 @@ function blankWorkspace() {
 var workspaceRegistry;
 var state = load();
 var diagramUrl;
+var serverSyncReady = false;
 var $ = (selector, parent = document) => parent.querySelector(selector);
 var $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
 var esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
@@ -282,12 +284,37 @@ function activeWorkspaceId() {
 }
 function setActiveWorkspaceId(id, updateUrl = true) {
   sessionStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
-  localStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
   if (updateUrl && location.protocol !== "file:") {
     const url = new URL(location.href);
     url.searchParams.set("workspace", id);
     history.replaceState(null, "", url);
   }
+}
+function tabWorkspaceIds() {
+  const available = new Set(workspaceRegistry.workspaces.map((workspace) => workspace.id));
+  const stored = sessionStorage.getItem(TAB_WORKSPACES_KEY);
+  let ids = stored ? JSON.parse(stored) : [];
+  if (!stored) {
+    const requested = requestedWorkspaceId();
+    ids = requested && available.has(requested) ? [requested] : workspaceRegistry.workspaces.map((workspace) => workspace.id);
+  }
+  ids = ids.filter((id) => available.has(id));
+  sessionStorage.setItem(TAB_WORKSPACES_KEY, JSON.stringify(ids));
+  return ids;
+}
+function setTabWorkspaceIds(ids) {
+  const unique = [...new Set(ids)];
+  sessionStorage.setItem(TAB_WORKSPACES_KEY, JSON.stringify(unique));
+  return unique;
+}
+function openWorkspaceInTab(id) {
+  if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === id))
+    return;
+  setTabWorkspaceIds([...tabWorkspaceIds(), id]);
+}
+function tabWorkspaces() {
+  const openIds = new Set(tabWorkspaceIds());
+  return workspaceRegistry.workspaces.filter((workspace) => openIds.has(workspace.id));
 }
 function refreshWorkspaceRegistry() {
   const stored = localStorage.getItem(WORKSPACES_KEY);
@@ -306,6 +333,7 @@ function load() {
   let activeId = requestedWorkspaceId() || activeWorkspaceId();
   if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === activeId))
     activeId = workspaceRegistry.workspaces[0].id;
+  openWorkspaceInTab(activeId);
   setActiveWorkspaceId(activeId);
   persistRegistry();
   return migrateWorkspace(structuredClone(activeWorkspace().data));
@@ -314,8 +342,45 @@ function activeWorkspace() {
   const activeId = activeWorkspaceId();
   return workspaceRegistry.workspaces.find((workspace) => workspace.id === activeId) || workspaceRegistry.workspaces[0];
 }
+function syncRegistryToServer() {
+  if (!serverSyncReady || !["http:", "https:"].includes(location.protocol))
+    return;
+  fetch("/api/projects", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(workspaceRegistry) }).catch(() => {});
+}
+async function hydrateRegistryFromServer() {
+  if (!["http:", "https:"].includes(location.protocol))
+    return;
+  try {
+    const response = await fetch("/api/projects");
+    if (!response.ok)
+      throw new Error("Project service is unavailable.");
+    const remote = await response.json();
+    if (Array.isArray(remote.workspaces) && remote.workspaces.length) {
+      refreshWorkspaceRegistry();
+      const merged = new Map(workspaceRegistry.workspaces.map((workspace) => [workspace.id, workspace]));
+      for (const workspace of remote.workspaces) {
+        const local = merged.get(workspace.id);
+        if (!local || String(workspace.updatedAt) > String(local.updatedAt))
+          merged.set(workspace.id, workspace);
+      }
+      workspaceRegistry.workspaces = [...merged.values()];
+      workspaceRegistry.closedWorkspaces = Array.isArray(remote.closedWorkspaces) ? remote.closedWorkspaces : workspaceRegistry.closedWorkspaces;
+      const activeId = activeWorkspaceId();
+      if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === activeId)) {
+        openWorkspaceInTab(workspaceRegistry.workspaces[0].id);
+        setActiveWorkspaceId(workspaceRegistry.workspaces[0].id);
+        state = migrateWorkspace(structuredClone(activeWorkspace().data));
+      }
+    }
+  } catch {} finally {
+    serverSyncReady = true;
+    persistRegistry();
+    renderAll();
+  }
+}
 function persistRegistry() {
   localStorage.setItem(WORKSPACES_KEY, JSON.stringify(workspaceRegistry));
+  syncRegistryToServer();
 }
 function persistState() {
   const activeId = activeWorkspaceId();
@@ -336,6 +401,7 @@ function switchWorkspace(id) {
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === id))
     return;
+  openWorkspaceInTab(id);
   setActiveWorkspaceId(id);
   state = migrateWorkspace(structuredClone(activeWorkspace().data));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -373,8 +439,10 @@ function openProject(project) {
   refreshWorkspaceRegistry();
   const open = matchingWorkspace(workspaceRegistry.workspaces, project);
   if (open) {
+    const alreadyOpen = tabWorkspaceIds().includes(open.id);
+    openWorkspaceInTab(open.id);
     switchWorkspace(open.id);
-    alert(`Workspace "${open.name}" is already open.`);
+    alert(alreadyOpen ? `Workspace "${open.name}" is already open in this tab.` : `Workspace "${open.name}" opened in this tab.`);
     return;
   }
   const closed = matchingWorkspace(workspaceRegistry.closedWorkspaces, project);
@@ -384,6 +452,7 @@ function openProject(project) {
     delete closed.closedIndex;
     workspaceRegistry.workspaces.splice(index, 0, closed);
     persistRegistry();
+    openWorkspaceInTab(closed.id);
     switchWorkspace(closed.id);
     alert(`Workspace "${closed.name}" reopened.`);
     return;
@@ -391,6 +460,7 @@ function openProject(project) {
   const workspace = { id: project.id || workspaceId(), name: requireValue(project.name, "Workspace name"), updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(project.data)) };
   workspaceRegistry.workspaces.push(workspace);
   persistRegistry();
+  openWorkspaceInTab(workspace.id);
   switchWorkspace(workspace.id);
   alert(`Workspace "${workspace.name}" opened.`);
 }
@@ -400,10 +470,13 @@ function deleteActiveWorkspace() {
   if (!confirm(`Delete workspace "${workspace.name}" from this browser? Select Save first if you need to reopen it later.`))
     return;
   workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter((item) => item.id !== workspace.id);
+  setTabWorkspaceIds(tabWorkspaceIds().filter((id) => id !== workspace.id));
   if (!workspaceRegistry.workspaces.length)
     workspaceRegistry.workspaces.push(blankWorkspaceRecord());
+  const next = tabWorkspaces()[0] || workspaceRegistry.workspaces[0];
+  openWorkspaceInTab(next.id);
   persistRegistry();
-  switchWorkspace(workspaceRegistry.workspaces[0].id);
+  switchWorkspace(next.id);
 }
 function openActiveWorkspaceInNewTab() {
   persistState();
@@ -415,14 +488,18 @@ function closeActiveWorkspace() {
   persistState();
   refreshWorkspaceRegistry();
   const workspace = activeWorkspace();
-  workspace.closedIndex = workspaceRegistry.workspaces.findIndex((item) => item.id === workspace.id);
-  workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter((item) => item.id !== workspace.id);
-  workspaceRegistry.closedWorkspaces = workspaceRegistry.closedWorkspaces.filter((item) => item.id !== workspace.id);
-  workspaceRegistry.closedWorkspaces.push(workspace);
-  if (!workspaceRegistry.workspaces.length)
-    workspaceRegistry.workspaces.push(blankWorkspaceRecord());
-  persistRegistry();
-  switchWorkspace(workspaceRegistry.workspaces[0].id);
+  const remaining = setTabWorkspaceIds(tabWorkspaceIds().filter((id) => id !== workspace.id));
+  let next = workspaceRegistry.workspaces.find((item) => remaining.includes(item.id));
+  if (!next) {
+    next = workspaceRegistry.workspaces.find((item) => item.id !== workspace.id);
+    if (!next) {
+      next = blankWorkspaceRecord();
+      workspaceRegistry.workspaces.push(next);
+      persistRegistry();
+    }
+    openWorkspaceInTab(next.id);
+  }
+  switchWorkspace(next.id);
 }
 function projectEnvelope(workspace = activeWorkspace()) {
   return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { id: workspace.id, name: workspace.name, data: structuredClone(state) } };
@@ -828,7 +905,7 @@ function renderArchitecture() {
 }
 function renderWorkspaceControls() {
   const active = activeWorkspace();
-  $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map((workspace) => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
+  $("#workspace-select").innerHTML = tabWorkspaces().map((workspace) => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
   document.title = `${active.name} | Praxis Studio`;
 }
 var FEATURE_RENDERERS = [
@@ -1026,7 +1103,9 @@ window.addEventListener("storage", (event) => {
     return;
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === activeWorkspaceId())) {
-    setActiveWorkspaceId(workspaceRegistry.workspaces[0].id);
+    const next = tabWorkspaces()[0] || workspaceRegistry.workspaces[0];
+    openWorkspaceInTab(next.id);
+    setActiveWorkspaceId(next.id);
     state = migrateWorkspace(structuredClone(activeWorkspace().data));
     renderAll();
   } else
@@ -1532,3 +1611,4 @@ $("#export-btn").addEventListener("click", () => {
   URL.revokeObjectURL(link.href);
 });
 renderAll();
+hydrateRegistryFromServer();

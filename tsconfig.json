@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["bun"]
   },
-  "include": ["app/**/*.ts", "scripts/**/*.ts"]
+  "include": ["app/**/*.ts", "scripts/**/*.ts", "services/**/*.ts"]
 }
