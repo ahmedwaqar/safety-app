@@ -1,5 +1,6 @@
 import { spawn } from "bun";
 import { join } from "path";
+import { buildApp } from "../scripts/build-app.ts";
 
 const root = join(import.meta.dir, "..");
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -55,6 +56,8 @@ const count = selector => evaluate(`document.querySelectorAll(${JSON.stringify(s
 function test(name, action) {
   return action().then(() => console.log(`PASS ${name}`));
 }
+
+await buildApp();
 
 try {
   const tabs = await retry(async () => {

@@ -1,0 +1,13 @@
+{
+  "name": "praxis-studio",
+  "private": true,
+  "scripts": {
+    "build": "bun scripts/build-app.ts",
+    "check": "tsc --noEmit",
+    "test": "bun tests/browser-smoke.js"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.5",
+    "typescript": "^5.9.0"
+  }
+}

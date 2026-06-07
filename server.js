@@ -1,4 +1,5 @@
 import { join, normalize } from "path";
+import { buildApp } from "./scripts/build-app.ts";
 
 const root = import.meta.dir;
 const port = Number(process.env.PORT || 8080);
@@ -43,6 +44,7 @@ export function startServer(serverPort = port) {
 }
 
 if (import.meta.main) {
+  await buildApp();
   const server = startServer();
   console.log(`Praxis Studio running at http://localhost:${server.port}`);
 }

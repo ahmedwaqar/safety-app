@@ -1,3 +1,4 @@
+// Application configuration and persisted project formats.
 const STORAGE_KEY = "safeguard-cobot-workspace-v1";
 const WORKSPACES_KEY = "safeguard-workspaces-v1";
 const ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
@@ -5,6 +6,7 @@ const PROJECT_FORMAT = "praxis-studio-workspace";
 const LEGACY_PROJECT_FORMAT = "safeguard-safety-workspace";
 const PROJECT_VERSION = 1;
 
+// Engineering workflow feature: reusable phases and safety-checkpoint defaults.
 function engineeringWorkflowTemplate() {
   const phases = [
     { id: crypto.randomUUID(), name: "Define", purpose: "Establish purpose, boundaries, stakeholders, lifecycle, and applicable obligations." },
@@ -28,6 +30,7 @@ function engineeringWorkflowTemplate() {
   };
 }
 
+// Starter project data. New blank projects use blankWorkspace() instead.
 const seed = {
   plantuml: `@startuml
 title Collaborative robot cell
@@ -122,17 +125,30 @@ function blankWorkspace() {
   };
 }
 
+// Shared application context. Feature code reads the active state and commits
+// changes through save() so storage and rendering stay outside feature logic.
 let workspaceRegistry;
 let state = load();
 let diagramUrl;
-const $ = (selector, parent = document) => parent.querySelector(selector);
-const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
+
+// Shared DOM and presentation helpers.
+const $ = <T extends Element = any>(selector: string, parent: ParentNode = document): T => parent.querySelector(selector) as T;
+const $$ = <T extends Element = HTMLElement>(selector: string, parent: ParentNode = document): T[] => [...parent.querySelectorAll<T>(selector)];
 const esc = (value = "") => String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
+type FeatureRecord = Record<string, any>;
+type UniqueIdentifierOptions = { field?: string; ignoreField?: string; ignoreValue?: string };
+type FmedaTotals = Record<"safe" | "dangerous_detected" | "dangerous_undetected" | "no_effect" | "total", number> & {
+  diagnosticCoverage: number;
+  safeFailureFraction: number;
+};
+const eventElement = (event: Event): Element => event.target as Element;
+const formValues = (form: HTMLFormElement): Record<string, string> => Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, String(value)]));
 const itemBy = (group, id) => state[group].find(item => item.id === id);
 const rpn = row => Number(row.severity) * Number(row.occurrence) * Number(row.detection);
 const riskClass = score => score >= 100 ? "high" : score >= 40 ? "medium" : "low";
 const asilClass = asil => `asil-${asil.replace("ASIL ", "").toLowerCase()}`;
 
+// Validation and migration boundary for stored and imported project data.
 function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   for (const [key, value] of Object.entries(defaults)) workspace[key] ??= structuredClone(value);
   return workspace;
@@ -147,7 +163,7 @@ function requireIdentifier(value, label) { const text = requireValue(value, labe
 function requireSymbol(value, label) { const text = requireValue(value, label); if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(text)) throw new Error(`${label} must use letters, numbers, or "_" and cannot start with a number.`); return text; }
 function requireEnum(value, label, allowed) { if (!allowed.includes(value)) throw new Error(`${label} must be one of: ${allowed.join(", ")}.`); return value; }
 function sameIdentifier(left, right) { return String(left ?? "").trim().toLowerCase() === String(right ?? "").trim().toLowerCase(); }
-function requireUniqueIdentifier(items, value, label, { field = "id", ignoreField, ignoreValue } = {}) {
+function requireUniqueIdentifier(items, value, label, { field = "id", ignoreField, ignoreValue }: UniqueIdentifierOptions = {}) {
   if (items.some(item => sameIdentifier(item[field], value) && (!ignoreField || !sameIdentifier(item[ignoreField], ignoreValue)))) throw new Error(`${label} "${value}" already exists.`);
   return value;
 }
@@ -184,6 +200,8 @@ function validateWorkspaceData(data) {
   return migrateWorkspace(data);
 }
 function handleFormError(error) { alert(error.message); }
+
+// Workspace feature: lifecycle, browser persistence, and portable project files.
 function workspaceId() { return `workspace-${crypto.randomUUID()}`; }
 function requestedWorkspaceId() { return new URLSearchParams(location.search).get("workspace"); }
 function activeWorkspaceId() { return sessionStorage.getItem(ACTIVE_WORKSPACE_KEY) || localStorage.getItem(ACTIVE_WORKSPACE_KEY); }
@@ -311,10 +329,14 @@ function parseProject(text) {
   if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Praxis Studio workspace.");
   return { id: hasEnvelope ? parsed.workspace?.id : undefined, name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
 }
+
+// Cross-feature lookup helpers used to preserve traceability in the UI.
 function options(items, selected = "", optional = false) {
   return `${optional ? '<option value="">Not linked</option>' : ""}${items.map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.id)} · ${esc(x.name)}</option>`).join("")}`;
 }
 function named(group, id) { return itemBy(group, id)?.name || "Not linked"; }
+
+// HARA and SIL features: deterministic risk classification rules.
 function deriveAsil(severity, exposure, controllability) {
   if (severity === "S0" || exposure === "E0" || controllability === "C0") return "QM";
   const table = {
@@ -335,6 +357,8 @@ const silBands = {
   continuous: { "SIL 1": [1e-6, 1e-5], "SIL 2": [1e-7, 1e-6], "SIL 3": [1e-8, 1e-7], "SIL 4": [1e-9, 1e-8] },
   low: { "SIL 1": [1e-2, 1e-1], "SIL 2": [1e-3, 1e-2], "SIL 3": [1e-4, 1e-3], "SIL 4": [1e-5, 1e-4] }
 };
+
+// Architecture feature: PlantUML editor completion state and behavior.
 const plantumlCompletions = [
   ["@startuml", "@startuml\n$0\n@enduml", "diagram wrapper"],
   ["@enduml", "@enduml", "diagram wrapper"],
@@ -391,6 +415,8 @@ function insertPlantumlCompletion(index = plantumlCompletionIndex) {
   editor.setSelectionRange(cursor, cursor); editor.focus(); closePlantumlCompletions();
   editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+// Quantitative safety feature: component and safety-function calculations.
 function componentRates(row) {
   const lambdaDangerous = Number(row.lambdaTotal) * Number(row.dangerousFraction);
   const singleResidual = lambdaDangerous * (1 - Number(row.diagnosticCoverage));
@@ -411,6 +437,8 @@ function quantitativeMeetsTarget(value = quantitativeValue()) {
   const band = silBands[state.quantitative.mode][state.quantitative.targetSil];
   return value < band[1];
 }
+
+// FMEDA feature: restricted expression evaluator and aggregate calculations.
 function evaluateExpression(expression) {
   const symbols = Object.fromEntries(state.fmeda.constants.map(item => [item.symbol, Number(item.value)]));
   const tokens = expression.match(/[A-Za-z_][A-Za-z0-9_]*|(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?|[()+\-*/]/gi) || [];
@@ -440,7 +468,7 @@ function evaluateExpression(expression) {
   return result;
 }
 function fmedaTotals() {
-  const totals = { safe: 0, dangerous_detected: 0, dangerous_undetected: 0, no_effect: 0, total: 0 };
+  const totals: FmedaTotals = { safe: 0, dangerous_detected: 0, dangerous_undetected: 0, no_effect: 0, total: 0, diagnosticCoverage: 0, safeFailureFraction: 0 };
   state.fmeda.rows.forEach(row => { const rate = evaluateExpression(row.expression); totals[row.classification] += rate; totals.total += rate; });
   totals.diagnosticCoverage = totals.dangerous_detected + totals.dangerous_undetected ? totals.dangerous_detected / (totals.dangerous_detected + totals.dangerous_undetected) : 0;
   totals.safeFailureFraction = totals.total ? (totals.safe + totals.dangerous_detected) / totals.total : 0;
@@ -448,6 +476,7 @@ function fmedaTotals() {
 }
 function goalBy(id) { return state.safetyGoals.find(goal => goal.id === id); }
 
+// Application shell: navigation is independent of individual feature renderers.
 function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
@@ -456,6 +485,7 @@ function showView(name) {
   $("#add-fmea-row-btn").hidden = name !== "fmea";
 }
 
+// Overview feature.
 function renderMetrics() {
   const sum = state.fmea.reduce((total, row) => total + rpn(row), 0);
   $("#hero-score").textContent = sum;
@@ -479,6 +509,7 @@ function renderMetrics() {
   $("#overview-components").innerHTML = state.components.map(x => `<span class="component-chip">${esc(x.name)}</span>`).join("");
 }
 
+// FMEA feature.
 function renderFmea() {
   const query = $("#fmea-search").value.toLowerCase();
   const filtered = state.fmea.filter(row => Object.values(row).join(" ").toLowerCase().includes(query) || named("hazards", row.hazard).toLowerCase().includes(query));
@@ -496,6 +527,7 @@ function renderFmea() {
   </tr>`).join("");
 }
 
+// Hazard and operational-situation catalogue feature.
 function renderCatalog(group) {
   $(`#${group}-grid`).innerHTML = state[group].map(item => {
     const links = group === "hazards" ? state.fmea.filter(x => x.hazard === item.id).length + state.requirements.filter(x => x.hazard === item.id).length + state.hara.filter(x => x.hazard === item.id).length + state.silAssessments.filter(x => x.hazard === item.id).length : state.fmea.filter(x => x.situation === item.id).length + state.hara.filter(x => x.situation === item.id).length + state.silAssessments.filter(x => x.situation === item.id).length;
@@ -503,6 +535,7 @@ function renderCatalog(group) {
   }).join("");
 }
 
+// AMR SIL assessment feature.
 function renderSil() {
   $("#sil-count").textContent = state.silAssessments.length;
   $("#sil-summary").innerHTML = ["No SIL", "SIL 1", "SIL 2", "SIL 3", "SIL 4"].map(sil => `<div class="hara-stat"><strong>${state.silAssessments.filter(row => deriveSil(row.consequence, row.frequency, row.avoidance, row.demand) === sil).length}</strong><span>${sil} functions</span></div>`).join("");
@@ -518,6 +551,7 @@ function renderSil() {
   }).join("");
 }
 
+// Quantitative safety feature.
 function renderQuantitative() {
   const quant = state.quantitative; const totals = quantitativeTotals(); const result = quantitativeValue(totals); const band = silBands[quant.mode][quant.targetSil]; const meets = quantitativeMeetsTarget(result);
   $("#quant-function").value = quant.safetyFunction; $("#quant-target").value = quant.targetSil; $("#quant-mode").value = quant.mode; $("#quant-architecture").value = quant.architecture;
@@ -538,6 +572,7 @@ function renderQuantitative() {
   }).join("");
 }
 
+// FMEDA feature.
 function renderFmeda() {
   const labels = { safe: "Safe · λS", dangerous_detected: "Dangerous detected · λDD", dangerous_undetected: "Dangerous undetected · λDU", no_effect: "No effect · λNE" };
   $("#constant-list").innerHTML = state.fmeda.constants.map(item => `<div class="constant-entry"><div><strong>${esc(item.symbol)}</strong><span>${esc(item.description)}</span></div><code>${scientific(item.value)}</code><button class="mini-btn" title="Delete" data-delete-constant="${esc(item.symbol)}">×</button></div>`).join("");
@@ -555,6 +590,7 @@ function renderFmeda() {
   }).join("");
 }
 
+// ISO 26262 HARA and safety-goal feature.
 function renderHara() {
   $("#hara-count").textContent = state.hara.length;
   $("#hara-summary").innerHTML = ["QM", "ASIL A", "ASIL B", "ASIL C", "ASIL D"].map(asil => `<div class="hara-stat"><strong>${state.hara.filter(row => deriveAsil(row.severity, row.exposure, row.controllability) === asil).length}</strong><span>${asil} events</span></div>`).join("");
@@ -574,6 +610,7 @@ function renderHara() {
   }).join("");
 }
 
+// Safety requirements feature.
 function renderRequirements() {
   $("#requirement-list").innerHTML = state.requirements.map(req => `<article class="requirement">
     <span class="requirement-id">${esc(req.id)}</span>
@@ -582,6 +619,7 @@ function renderRequirements() {
   </article>`).join("");
 }
 
+// Engineering workflow and safety-checkpoint feature.
 function workflowGateReady(activity) {
   return activity.status === "Complete" && (!activity.safetyCheckpoint || String(activity.evidence || "").trim()) && String(activity.completionCriteria || "").trim();
 }
@@ -615,6 +653,7 @@ function renderWorkflow() {
   }).join("");
 }
 
+// Architecture feature.
 function renderArchitecture() {
   $("#plantuml-source").value = state.plantuml;
   $("#component-count").textContent = state.components.length;
@@ -625,9 +664,27 @@ function renderWorkspaceControls() {
   $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
   document.title = `${active.name} | Praxis Studio`;
 }
-function renderAll() { renderWorkspaceControls(); renderMetrics(); renderWorkflow(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
 
-function fillRowForm(row = {}) {
+// Feature registry: new features can join the application shell without adding
+// another direct dependency to renderAll().
+const FEATURE_RENDERERS = [
+  renderWorkspaceControls,
+  renderMetrics,
+  renderWorkflow,
+  renderFmea,
+  () => renderCatalog("hazards"),
+  () => renderCatalog("situations"),
+  renderRequirements,
+  renderHara,
+  renderSil,
+  renderQuantitative,
+  renderFmeda,
+  renderArchitecture
+];
+function renderAll() { FEATURE_RENDERERS.forEach(render => render()); }
+
+// Feature dialog adapters. They translate feature state into form controls.
+function fillRowForm(row: FeatureRecord = {}) {
   const form = $("#row-form");
   form.reset();
   $("#row-dialog-title").textContent = row.id ? "Edit failure mode" : "Add failure mode";
@@ -639,7 +696,7 @@ function fillRowForm(row = {}) {
   $("#custom-row-fields").innerHTML = state.customColumns.map(column => `<label><span>${esc(column.label)}</span><input name="custom_${esc(column.key)}" value="${esc(row.custom?.[column.key] || "")}" /></label>`).join("");
   $("#row-dialog").showModal();
 }
-function fillWorkflowActivityForm(activity = {}) {
+function fillWorkflowActivityForm(activity: FeatureRecord = {}) {
   const form = $("#workflow-activity-form"); form.reset();
   $("#workflow-activity-title").textContent = activity.id ? "Edit activity" : "Add activity";
   form.elements.id.value = activity.id || "";
@@ -658,7 +715,7 @@ function openCatalog(group) {
 function renderColumns() {
   $("#column-list").innerHTML = state.customColumns.length ? state.customColumns.map(x => `<div class="column-entry"><span>${esc(x.label)}</span><button type="button" class="remove-column" data-delete-column="${x.key}">Remove</button></div>`).join("") : `<p class="dialog-copy">No additional columns yet.</p>`;
 }
-function fillHaraForm(row = {}) {
+function fillHaraForm(row: FeatureRecord = {}) {
   const form = $("#hara-form"); form.reset();
   $("#hara-dialog-title").textContent = row.id ? "Edit hazardous event" : "Add hazardous event";
   form.elements.id.value = row.id || "";
@@ -668,7 +725,7 @@ function fillHaraForm(row = {}) {
   ["eventId", "malfunction", "consequence", "severity", "exposure", "controllability"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
   updateAsilPreview(); $("#hara-dialog").showModal();
 }
-function fillGoalForm(goal = {}) {
+function fillGoalForm(goal: FeatureRecord = {}) {
   const form = $("#goal-form"); form.reset();
   $("#goal-dialog-title").textContent = goal.id ? "Edit safety goal" : "Add safety goal";
   form.elements.originalId.value = goal.id || "";
@@ -679,7 +736,7 @@ function updateAsilPreview() {
   const form = $("#hara-form");
   $("#asil-preview").textContent = deriveAsil(form.elements.severity.value, form.elements.exposure.value, form.elements.controllability.value);
 }
-function fillSilForm(row = {}) {
+function fillSilForm(row: FeatureRecord = {}) {
   const form = $("#sil-form"); form.reset();
   $("#sil-dialog-title").textContent = row.id ? "Edit SIL assessment" : "Add SIL assessment";
   form.elements.id.value = row.id || "";
@@ -692,14 +749,14 @@ function updateSilPreview() {
   const form = $("#sil-form");
   $("#sil-preview").textContent = deriveSil(form.elements.consequence.value, form.elements.frequency.value, form.elements.avoidance.value, form.elements.demand.value);
 }
-function fillQuantitativeForm(row = {}) {
+function fillQuantitativeForm(row: FeatureRecord = {}) {
   const form = $("#quant-component-form"); form.reset();
   $("#quant-component-title").textContent = row.id ? "Edit component rate" : "Add component rate";
   form.elements.id.value = row.id || ""; form.elements.component.innerHTML = options(state.components, row.component);
   ["role", "lambdaTotal", "dangerousFraction", "diagnosticCoverage", "proofTestHours", "channels", "beta"].forEach(key => { if (row[key] !== undefined) form.elements[key].value = row[key]; });
   $("#quant-component-dialog").showModal();
 }
-function fillFmedaForm(row = {}) {
+function fillFmedaForm(row: FeatureRecord = {}) {
   const form = $("#fmeda-form"); form.reset();
   $("#fmeda-dialog-title").textContent = row.id ? "Edit FMEDA failure mode" : "Add FMEDA failure mode";
   form.elements.id.value = row.id || ""; form.elements.component.innerHTML = options(state.components, row.component);
@@ -714,25 +771,30 @@ function closeWorkspaceMenu() {
   $("#workspace-menu").hidden = true; $("#workspace-menu-btn").setAttribute("aria-expanded", "false");
 }
 
-$("#main-nav").addEventListener("click", event => { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); });
+// Application shell and workspace events.
+$("#main-nav").addEventListener("click", event => { const button = eventElement(event).closest<HTMLElement>("[data-view]"); if (button) showView(button.dataset.view); });
 $("#workspace-select").addEventListener("change", event => switchWorkspace(event.target.value));
 $("#workspace-menu-btn").addEventListener("click", () => {
   const menu = $("#workspace-menu"); menu.hidden = !menu.hidden;
   $("#workspace-menu-btn").setAttribute("aria-expanded", String(!menu.hidden));
 });
-$("#workspace-menu").addEventListener("click", event => { if (event.target.closest("button")) closeWorkspaceMenu(); });
-document.addEventListener("click", event => { if (!event.target.closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
+$("#workspace-menu").addEventListener("click", event => { if (eventElement(event).closest("button")) closeWorkspaceMenu(); });
+document.addEventListener("click", event => { if (!eventElement(event).closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
 $("#new-workspace-btn").addEventListener("click", createNewWorkspace);
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
 $("#close-workspace-btn").addEventListener("click", closeActiveWorkspace);
+
+// Engineering workflow events.
 $("#add-workflow-phase-btn").addEventListener("click", () => { $("#workflow-phase-form").reset(); $("#workflow-phase-dialog").showModal(); });
 $("#add-workflow-activity-btn").addEventListener("click", () => {
   if (!state.workflow.phases.length) return alert("Add an engineering phase before creating an activity.");
   fillWorkflowActivityForm();
 });
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
+
+// Portable project import and cross-tab workspace synchronization.
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
   const file = event.target.files[0]; if (!file) return;
@@ -749,61 +811,66 @@ window.addEventListener("storage", event => {
     renderAll();
   } else renderWorkspaceControls();
 });
+
+// Delegated feature actions. Data attributes keep rendered rows independent
+// from event registration and avoid one listener per dynamic record.
 document.addEventListener("click", event => {
-  const close = event.target.closest("[data-close-dialog]"); if (close) close.closest("dialog").close();
-  const go = event.target.closest("[data-go]"); if (go) showView(go.dataset.go);
-  const workflowAnalysis = event.target.closest("[data-open-workflow-analysis]"); if (workflowAnalysis) showView(workflowAnalysis.dataset.openWorkflowAnalysis);
-  const editWorkflow = event.target.closest("[data-edit-workflow-activity]"); if (editWorkflow) fillWorkflowActivityForm(state.workflow.activities.find(activity => activity.id === editWorkflow.dataset.editWorkflowActivity));
-  const toggleWorkflow = event.target.closest("[data-toggle-workflow-activity]");
+  const target = eventElement(event);
+  const close = target.closest("[data-close-dialog]"); if (close) close.closest<HTMLDialogElement>("dialog")?.close();
+  const go = target.closest<HTMLElement>("[data-go]"); if (go) showView(go.dataset.go);
+  const workflowAnalysis = target.closest<HTMLElement>("[data-open-workflow-analysis]"); if (workflowAnalysis) showView(workflowAnalysis.dataset.openWorkflowAnalysis);
+  const editWorkflow = target.closest<HTMLElement>("[data-edit-workflow-activity]"); if (editWorkflow) fillWorkflowActivityForm(state.workflow.activities.find(activity => activity.id === editWorkflow.dataset.editWorkflowActivity));
+  const toggleWorkflow = target.closest<HTMLInputElement>("[data-toggle-workflow-activity]");
   if (toggleWorkflow) {
     const activity = state.workflow.activities.find(item => item.id === toggleWorkflow.dataset.toggleWorkflowActivity);
     if (activity) { activity.status = toggleWorkflow.checked ? "Complete" : "In progress"; save(); }
   }
-  const removeWorkflow = event.target.closest("[data-delete-workflow-activity]");
+  const removeWorkflow = target.closest<HTMLElement>("[data-delete-workflow-activity]");
   if (removeWorkflow && confirm("Delete this workflow activity?")) { state.workflow.activities = state.workflow.activities.filter(activity => activity.id !== removeWorkflow.dataset.deleteWorkflowActivity); save(); }
-  const removeWorkflowPhase = event.target.closest("[data-delete-workflow-phase]");
+  const removeWorkflowPhase = target.closest<HTMLElement>("[data-delete-workflow-phase]");
   if (removeWorkflowPhase) {
     const used = state.workflow.activities.some(activity => activity.phaseId === removeWorkflowPhase.dataset.deleteWorkflowPhase);
     if (used) alert("Move or delete this phase's activities before deleting the phase.");
     else if (confirm("Delete this engineering phase?")) { state.workflow.phases = state.workflow.phases.filter(phase => phase.id !== removeWorkflowPhase.dataset.deleteWorkflowPhase); save(); }
   }
-  if (event.target.closest("[data-open-row]")) fillRowForm();
-  const catalog = event.target.closest("[data-open-catalog]"); if (catalog) openCatalog(catalog.dataset.openCatalog);
-  const edit = event.target.closest("[data-edit-row]"); if (edit) fillRowForm(state.fmea.find(x => x.id === edit.dataset.editRow));
-  const remove = event.target.closest("[data-delete-row]"); if (remove && confirm("Delete this failure mode?")) { state.fmea = state.fmea.filter(x => x.id !== remove.dataset.deleteRow); save(); }
-  const removeCatalog = event.target.closest("[data-delete-catalog]");
+  if (target.closest("[data-open-row]")) fillRowForm();
+  const catalog = target.closest<HTMLElement>("[data-open-catalog]"); if (catalog) openCatalog(catalog.dataset.openCatalog);
+  const edit = target.closest<HTMLElement>("[data-edit-row]"); if (edit) fillRowForm(state.fmea.find(x => x.id === edit.dataset.editRow));
+  const remove = target.closest<HTMLElement>("[data-delete-row]"); if (remove && confirm("Delete this failure mode?")) { state.fmea = state.fmea.filter(x => x.id !== remove.dataset.deleteRow); save(); }
+  const removeCatalog = target.closest<HTMLElement>("[data-delete-catalog]");
   if (removeCatalog) {
     const [group, id] = removeCatalog.dataset.deleteCatalog.split(":");
     const linked = group === "hazards" ? state.fmea.some(x => x.hazard === id) || state.requirements.some(x => x.hazard === id) || state.hara.some(x => x.hazard === id) || state.silAssessments.some(x => x.hazard === id) : state.fmea.some(x => x.situation === id) || state.hara.some(x => x.situation === id) || state.silAssessments.some(x => x.situation === id);
     if (linked) alert("This catalogue entry is referenced by the analysis and cannot be deleted.");
     else if (confirm("Delete this catalogue entry?")) { state[group] = state[group].filter(x => x.id !== id); save(); }
   }
-  const removeColumn = event.target.closest("[data-delete-column]");
+  const removeColumn = target.closest<HTMLElement>("[data-delete-column]");
   if (removeColumn) { state.customColumns = state.customColumns.filter(x => x.key !== removeColumn.dataset.deleteColumn); save(); renderColumns(); }
-  const editHara = event.target.closest("[data-edit-hara]"); if (editHara) fillHaraForm(state.hara.find(x => x.id === editHara.dataset.editHara));
-  const removeHara = event.target.closest("[data-delete-hara]"); if (removeHara && confirm("Delete this hazardous event?")) { state.hara = state.hara.filter(x => x.id !== removeHara.dataset.deleteHara); save(); }
-  const editGoal = event.target.closest("[data-edit-goal]"); if (editGoal) fillGoalForm(goalBy(editGoal.dataset.editGoal));
-  const removeGoal = event.target.closest("[data-delete-goal]");
+  const editHara = target.closest<HTMLElement>("[data-edit-hara]"); if (editHara) fillHaraForm(state.hara.find(x => x.id === editHara.dataset.editHara));
+  const removeHara = target.closest<HTMLElement>("[data-delete-hara]"); if (removeHara && confirm("Delete this hazardous event?")) { state.hara = state.hara.filter(x => x.id !== removeHara.dataset.deleteHara); save(); }
+  const editGoal = target.closest<HTMLElement>("[data-edit-goal]"); if (editGoal) fillGoalForm(goalBy(editGoal.dataset.editGoal));
+  const removeGoal = target.closest<HTMLElement>("[data-delete-goal]");
   if (removeGoal) {
     if (state.hara.some(row => row.safetyGoal === removeGoal.dataset.deleteGoal)) alert("This safety goal is referenced by a hazardous event and cannot be deleted.");
     else if (confirm("Delete this safety goal?")) { state.safetyGoals = state.safetyGoals.filter(goal => goal.id !== removeGoal.dataset.deleteGoal); save(); }
   }
-  const editSil = event.target.closest("[data-edit-sil]"); if (editSil) fillSilForm(state.silAssessments.find(x => x.id === editSil.dataset.editSil));
-  const removeSil = event.target.closest("[data-delete-sil]"); if (removeSil && confirm("Delete this SIL assessment?")) { state.silAssessments = state.silAssessments.filter(x => x.id !== removeSil.dataset.deleteSil); save(); }
-  const editQuant = event.target.closest("[data-edit-quant]"); if (editQuant) fillQuantitativeForm(state.quantitative.components.find(x => x.id === editQuant.dataset.editQuant));
-  const removeQuant = event.target.closest("[data-delete-quant]"); if (removeQuant && confirm("Delete this component rate?")) { state.quantitative.components = state.quantitative.components.filter(x => x.id !== removeQuant.dataset.deleteQuant); save(); }
-  const editFmeda = event.target.closest("[data-edit-fmeda]"); if (editFmeda) fillFmedaForm(state.fmeda.rows.find(x => x.id === editFmeda.dataset.editFmeda));
-  const removeFmeda = event.target.closest("[data-delete-fmeda]"); if (removeFmeda && confirm("Delete this FMEDA row?")) { state.fmeda.rows = state.fmeda.rows.filter(x => x.id !== removeFmeda.dataset.deleteFmeda); save(); }
-  const removeConstant = event.target.closest("[data-delete-constant]");
+  const editSil = target.closest<HTMLElement>("[data-edit-sil]"); if (editSil) fillSilForm(state.silAssessments.find(x => x.id === editSil.dataset.editSil));
+  const removeSil = target.closest<HTMLElement>("[data-delete-sil]"); if (removeSil && confirm("Delete this SIL assessment?")) { state.silAssessments = state.silAssessments.filter(x => x.id !== removeSil.dataset.deleteSil); save(); }
+  const editQuant = target.closest<HTMLElement>("[data-edit-quant]"); if (editQuant) fillQuantitativeForm(state.quantitative.components.find(x => x.id === editQuant.dataset.editQuant));
+  const removeQuant = target.closest<HTMLElement>("[data-delete-quant]"); if (removeQuant && confirm("Delete this component rate?")) { state.quantitative.components = state.quantitative.components.filter(x => x.id !== removeQuant.dataset.deleteQuant); save(); }
+  const editFmeda = target.closest<HTMLElement>("[data-edit-fmeda]"); if (editFmeda) fillFmedaForm(state.fmeda.rows.find(x => x.id === editFmeda.dataset.editFmeda));
+  const removeFmeda = target.closest<HTMLElement>("[data-delete-fmeda]"); if (removeFmeda && confirm("Delete this FMEDA row?")) { state.fmeda.rows = state.fmeda.rows.filter(x => x.id !== removeFmeda.dataset.deleteFmeda); save(); }
+  const removeConstant = target.closest<HTMLElement>("[data-delete-constant]");
   if (removeConstant) {
     const symbol = removeConstant.dataset.deleteConstant; const used = state.fmeda.rows.some(row => new RegExp(`\\b${symbol}\\b`).test(row.expression));
     if (used) alert("This constant is referenced by an FMEDA expression and cannot be deleted."); else if (confirm("Delete this constant?")) { state.fmeda.constants = state.fmeda.constants.filter(item => item.symbol !== symbol); save(); }
   }
 });
 
+// Engineering workflow forms.
 $("#workflow-phase-form").addEventListener("submit", event => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.target));
+  const data = formValues(event.target as HTMLFormElement);
   try {
     data.name = requireUniqueIdentifier(state.workflow.phases, requireValue(data.name, "Phase name"), "Phase name", { field: "name" });
     data.purpose = requireValue(data.purpose, "Phase purpose");
@@ -813,7 +880,7 @@ $("#workflow-phase-form").addEventListener("submit", event => {
 });
 $("#workflow-activity-form").addEventListener("submit", event => {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.target));
+  const data = formValues(event.target as HTMLFormElement);
   let activity;
   try {
     activity = {
@@ -833,10 +900,11 @@ $("#workflow-activity-form").addEventListener("submit", event => {
   $("#workflow-activity-dialog").close(); save();
 });
 
+// FMEA, catalogue, and requirements forms.
 $("#row-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#row-dialog").close(); return; }
-  const data = Object.fromEntries(new FormData(event.target));
+  const data = formValues(event.target as HTMLFormElement);
   let row;
   try { row = { id: data.id || crypto.randomUUID(), component: requireValue(data.component, "Component"), failureMode: requireValue(data.failureMode, "Failure mode"), effect: requireValue(data.effect, "Potential effect"), hazard: data.hazard, situation: data.situation, severity: validateNumber(data.severity, "Severity", { min: 1, max: 10, integer: true }), occurrence: validateNumber(data.occurrence, "Occurrence", { min: 1, max: 10, integer: true }), detection: validateNumber(data.detection, "Detection", { min: 1, max: 10, integer: true }), action: data.action, custom: {} }; } catch (error) { return handleFormError(error); }
   const existing = state.fmea.find(x => x.id === data.id);
@@ -847,7 +915,7 @@ $("#row-form").addEventListener("submit", event => {
 $("#catalog-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#catalog-dialog").close(); return; }
-  const data = Object.fromEntries(new FormData(event.target)); const group = data.catalog;
+  const data = formValues(event.target as HTMLFormElement); const group = data.catalog;
   let id, name, description;
   try { id = requireUniqueIdentifier(state[group], requireIdentifier(data.id, "Identifier"), "Identifier"); name = requireValue(data.name, "Name"); description = requireValue(data.description, "Description"); } catch (error) { return handleFormError(error); }
   state[group].push({ id, name, description, category: group === "hazards" ? data.category : "Operational context" });
@@ -861,7 +929,7 @@ $("#add-requirement-btn").addEventListener("click", () => {
 $("#requirement-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#requirement-dialog").close(); return; }
-  const data = Object.fromEntries(new FormData(event.target));
+  const data = formValues(event.target as HTMLFormElement);
   try { data.id = requireUniqueIdentifier(state.requirements, requireIdentifier(data.id, "Requirement identifier"), "Requirement identifier"); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
   state.requirements.push(data); $("#requirement-dialog").close(); save();
 });
@@ -873,11 +941,13 @@ $("#add-column-btn").addEventListener("click", () => {
   state.customColumns.push({ key, label }); input.value = ""; save(); renderColumns();
 });
 $("#fmea-search").addEventListener("input", renderFmea);
+
+// HARA and safety-goal forms.
 $("#add-hara-btn").addEventListener("click", () => fillHaraForm());
 $("#add-goal-btn").addEventListener("click", () => fillGoalForm());
 $("#hara-form").addEventListener("change", updateAsilPreview);
 $("#hara-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
   try { data.eventId = requireUniqueIdentifier(state.hara, requireIdentifier(data.eventId, "Hazardous-event identifier"), "Hazardous-event identifier", { field: "eventId", ignoreField: "id", ignoreValue: data.id }); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.malfunction = requireValue(data.malfunction, "Malfunctioning behaviour"); data.consequence = requireValue(data.consequence, "Consequence"); } catch (error) { return handleFormError(error); }
   const existing = state.hara.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), eventId: data.eventId, hazard: data.hazard, situation: data.situation, malfunction: data.malfunction, consequence: data.consequence, severity: data.severity, exposure: data.exposure, controllability: data.controllability, safetyGoal: data.safetyGoal };
@@ -885,7 +955,7 @@ $("#hara-form").addEventListener("submit", event => {
   $("#hara-dialog").close(); save();
 });
 $("#goal-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
   try { data.id = requireUniqueIdentifier(state.safetyGoals, requireIdentifier(data.id, "Safety-goal identifier"), "Safety-goal identifier", { ignoreField: "id", ignoreValue: data.originalId }); data.text = requireValue(data.text, "Safety goal"); } catch (error) { return handleFormError(error); }
   const existing = goalBy(data.originalId);
   const goal = { id: data.id, text: data.text, asil: data.asil, safeState: data.safeState, ftti: data.ftti };
@@ -895,16 +965,20 @@ $("#goal-form").addEventListener("submit", event => {
   } else state.safetyGoals.push(goal);
   $("#goal-dialog").close(); save();
 });
+
+// AMR SIL assessment form.
 $("#add-sil-btn").addEventListener("click", () => fillSilForm());
 $("#sil-form").addEventListener("change", updateSilPreview);
 $("#sil-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
   try { data.assessmentId = requireUniqueIdentifier(state.silAssessments, requireIdentifier(data.assessmentId, "SIL-assessment identifier"), "SIL-assessment identifier", { field: "assessmentId", ignoreField: "id", ignoreValue: data.id }); data.safetyFunction = requireValue(data.safetyFunction, "Safety function"); data.hazard = requireValue(data.hazard, "Linked hazard"); data.situation = requireValue(data.situation, "Operational situation"); data.hazardousEvent = requireValue(data.hazardousEvent, "Hazardous event"); } catch (error) { return handleFormError(error); }
   const existing = state.silAssessments.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), assessmentId: data.assessmentId, safetyFunction: data.safetyFunction, hazard: data.hazard, situation: data.situation, hazardousEvent: data.hazardousEvent, consequence: data.consequence, frequency: data.frequency, avoidance: data.avoidance, demand: data.demand, safeState: data.safeState, evidence: data.evidence };
   if (existing) Object.assign(existing, row); else state.silAssessments.push(row);
   $("#sil-dialog").close(); save();
 });
+
+// Quantitative safety form.
 $("#add-quant-component-btn").addEventListener("click", () => fillQuantitativeForm());
 ["quant-function", "quant-target", "quant-mode", "quant-architecture"].forEach(id => $(`#${id}`).addEventListener("change", event => {
   const keys = { "quant-function": "safetyFunction", "quant-target": "targetSil", "quant-mode": "mode", "quant-architecture": "architecture" };
@@ -912,30 +986,35 @@ $("#add-quant-component-btn").addEventListener("click", () => fillQuantitativeFo
 }));
 $("#quant-function").addEventListener("input", event => { state.quantitative.safetyFunction = event.target.value; persistState(); });
 $("#quant-component-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
   const existing = state.quantitative.components.find(row => row.id === data.id);
   let row;
   try { row = { id: data.id || crypto.randomUUID(), component: requireValue(data.component, "Architecture component"), role: requireValue(data.role, "Component role"), lambdaTotal: validateNumber(data.lambdaTotal, "Total failure rate", { min: 0 }), dangerousFraction: validateNumber(data.dangerousFraction, "Dangerous fraction", { min: 0, max: 1 }), diagnosticCoverage: validateNumber(data.diagnosticCoverage, "Diagnostic coverage", { min: 0, max: 1 }), proofTestHours: validateNumber(data.proofTestHours, "Proof-test interval", { min: Number.EPSILON }), channels: validateNumber(data.channels, "Channels", { min: 1, max: 2, integer: true }), beta: validateNumber(data.beta, "Common-cause beta", { min: 0, max: 1 }) }; } catch (error) { return handleFormError(error); }
   if (existing) Object.assign(existing, row); else state.quantitative.components.push(row);
   $("#quant-component-dialog").close(); save();
 });
+
+// FMEDA constants, rows, and handoff to quantitative safety.
 $("#add-constant-btn").addEventListener("click", () => { $("#constant-form").reset(); $("#constant-dialog").showModal(); });
 $("#constant-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
-  try { data.symbol = requireSymbol(data.symbol, "Symbol"); data.description = requireValue(data.description, "Description"); data.value = validateNumber(data.value, "Constant value", { min: 0 }); } catch (error) { return handleFormError(error); }
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
+  let value;
+  try { data.symbol = requireSymbol(data.symbol, "Symbol"); data.description = requireValue(data.description, "Description"); value = validateNumber(data.value, "Constant value", { min: 0 }); } catch (error) { return handleFormError(error); }
   if (state.fmeda.constants.some(item => item.symbol === data.symbol)) return alert("That symbolic constant already exists.");
-  state.fmeda.constants.push({ symbol: data.symbol, value: data.value, description: data.description }); $("#constant-dialog").close(); save();
+  state.fmeda.constants.push({ symbol: data.symbol, value, description: data.description }); $("#constant-dialog").close(); save();
 });
 $("#add-fmeda-btn").addEventListener("click", () => fillFmedaForm());
 $("#fmeda-form").elements.expression.addEventListener("input", updateExpressionPreview);
 $("#fmeda-form").addEventListener("submit", event => {
-  event.preventDefault(); const data = Object.fromEntries(new FormData(event.target));
+  event.preventDefault(); const data = formValues(event.target as HTMLFormElement);
   try { data.component = requireValue(data.component, "Architecture component"); data.failureMode = requireValue(data.failureMode, "Failure mode"); data.localEffect = requireValue(data.localEffect, "Local effect"); data.endEffect = requireValue(data.endEffect, "End effect"); data.expression = requireValue(data.expression, "Failure-rate expression"); evaluateExpression(data.expression); } catch (error) { $("#expression-error").textContent = error.message; return; }
   const existing = state.fmeda.rows.find(row => row.id === data.id);
   const row = { id: data.id || crypto.randomUUID(), component: data.component, failureMode: data.failureMode, localEffect: data.localEffect, endEffect: data.endEffect, classification: data.classification, diagnostic: data.diagnostic, expression: data.expression };
   if (existing) Object.assign(existing, row); else state.fmeda.rows.push(row);
   $("#fmeda-dialog").close(); save();
 });
+
+// Architecture editor completion, import, and local rendering.
 $("#plantuml-source").addEventListener("input", () => { plantumlCompletionIndex = 0; renderPlantumlCompletions(); });
 $("#plantuml-source").addEventListener("keydown", event => {
   if ($("#plantuml-completions").hidden) return;
@@ -950,7 +1029,7 @@ $("#plantuml-source").addEventListener("keydown", event => {
   }
 });
 $("#plantuml-completions").addEventListener("mousedown", event => {
-  const item = event.target.closest("[data-completion-index]");
+  const item = eventElement(event).closest<HTMLElement>("[data-completion-index]");
   if (item) { event.preventDefault(); insertPlantumlCompletion(Number(item.dataset.completionIndex)); }
 });
 $("#plantuml-source").addEventListener("blur", () => setTimeout(closePlantumlCompletions));
@@ -996,6 +1075,8 @@ $("#render-btn").addEventListener("click", async () => {
     button.disabled = false;
   }
 });
+
+// Portable project export.
 $("#export-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value; persistState();
   const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
@@ -1003,4 +1084,6 @@ $("#export-btn").addEventListener("click", () => {
   const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.praxis.json` });
   link.click(); URL.revokeObjectURL(link.href);
 });
+
+// Bootstrap after every feature has registered its renderer and events.
 renderAll();

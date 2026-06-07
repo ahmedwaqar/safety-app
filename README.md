@@ -58,6 +58,12 @@ Run:
 bun server.js
 ```
 
+The server compiles the TypeScript browser source before starting. To build the browser artifact without starting the server, run:
+
+```sh
+bun run build
+```
+
 Open:
 
 ```text
@@ -284,7 +290,8 @@ The suite verifies workspace creation, switching, deletion, isolation, project-f
 Compile-check the browser and server entry points:
 
 ```sh
-bun build app.js --target=browser --outfile=/tmp/praxis-app-check.js
+bun run check
+bun run build
 bun build server.js --target=bun --outfile=/tmp/praxis-server-check.js
 ```
 
@@ -293,7 +300,11 @@ bun build server.js --target=bun --outfile=/tmp/praxis-server-check.js
 ```text
 index.html               Web-app structure and dialogs
 styles.css               Responsive application styling
-app.js                   Browser state, workflows, and traceability logic
+app/
+  praxis-studio.ts       Typed feature registry, browser state, workflows, and traceability source
+  praxis-studio.browser.js
+                         Generated browser artifact for direct index.html use
+scripts/build-app.ts      Shared TypeScript-to-JavaScript browser build
 server.js                Lightweight server and local PlantUML SVG endpoint
 tests/browser-smoke.js   Headless Chrome interaction suite
 vendor/plantuml.jar      Attached PlantUML renderer
