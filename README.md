@@ -209,7 +209,7 @@ Safeguard supports multiple independent local workspaces. Use the top-bar worksp
 - Select **Open** to reopen a saved project file as a browser workspace
 - Select **Open in new tab** to work with the active project alongside other projects
 - Select **Save** to preserve the active project in browser storage and download `<workspace-name>.safeguard.json`
-- Select **Close workspace** to close the current project tab without deleting its stored data
+- Select **Close workspace** to remove the project from the workspace selector without deleting its stored data; opening it again restores the existing project
 - Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
 

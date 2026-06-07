@@ -110,13 +110,16 @@ try {
     assert(await evaluate(`sessionStorage.getItem("safeguard-active-workspace-v1")`) === activeId, "active project is not stored per tab");
   });
 
-  await test("close workspace exits the tab without deleting the project", async () => {
+  await test("close workspace removes the project from the switcher and allows reopening", async () => {
     const before = await count("#workspace-select option");
-    await evaluate(`window.close = () => { window.__closeRequested = true; };`);
+    const closedName = await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`);
     await click("#workspace-menu-btn");
     await click("#close-workspace-btn");
-    assert(await evaluate(`window.__closeRequested`), "close workspace did not request tab closure");
-    assert(await count("#workspace-select option") === before, "close workspace deleted a stored project");
+    assert(await count("#workspace-select option") === before - 1, "close workspace did not remove the project from the switcher");
+    assert(await evaluate(`workspaceRegistry.closedWorkspaces.some(workspace => workspace.name === ${JSON.stringify(closedName)})`), "closed project was not preserved");
+    await evaluate(`openProject({ name: ${JSON.stringify(closedName)}, data: blankWorkspace() })`);
+    assert(await count("#workspace-select option") === before, "reopening a closed project did not restore it");
+    assert(await evaluate(`document.querySelector("#workspace-select").selectedOptions[0].textContent`) === closedName, "reopened project did not become active");
   });
 
   await test("workspace manager rejects duplicate project names", async () => {
@@ -163,6 +166,7 @@ try {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {
       const envelope = projectEnvelope();
+      delete envelope.workspace.id;
       envelope.workspace.name = "Imported AMR project";
       envelope.workspace.data.hazards.push({ id: "H-IMPORTED", name: "Imported JSON hazard", category: "Operational", description: "Portable project test" });
       const file = new File([JSON.stringify(envelope)], "imported.safeguard.json", { type: "application/json" });
@@ -174,7 +178,7 @@ try {
     assert(await evaluate(`document.querySelector("#hazards-grid").textContent.includes("H-IMPORTED")`), "imported workspace data is missing");
   });
 
-  await test("portable JSON import rejects an existing project name", async () => {
+  await test("portable JSON import activates an existing project without duplicating it", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {
       const envelope = projectEnvelope();
@@ -183,8 +187,8 @@ try {
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
-    await retry(async () => { assert(await evaluate(`window.__lastAlert.includes("Project name") && window.__lastAlert.includes("already exists")`), "duplicate imported project name did not report a useful error"); });
-    assert(await count("#workspace-select option") === before, "workspace with duplicate project name was imported");
+    await retry(async () => { assert(await evaluate(`window.__lastAlert.includes("already open")`), "existing imported project did not report that it was already open"); });
+    assert(await count("#workspace-select option") === before, "existing imported project was duplicated");
   });
 
   await test("portable JSON import rejects invalid typed values", async () => {
@@ -192,6 +196,7 @@ try {
     await evaluate(`(() => {
       const envelope = projectEnvelope();
       envelope.workspace.name = "Invalid imported project";
+      envelope.workspace.data.quantitative.components[0] ??= { id: crypto.randomUUID(), component: "TEST", role: "Validation test", lambdaTotal: 1e-6, dangerousFraction: 0.5, diagnosticCoverage: 0.9, proofTestHours: 8760, channels: 1, beta: 0.05 };
       envelope.workspace.data.quantitative.components[0].diagnosticCoverage = 2;
       const file = new File([JSON.stringify(envelope)], "invalid.safeguard.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);

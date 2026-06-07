@@ -170,10 +170,12 @@ function setActiveWorkspaceId(id, updateUrl = true) {
 function refreshWorkspaceRegistry() {
   const stored = localStorage.getItem(WORKSPACES_KEY);
   if (stored) workspaceRegistry = JSON.parse(stored);
+  workspaceRegistry.closedWorkspaces ??= [];
 }
 function load() {
   const storedRegistry = localStorage.getItem(WORKSPACES_KEY);
-  workspaceRegistry = storedRegistry ? JSON.parse(storedRegistry) : { version: PROJECT_VERSION, workspaces: [] };
+  workspaceRegistry = storedRegistry ? JSON.parse(storedRegistry) : { version: PROJECT_VERSION, workspaces: [], closedWorkspaces: [] };
+  workspaceRegistry.closedWorkspaces ??= [];
   if (!workspaceRegistry.workspaces.length) {
     const legacy = localStorage.getItem(STORAGE_KEY);
     workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Cobot safety case", updatedAt: new Date().toISOString(), data: migrateWorkspace(legacy ? JSON.parse(legacy) : structuredClone(seed), seed) });
@@ -205,16 +207,47 @@ function switchWorkspace(id) {
 }
 function createWorkspace(name, data = blankWorkspace()) {
   refreshWorkspaceRegistry();
-  const workspaceName = requireUniqueIdentifier(workspaceRegistry.workspaces, requireValue(name, "Workspace name"), "Project name", { field: "name" });
+  const workspaceName = requireUniqueIdentifier([...workspaceRegistry.workspaces, ...workspaceRegistry.closedWorkspaces], requireValue(name, "Workspace name"), "Project name", { field: "name" });
   const workspace = { id: workspaceId(), name: workspaceName, updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(data)) };
   workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
+}
+function matchingWorkspace(items, project) {
+  return items.find(workspace => (project.id && workspace.id === project.id) || sameIdentifier(workspace.name, project.name));
+}
+function blankWorkspaceRecord() {
+  const existing = [...workspaceRegistry.workspaces, ...workspaceRegistry.closedWorkspaces];
+  let name = "Untitled workspace";
+  for (let suffix = 2; existing.some(workspace => sameIdentifier(workspace.name, name)); suffix++) name = `Untitled workspace ${suffix}`;
+  return { id: workspaceId(), name, updatedAt: new Date().toISOString(), data: blankWorkspace() };
+}
+function openProject(project) {
+  refreshWorkspaceRegistry();
+  const open = matchingWorkspace(workspaceRegistry.workspaces, project);
+  if (open) {
+    switchWorkspace(open.id);
+    alert(`Workspace "${open.name}" is already open.`);
+    return;
+  }
+  const closed = matchingWorkspace(workspaceRegistry.closedWorkspaces, project);
+  if (closed) {
+    workspaceRegistry.closedWorkspaces = workspaceRegistry.closedWorkspaces.filter(workspace => workspace.id !== closed.id);
+    const index = Math.min(closed.closedIndex ?? workspaceRegistry.workspaces.length, workspaceRegistry.workspaces.length);
+    delete closed.closedIndex;
+    workspaceRegistry.workspaces.splice(index, 0, closed);
+    persistRegistry(); switchWorkspace(closed.id);
+    alert(`Workspace "${closed.name}" reopened.`);
+    return;
+  }
+  const workspace = { id: project.id || workspaceId(), name: requireValue(project.name, "Workspace name"), updatedAt: new Date().toISOString(), data: validateWorkspaceData(structuredClone(project.data)) };
+  workspaceRegistry.workspaces.push(workspace); persistRegistry(); switchWorkspace(workspace.id);
+  alert(`Workspace "${workspace.name}" opened.`);
 }
 function deleteActiveWorkspace() {
   refreshWorkspaceRegistry();
   const workspace = activeWorkspace();
   if (!confirm(`Delete workspace "${workspace.name}" from this browser? Select Save first if you need to reopen it later.`)) return;
   workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter(item => item.id !== workspace.id);
-  if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push({ id: workspaceId(), name: "Untitled workspace", updatedAt: new Date().toISOString(), data: blankWorkspace() });
+  if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push(blankWorkspaceRecord());
   persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);
 }
 function openActiveWorkspaceInNewTab() {
@@ -225,20 +258,24 @@ function openActiveWorkspaceInNewTab() {
 }
 function closeActiveWorkspace() {
   persistState();
-  window.close();
-  setTimeout(() => {
-    if (!window.closed) alert("This browser cannot close a tab it did not open. Close this tab manually; the project remains saved.");
-  }, 100);
+  refreshWorkspaceRegistry();
+  const workspace = activeWorkspace();
+  workspace.closedIndex = workspaceRegistry.workspaces.findIndex(item => item.id === workspace.id);
+  workspaceRegistry.workspaces = workspaceRegistry.workspaces.filter(item => item.id !== workspace.id);
+  workspaceRegistry.closedWorkspaces = workspaceRegistry.closedWorkspaces.filter(item => item.id !== workspace.id);
+  workspaceRegistry.closedWorkspaces.push(workspace);
+  if (!workspaceRegistry.workspaces.length) workspaceRegistry.workspaces.push(blankWorkspaceRecord());
+  persistRegistry(); switchWorkspace(workspaceRegistry.workspaces[0].id);
 }
 function projectEnvelope(workspace = activeWorkspace()) {
-  return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { name: workspace.name, data: structuredClone(state) } };
+  return { format: PROJECT_FORMAT, version: PROJECT_VERSION, exportedAt: new Date().toISOString(), workspace: { id: workspace.id, name: workspace.name, data: structuredClone(state) } };
 }
 function parseProject(text) {
   const parsed = JSON.parse(text);
   const data = parsed.format === PROJECT_FORMAT ? parsed.workspace?.data : parsed;
   const name = parsed.format === PROJECT_FORMAT ? parsed.workspace?.name : "Imported safety workspace";
   if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Safeguard workspace.");
-  return { name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
+  return { id: parsed.format === PROJECT_FORMAT ? parsed.workspace?.id : undefined, name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
 }
 function options(items, selected = "", optional = false) {
   return `${optional ? '<option value="">Not linked</option>' : ""}${items.map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.id)} · ${esc(x.name)}</option>`).join("")}`;
@@ -618,7 +655,7 @@ $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 $("#import-workspace-btn").addEventListener("click", () => $("#workspace-file-input").click());
 $("#workspace-file-input").addEventListener("change", async event => {
   const file = event.target.files[0]; if (!file) return;
-  try { const project = parseProject(await file.text()); createWorkspace(project.name, project.data); alert(`Workspace "${project.name}" opened.`); }
+  try { openProject(parseProject(await file.text())); }
   catch (error) { alert(error.message); }
   finally { event.target.value = ""; }
 });
