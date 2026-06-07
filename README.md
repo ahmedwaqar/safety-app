@@ -1,6 +1,10 @@
 # Praxis Studio
 
-Praxis Studio is a lightweight engineering workspace for analyzing safety-critical systems. It keeps architecture, operational context, hazards, integrity assessments, FMEA records, and requirements together in one traceable project.
+Praxis Studio helps engineers do good engineering before asking them to produce safety paperwork. It provides a structured workspace for defining the system, understanding how it will be used, exploring architecture, making design decisions, and recording the reasoning and evidence behind those decisions.
+
+As the engineering workflow develops, Praxis Studio helps the team identify the points where a decision could introduce, increase, or reduce risk. Engineers can place safety checkpoints at those points, define what must be reviewed before work proceeds, and connect each checkpoint to the appropriate analysis, requirement, owner, and verification evidence. Safety becomes an integrated outcome of disciplined, traceable engineering rather than a separate activity added near the end.
+
+Architecture, operational context, hazards, integrity assessments, FMEA records, and requirements remain together in one traceable project, helping teams develop critical systems with greater clarity, confidence, and assurance.
 
 The initial browser workspace ships with an example cobot-cell safety case so the workflow is visible immediately after startup. Deleting the final browser workspace creates a blank replacement.
 
