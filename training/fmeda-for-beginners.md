@@ -1,6 +1,6 @@
 # FMEDA For Beginners
 
-This lesson introduces failure modes, effects, and diagnostic analysis (FMEDA) through the AMR protective-stop example in Safeguard. Complete the main [AMR Robot Safety Training](README.md) first or use this as a focused follow-up.
+This lesson introduces failure modes, effects, and diagnostic analysis (FMEDA) through the AMR protective-stop example in Praxis Studio. Complete the main [AMR Robot Safety Training](README.md) first or use this as a focused follow-up.
 
 ## Learning Objectives
 

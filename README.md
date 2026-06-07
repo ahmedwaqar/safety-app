@@ -1,6 +1,6 @@
-# Safeguard Cobot Safety Studio
+# Praxis Studio
 
-Safeguard is a lightweight web app for collaborative-robot and autonomous-mobile-robot (AMR) safety analysis. It keeps architecture, operational context, hazards, AMR SIL assessments, ISO 26262 hazard analysis and risk assessment (HARA), FMEA records, and safety requirements in one traceable browser workspace.
+Praxis Studio is a lightweight engineering workspace for analyzing safety-critical systems. It keeps architecture, operational context, hazards, integrity assessments, FMEA records, and requirements together in one traceable project.
 
 The initial browser workspace ships with an example cobot-cell safety case so the workflow is visible immediately after startup. Deleting the final browser workspace creates a blank replacement.
 
@@ -71,7 +71,7 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 9. Use the **FMEDA worksheet** to classify hardware failure modes and evaluate symbolic rate expressions.
 10. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
 11. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
-12. Use the top-bar controls to save the active project as a portable `.safeguard.json` file.
+12. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
 
 ## Using Each Workspace
 
@@ -204,11 +204,11 @@ Use **Add requirement** to specify the control statement, source hazard, allocat
 
 ## Workspaces And Portable Project Files
 
-Safeguard supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
+Praxis Studio supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
 
 - Select **Open** to reopen a saved project file as a browser workspace
 - Select **Open in new tab** to work with the active project alongside other projects
-- Select **Save** to preserve the active project in browser storage and download `<workspace-name>.safeguard.json`
+- Select **Save** to preserve the active project in browser storage and download `<workspace-name>.praxis.json`
 - Select **Close workspace** to remove the project from the workspace selector without deleting its stored data; opening it again restores the existing project
 - Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
@@ -217,7 +217,7 @@ Portable project files use a versioned JSON envelope:
 
 ```json
 {
-  "format": "safeguard-safety-workspace",
+  "format": "praxis-studio-workspace",
   "version": 1,
   "exportedAt": "2026-05-31T00:00:00.000Z",
   "workspace": {
@@ -229,11 +229,11 @@ Portable project files use a versioned JSON envelope:
 
 The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, and requirements. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
-Local workspace metadata is stored in browser `localStorage`, while each tab keeps its active-project selection in `sessionStorage`. The previous single-workspace storage key remains supported for backward-compatible migration.
+Local workspace metadata is stored in browser `localStorage`, while each tab keeps its active-project selection in `sessionStorage`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
 
 ## Input Validation
 
-Safeguard validates typed values before saving records and checks imported JSON project structure before opening a workspace.
+Praxis Studio validates typed values before saving records and checks imported JSON project structure before opening a workspace.
 
 Key rules:
 
@@ -261,8 +261,8 @@ The suite verifies workspace creation, switching, deletion, isolation, project-f
 Compile-check the browser and server entry points:
 
 ```sh
-bun build app.js --target=browser --outfile=/tmp/safeguard-app-check.js
-bun build server.js --target=bun --outfile=/tmp/safeguard-server-check.js
+bun build app.js --target=browser --outfile=/tmp/praxis-app-check.js
+bun build server.js --target=bun --outfile=/tmp/praxis-server-check.js
 ```
 
 ## Project Layout

@@ -1,7 +1,8 @@
 const STORAGE_KEY = "safeguard-cobot-workspace-v1";
 const WORKSPACES_KEY = "safeguard-workspaces-v1";
 const ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
-const PROJECT_FORMAT = "safeguard-safety-workspace";
+const PROJECT_FORMAT = "praxis-studio-workspace";
+const LEGACY_PROJECT_FORMAT = "safeguard-safety-workspace";
 const PROJECT_VERSION = 1;
 
 const seed = {
@@ -272,10 +273,11 @@ function projectEnvelope(workspace = activeWorkspace()) {
 }
 function parseProject(text) {
   const parsed = JSON.parse(text);
-  const data = parsed.format === PROJECT_FORMAT ? parsed.workspace?.data : parsed;
-  const name = parsed.format === PROJECT_FORMAT ? parsed.workspace?.name : "Imported safety workspace";
-  if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Safeguard workspace.");
-  return { id: parsed.format === PROJECT_FORMAT ? parsed.workspace?.id : undefined, name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
+  const hasEnvelope = [PROJECT_FORMAT, LEGACY_PROJECT_FORMAT].includes(parsed.format);
+  const data = hasEnvelope ? parsed.workspace?.data : parsed;
+  const name = hasEnvelope ? parsed.workspace?.name : "Imported safety workspace";
+  if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Praxis Studio workspace.");
+  return { id: hasEnvelope ? parsed.workspace?.id : undefined, name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
 }
 function options(items, selected = "", optional = false) {
   return `${optional ? '<option value="">Not linked</option>' : ""}${items.map(x => `<option value="${esc(x.id)}" ${x.id === selected ? "selected" : ""}>${esc(x.id)} · ${esc(x.name)}</option>`).join("")}`;
@@ -556,7 +558,7 @@ function renderArchitecture() {
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = workspaceRegistry.workspaces.map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
-  document.title = `${active.name} | Safeguard`;
+  document.title = `${active.name} | Praxis Studio`;
 }
 function renderAll() { renderWorkspaceControls(); renderMetrics(); renderFmea(); renderCatalog("hazards"); renderCatalog("situations"); renderRequirements(); renderHara(); renderSil(); renderQuantitative(); renderFmeda(); renderArchitecture(); }
 
@@ -872,7 +874,7 @@ $("#export-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value; persistState();
   const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.safeguard.json` });
+  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.praxis.json` });
   link.click(); URL.revokeObjectURL(link.href);
 });
 renderAll();

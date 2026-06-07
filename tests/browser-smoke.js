@@ -83,6 +83,11 @@ try {
   await retry(async () => { assert(await count("#metrics .metric") === 4, "app did not render"); });
   await evaluate(`window.alert = message => window.__lastAlert = message; window.confirm = () => true;`);
 
+  await test("Praxis Studio branding appears in the app and browser tab", async () => {
+    assert(await evaluate(`document.querySelector(".brand strong").textContent`) === "Praxis Studio", "sidebar branding is incorrect");
+    assert(await evaluate(`document.title.endsWith("| Praxis Studio")`), "browser tab title is incorrect");
+  });
+
   await test("workspace manager creates, switches, and isolates local projects", async () => {
     const original = await evaluate(`document.querySelector("#workspace-select").value`);
     await evaluate(`createWorkspace("Warehouse AMR project")`);
@@ -145,7 +150,7 @@ try {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
     assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === sessionStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save did not preserve PlantUML editor text");
-    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save did not download the project file");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.praxis.json", "save did not download the project file");
   });
 
   await test("workspace manager deletes the active project and keeps a blank fallback", async () => {
@@ -169,7 +174,7 @@ try {
       delete envelope.workspace.id;
       envelope.workspace.name = "Imported AMR project";
       envelope.workspace.data.hazards.push({ id: "H-IMPORTED", name: "Imported JSON hazard", category: "Operational", description: "Portable project test" });
-      const file = new File([JSON.stringify(envelope)], "imported.safeguard.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "imported.praxis.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -183,7 +188,7 @@ try {
     await evaluate(`(() => {
       const envelope = projectEnvelope();
       envelope.workspace.name = "imported amr PROJECT";
-      const file = new File([JSON.stringify(envelope)], "duplicate-project-name.safeguard.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "duplicate-project-name.praxis.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -198,7 +203,7 @@ try {
       envelope.workspace.name = "Invalid imported project";
       envelope.workspace.data.quantitative.components[0] ??= { id: crypto.randomUUID(), component: "TEST", role: "Validation test", lambdaTotal: 1e-6, dangerousFraction: 0.5, diagnosticCoverage: 0.9, proofTestHours: 8760, channels: 1, beta: 0.05 };
       envelope.workspace.data.quantitative.components[0].diagnosticCoverage = 2;
-      const file = new File([JSON.stringify(envelope)], "invalid.safeguard.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "invalid.praxis.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -212,7 +217,7 @@ try {
       const envelope = projectEnvelope();
       envelope.workspace.name = "Duplicate-ID imported project";
       envelope.workspace.data.hazards.push({ ...envelope.workspace.data.hazards[0], id: envelope.workspace.data.hazards[0].id.toLowerCase() });
-      const file = new File([JSON.stringify(envelope)], "duplicate-id.safeguard.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "duplicate-id.praxis.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -610,8 +615,9 @@ try {
   await test("save initiates JSON download", async () => {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`window.__download`) === "cobot-safety-case.safeguard.json", "save project file did not initiate expected portable JSON download");
-    assert(await evaluate(`projectEnvelope().format`) === "safeguard-safety-workspace", "export envelope format is missing");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.praxis.json", "save project file did not initiate expected portable JSON download");
+    assert(await evaluate(`projectEnvelope().format`) === "praxis-studio-workspace", "export envelope format is missing");
+    assert(await evaluate(`parseProject(JSON.stringify({ ...projectEnvelope(), format: "safeguard-safety-workspace" })).name`) === "Cobot safety case", "legacy project format is no longer supported");
     assert(await evaluate(`projectEnvelope().version`) === 1, "export envelope version is missing");
   });
 

@@ -1,6 +1,6 @@
 # AMR Robot Safety Training
 
-This beginner course introduces safety analysis for autonomous mobile robots (AMRs) used in industrial operating zones. It combines short lessons with hands-on work in Safeguard.
+This beginner course introduces safety analysis for autonomous mobile robots (AMRs) used in industrial operating zones. It combines short lessons with hands-on work in Praxis Studio.
 
 ## Learning Objectives
 
@@ -28,7 +28,7 @@ Allow approximately 3 to 4 hours for the complete course.
 
 ## Prerequisites
 
-Start Safeguard before the practical exercises:
+Start Praxis Studio before the practical exercises:
 
 ```sh
 bun server.js
@@ -159,7 +159,7 @@ For each hazard, write:
 
 Do not assign a SIL to the entire robot as a vague label. The assessment should focus on a safety function, such as protective stopping, speed limitation, or prevention of unintended movement.
 
-Safeguard provides a C/F/P/W risk graph to estimate a **target SIL**:
+Praxis Studio provides a C/F/P/W risk graph to estimate a **target SIL**:
 
 | Factor | Question |
 | --- | --- |
@@ -272,7 +272,7 @@ A warehouse AMR transports loaded totes through a mixed-traffic area. Forklifts 
 
 ### Student Task 5: Complete Mini Analysis
 
-Use Safeguard to create:
+Use Praxis Studio to create:
 
 1. A PlantUML architecture with at least six components.
 2. Five operational situations, including charging and jam recovery.
