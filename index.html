@@ -18,6 +18,7 @@
       </div>
       <nav id="main-nav">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
+        <button class="nav-item" data-view="notepad"><span class="nav-icon">✎</span>Notepad</button>
         <button class="nav-item" data-view="workflow"><span class="nav-icon">↳</span>Engineering workflow</button>
         <button class="nav-item" data-view="architecture"><span class="nav-icon">⌘</span>Architecture</button>
         <button class="nav-item" data-view="situations"><span class="nav-icon">◎</span>Operational situations</button>
@@ -95,6 +96,52 @@
             <button class="text-btn" data-go="architecture">Manage architecture →</button>
           </div>
           <div class="component-row" id="overview-components"></div>
+        </section>
+      </section>
+
+      <section class="view" id="notepad-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Engineering thinking space</p><h2>Notepad</h2><p>Capture raw notes, calculations, figures, links, and stakeholder brainstorming before promoting mature rows into FMEA or HARA.</p></div>
+          <div class="toolbar-actions"><button class="button secondary" id="notepad-save-btn">Save notes</button><button class="button primary" id="notepad-add-table-btn">Add brainstorm row</button></div>
+        </div>
+        <section class="card notepad-card">
+          <div class="notepad-toolbar" id="notepad-toolbar">
+            <button type="button" data-command="bold">Bold</button>
+            <button type="button" data-command="italic">Italic</button>
+            <button type="button" data-command="insertUnorderedList">List</button>
+            <button type="button" data-command="insertOrderedList">Numbered</button>
+            <button type="button" data-command="undo">Undo</button>
+            <button type="button" data-command="redo">Redo</button>
+            <button type="button" id="notepad-heading-btn">Heading</button>
+            <button type="button" id="notepad-math-btn">Math</button>
+            <button type="button" id="notepad-table-btn">Table</button>
+            <button type="button" id="notepad-link-btn">Artifact link</button>
+            <button type="button" id="notepad-figure-btn">Figure</button>
+          </div>
+          <div class="notepad-table-toolbar" id="notepad-table-toolbar">
+            <span id="notepad-table-status">Select a table cell to edit its structure</span>
+            <button type="button" data-table-action="row-above" disabled>Row above</button>
+            <button type="button" data-table-action="row-below" disabled>Row below</button>
+            <button type="button" data-table-action="column-left" disabled>Column left</button>
+            <button type="button" data-table-action="column-right" disabled>Column right</button>
+            <button type="button" data-table-action="delete-row" disabled>Delete row</button>
+            <button type="button" data-table-action="delete-column" disabled>Delete column</button>
+            <button type="button" data-table-action="delete-table" disabled>Delete table</button>
+          </div>
+          <div class="notepad-editor" id="notepad-editor" contenteditable="true" aria-label="Rich engineering notes"></div>
+          <input type="file" id="notepad-figure-input" accept="image/*" hidden />
+        </section>
+        <section class="card brainstorm-card">
+          <div class="card-header">
+            <div><p class="eyebrow">Stakeholder brainstorming</p><h3>Draft analysis table</h3></div>
+            <div class="toolbar-actions">
+              <select id="brainstorm-type"><option value="fmea">FMEA draft</option><option value="hara">HARA draft</option></select>
+              <button class="button secondary" id="brainstorm-clean-btn" type="button">Clean up table</button>
+              <button class="button primary" id="brainstorm-import-btn" type="button">Import cleaned rows</button>
+            </div>
+          </div>
+          <p class="dialog-copy" id="brainstorm-status">Use this table during reviews, then clean it before importing into formal analysis.</p>
+          <div class="table-scroll"><table class="brainstorm-table"><thead id="brainstorm-head"></thead><tbody id="brainstorm-body"></tbody></table></div>
         </section>
       </section>
 

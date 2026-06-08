@@ -122,6 +122,14 @@ HMI --> CTRL : task selection
       { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen clear not detected", localEffect: "Protective-field intrusion is not reported", endEffect: "Protective stop may fail on demand", classification: "dangerous_undetected", diagnostic: "Residual failure after scanner diagnostics", expression: "lambda_scanner * frac_dangerous * (1 - dc_scanner)" }
     ]
   },
+  notepad: {
+    html: "<h3>Engineering notes</h3><p>Capture raw stakeholder observations, calculations, assumptions, and early analysis ideas here.</p>",
+    brainstormType: "fmea",
+    brainstormRows: [
+      { kind: "fmea", component: "SCAN", failureMode: "Scanner muted during setup", effect: "Protective field may not stop robot", hazard: "H-03", situation: "OS-02", severity: "9", occurrence: "2", detection: "4", action: "Review setup-mode muting logic" },
+      { kind: "hara", eventId: "HE-DRAFT", hazard: "H-01", situation: "OS-03", malfunction: "Unexpected motion during jam recovery", consequence: "Operator hand caught near tooling", severity: "S3", exposure: "E3", controllability: "C2", safetyGoal: "SG-01" }
+    ]
+  },
   workflow: engineeringWorkflowTemplate(),
   customColumns: [{ key: "owner", label: "Owner" }],
   fmea: [
@@ -144,6 +152,7 @@ function blankWorkspace() {
     silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
     fmeda: { constants: [], rows: [] },
+    notepad: { html: "", brainstormType: "fmea", brainstormRows: [] },
     workflow: engineeringWorkflowTemplate(),
     customColumns: [],
     fmea: []
@@ -153,6 +162,8 @@ var workspaceRegistry;
 var state = load();
 var diagramUrl;
 var serverSyncReady = false;
+var activeNotepadCell = null;
+var notepadSaveTimer;
 var $ = (selector, parent = document) => parent.querySelector(selector);
 var $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
 var esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
@@ -165,6 +176,7 @@ var asilClass = (asil) => `asil-${asil.replace("ASIL ", "").toLowerCase()}`;
 function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   for (const [key, value] of Object.entries(defaults))
     workspace[key] ??= structuredClone(value);
+  workspace.notepad.brainstormRows.forEach((row) => row.id ??= crypto.randomUUID());
   return workspace;
 }
 function validateNumber(value, label, { min = -Infinity, max = Infinity, integer = false } = {}) {
@@ -224,6 +236,8 @@ function validateWorkspaceData(data) {
     throw new Error('Workspace field "quantitative.components" must be an array.');
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows)))
     throw new Error("Workspace FMEDA fields must be arrays.");
+  if (data.notepad !== undefined && (!data.notepad || typeof data.notepad !== "object" || !Array.isArray(data.notepad.brainstormRows)))
+    throw new Error("Workspace notepad brainstorming rows must be an array.");
   if (data.workflow !== undefined && (!data.workflow || typeof data.workflow !== "object" || !Array.isArray(data.workflow.phases) || !Array.isArray(data.workflow.activities)))
     throw new Error("Workspace workflow phases and activities must be arrays.");
   validateIdentifierCollection(data.components, "id", "Component identifier");
@@ -267,6 +281,8 @@ function validateWorkspaceData(data) {
     validateNumber(item.value, "FMEDA constant", { min: 0 });
   });
   data.fmeda?.rows?.forEach((row) => requireEnum(row.classification, "FMEDA classification", ["safe", "dangerous_detected", "dangerous_undetected", "no_effect"]));
+  if (data.notepad?.brainstormType)
+    requireEnum(data.notepad.brainstormType, "Notepad brainstorm type", ["fmea", "hara"]);
   data.workflow?.activities?.forEach((activity) => requireEnum(activity.status, "Workflow activity status", ["Not started", "In progress", "Complete"]));
   return migrateWorkspace(data);
 }
@@ -716,12 +732,252 @@ function fmedaTotals() {
 function goalBy(id) {
   return state.safetyGoals.find((goal) => goal.id === id);
 }
+var brainstormColumns = {
+  fmea: [
+    ["component", "Component"],
+    ["failureMode", "Failure mode"],
+    ["effect", "Potential effect"],
+    ["hazard", "Hazard ID"],
+    ["situation", "Situation ID"],
+    ["severity", "S"],
+    ["occurrence", "O"],
+    ["detection", "D"],
+    ["action", "Recommended action"]
+  ],
+  hara: [
+    ["eventId", "Event ID"],
+    ["hazard", "Hazard ID"],
+    ["situation", "Situation ID"],
+    ["malfunction", "Malfunctioning behaviour"],
+    ["consequence", "Consequence"],
+    ["severity", "S"],
+    ["exposure", "E"],
+    ["controllability", "C"],
+    ["safetyGoal", "Safety goal"]
+  ]
+};
+function sanitizeRichHtml(html) {
+  const documentFragment = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html").body;
+  const allowedTags = new Set(["A", "B", "BLOCKQUOTE", "BR", "CODE", "EM", "FIGCAPTION", "FIGURE", "H2", "H3", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "STRONG", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR", "U", "UL"]);
+  for (const element of [...documentFragment.querySelectorAll("*")]) {
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(...element.childNodes);
+      continue;
+    }
+    for (const attribute of [...element.attributes]) {
+      const allowed = attribute.name === "href" || attribute.name === "src" || attribute.name === "alt" || attribute.name === "data-notepad-artifact" || attribute.name === "data-go";
+      const unsafeSource = attribute.name === "src" && !attribute.value.startsWith("data:image/");
+      const unsafeLink = attribute.name === "href" && !/^(#|https?:|mailto:)/i.test(attribute.value);
+      if (!allowed || unsafeSource || unsafeLink)
+        element.removeAttribute(attribute.name);
+    }
+  }
+  return documentFragment.innerHTML;
+}
+function saveNotepad() {
+  state.notepad.html = sanitizeRichHtml($("#notepad-editor").innerHTML);
+  persistState();
+  $("#brainstorm-status").textContent = "Notes saved in this project.";
+}
+function scheduleNotepadSave() {
+  clearTimeout(notepadSaveTimer);
+  $("#notepad-table-status").textContent = activeNotepadCell ? "Table cell selected · saving changes..." : "Saving notes...";
+  notepadSaveTimer = setTimeout(() => {
+    saveNotepad();
+    updateNotepadTableControls();
+  }, 400);
+}
+function insertNotepadHtml(html) {
+  const editor = $("#notepad-editor");
+  editor.focus();
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (range && editor.contains(range.commonAncestorContainer)) {
+    range.deleteContents();
+    range.insertNode(template.content);
+    selection?.collapseToEnd();
+  } else
+    editor.append(template.content);
+  saveNotepad();
+}
+function selectNotepadCell(cell) {
+  activeNotepadCell?.classList.remove("notepad-cell-selected");
+  activeNotepadCell = cell;
+  activeNotepadCell?.classList.add("notepad-cell-selected");
+  updateNotepadTableControls();
+}
+function updateNotepadTableControls() {
+  const available = Boolean(activeNotepadCell?.isConnected);
+  $$("#notepad-table-toolbar button").forEach((button) => button.disabled = !available);
+  $("#notepad-table-status").textContent = available ? `Selected row ${activeNotepadCell.parentElement.rowIndex + 1}, column ${activeNotepadCell.cellIndex + 1}` : "Select a table cell to edit its structure";
+}
+function createNotepadCell(row, index) {
+  const tag = row.parentElement?.tagName === "THEAD" || row.cells[0]?.tagName === "TH" ? "th" : "td";
+  const cell = document.createElement(tag);
+  cell.innerHTML = "<br>";
+  row.insertBefore(cell, row.cells[index] || null);
+  return cell;
+}
+function editNotepadTable(action) {
+  const cell = activeNotepadCell;
+  const table = cell?.closest("table");
+  const row = cell?.parentElement;
+  if (!cell || !table || !row)
+    return;
+  const column = cell.cellIndex;
+  if (action === "row-above" || action === "row-below") {
+    const body = table.tBodies[0] || table.createTBody();
+    const bodyRow = row.parentElement === body ? row : body.rows[0];
+    const index = bodyRow ? bodyRow.sectionRowIndex + (action === "row-below" ? 1 : 0) : 0;
+    const newRow = body.insertRow(index);
+    const width = Math.max(1, table.rows[0]?.cells.length || 1);
+    for (let i = 0;i < width; i++)
+      createNotepadCell(newRow, i);
+    selectNotepadCell(newRow.cells[Math.min(column, width - 1)]);
+  } else if (action === "column-left" || action === "column-right") {
+    const index = column + (action === "column-right" ? 1 : 0);
+    let selected = null;
+    [...table.rows].forEach((currentRow) => {
+      const newCell = createNotepadCell(currentRow, index);
+      if (currentRow === row)
+        selected = newCell;
+    });
+    selectNotepadCell(selected);
+  } else if (action === "delete-row") {
+    const nextRow = row.nextElementSibling || row.previousElementSibling;
+    const next = nextRow?.cells[column] || null;
+    row.remove();
+    if (!table.rows.length)
+      table.remove();
+    selectNotepadCell(next);
+  } else if (action === "delete-column") {
+    if (row.cells.length <= 1)
+      return;
+    [...table.rows].forEach((currentRow) => currentRow.cells[column]?.remove());
+    selectNotepadCell(row.cells[Math.min(column, row.cells.length - 1)] || null);
+  } else if (action === "delete-table") {
+    table.remove();
+    selectNotepadCell(null);
+  }
+  saveNotepad();
+}
+function currentBrainstormRows() {
+  return state.notepad.brainstormRows.filter((row) => row.kind === state.notepad.brainstormType);
+}
+function blankBrainstormRow(kind = state.notepad.brainstormType) {
+  return kind === "hara" ? { id: crypto.randomUUID(), kind, eventId: "", hazard: "", situation: "", malfunction: "", consequence: "", severity: "S0", exposure: "E0", controllability: "C0", safetyGoal: "" } : { id: crypto.randomUUID(), kind, component: "", failureMode: "", effect: "", hazard: "", situation: "", severity: "1", occurrence: "1", detection: "1", action: "" };
+}
+function cleanupBrainstormRows() {
+  const kind = state.notepad.brainstormType;
+  const columns = brainstormColumns[kind];
+  const rows = currentBrainstormRows().filter((row) => columns.some(([field]) => String(row[field] || "").trim()));
+  rows.forEach((row) => {
+    columns.forEach(([field]) => row[field] = String(row[field] || "").trim());
+    if (kind === "fmea") {
+      ["severity", "occurrence", "detection"].forEach((field) => row[field] = String(Math.max(1, Math.min(10, Math.round(Number(row[field]) || 1)))));
+    } else {
+      if (!["S0", "S1", "S2", "S3"].includes(row.severity))
+        row.severity = "S0";
+      if (!["E0", "E1", "E2", "E3", "E4"].includes(row.exposure))
+        row.exposure = "E0";
+      if (!["C0", "C1", "C2", "C3"].includes(row.controllability))
+        row.controllability = "C0";
+    }
+  });
+  state.notepad.brainstormRows = [...state.notepad.brainstormRows.filter((row) => row.kind !== kind), ...rows];
+  save();
+  const invalid = rows.filter((row) => brainstormRowErrors(row).length).length;
+  $("#brainstorm-status").textContent = `${rows.length} draft row${rows.length === 1 ? "" : "s"} cleaned. ${invalid ? `${invalid} still need valid references or required values.` : "Rows are ready to import."}`;
+}
+function brainstormRowErrors(row) {
+  const errors = [];
+  if (row.kind === "fmea") {
+    if (!state.components.some((item) => sameIdentifier(item.id, row.component)))
+      errors.push("component");
+    if (!row.failureMode)
+      errors.push("failure mode");
+    if (!row.effect)
+      errors.push("effect");
+    if (row.hazard && !state.hazards.some((item) => sameIdentifier(item.id, row.hazard)))
+      errors.push("hazard");
+    if (row.situation && !state.situations.some((item) => sameIdentifier(item.id, row.situation)))
+      errors.push("situation");
+  } else {
+    if (!row.eventId || state.hara.some((item) => sameIdentifier(item.eventId, row.eventId)))
+      errors.push("unique event ID");
+    if (!state.hazards.some((item) => sameIdentifier(item.id, row.hazard)))
+      errors.push("hazard");
+    if (!state.situations.some((item) => sameIdentifier(item.id, row.situation)))
+      errors.push("situation");
+    if (!row.malfunction)
+      errors.push("malfunction");
+    if (!row.consequence)
+      errors.push("consequence");
+    if (row.safetyGoal && !state.safetyGoals.some((item) => sameIdentifier(item.id, row.safetyGoal)))
+      errors.push("safety goal");
+  }
+  return errors;
+}
+function importBrainstormRows() {
+  cleanupBrainstormRows();
+  const kind = state.notepad.brainstormType;
+  const rows = currentBrainstormRows();
+  const valid = rows.filter((row) => !brainstormRowErrors(row).length);
+  if (kind === "fmea") {
+    valid.forEach((row) => state.fmea.push({
+      id: crypto.randomUUID(),
+      component: row.component,
+      failureMode: row.failureMode,
+      effect: row.effect,
+      hazard: row.hazard,
+      situation: row.situation,
+      severity: Number(row.severity),
+      occurrence: Number(row.occurrence),
+      detection: Number(row.detection),
+      action: row.action,
+      custom: {}
+    }));
+  } else {
+    valid.forEach((row) => state.hara.push({
+      id: crypto.randomUUID(),
+      eventId: row.eventId,
+      hazard: row.hazard,
+      situation: row.situation,
+      malfunction: row.malfunction,
+      consequence: row.consequence,
+      severity: row.severity,
+      exposure: row.exposure,
+      controllability: row.controllability,
+      safetyGoal: row.safetyGoal
+    }));
+  }
+  const importedIds = new Set(valid.map((row) => row.id));
+  state.notepad.brainstormRows = state.notepad.brainstormRows.filter((row) => !importedIds.has(row.id));
+  save();
+  $("#brainstorm-status").textContent = `${valid.length} cleaned ${kind.toUpperCase()} row${valid.length === 1 ? "" : "s"} imported. ${rows.length - valid.length} draft row${rows.length - valid.length === 1 ? "" : "s"} retained for correction.`;
+}
 function showView(name) {
   $$(".view").forEach((view) => view.classList.remove("active"));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = { workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" }[name] || "Overview";
+  $("#page-title").textContent = { notepad: "Notepad", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" }[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
+}
+function renderNotepad() {
+  const editor = $("#notepad-editor");
+  if (document.activeElement !== editor) {
+    editor.innerHTML = sanitizeRichHtml(state.notepad.html || "");
+    selectNotepadCell(null);
+  }
+  $("#brainstorm-type").value = state.notepad.brainstormType;
+  const columns = brainstormColumns[state.notepad.brainstormType];
+  $("#brainstorm-head").innerHTML = `<tr>${columns.map(([, label]) => `<th>${esc(label)}</th>`).join("")}<th></th></tr>`;
+  $("#brainstorm-body").innerHTML = currentBrainstormRows().map((row) => `<tr data-brainstorm-row="${row.id}">
+    ${columns.map(([field]) => `<td><input value="${esc(row[field] || "")}" data-brainstorm-field="${field}" /></td>`).join("")}
+    <td><button class="mini-btn" type="button" data-delete-brainstorm="${row.id}" title="Delete">×</button></td>
+  </tr>`).join("");
 }
 function renderMetrics() {
   const sum = state.fmea.reduce((total, row) => total + rpn(row), 0);
@@ -911,6 +1167,7 @@ function renderWorkspaceControls() {
 var FEATURE_RENDERERS = [
   renderWorkspaceControls,
   renderMetrics,
+  renderNotepad,
   renderWorkflow,
   renderFmea,
   () => renderCatalog("hazards"),
@@ -1075,6 +1332,73 @@ $("#new-workspace-btn").addEventListener("click", createNewWorkspace);
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
 $("#close-workspace-btn").addEventListener("click", closeActiveWorkspace);
+$("#notepad-toolbar").addEventListener("click", (event) => {
+  const command = eventElement(event).closest("[data-command]")?.dataset.command;
+  if (command) {
+    $("#notepad-editor").focus();
+    document.execCommand(command);
+    saveNotepad();
+  }
+});
+$("#notepad-save-btn").addEventListener("click", saveNotepad);
+$("#notepad-editor").addEventListener("click", (event) => {
+  const target = eventElement(event);
+  selectNotepadCell(target.closest("td, th"));
+  const artifact = target.closest("[data-notepad-artifact]");
+  if (artifact) {
+    event.preventDefault();
+    showView(artifact.dataset.notepadArtifact);
+  }
+});
+$("#notepad-editor").addEventListener("input", scheduleNotepadSave);
+$("#notepad-table-toolbar").addEventListener("click", (event) => {
+  const action = eventElement(event).closest("[data-table-action]")?.dataset.tableAction;
+  if (action)
+    editNotepadTable(action);
+});
+$("#notepad-heading-btn").addEventListener("click", () => {
+  $("#notepad-editor").focus();
+  document.execCommand("formatBlock", false, "h3");
+  saveNotepad();
+});
+$("#notepad-math-btn").addEventListener("click", () => {
+  const expression = prompt("Enter a mathematical expression or engineering equation:");
+  if (expression)
+    insertNotepadHtml(`<pre><code>${esc(expression)}</code></pre><p><br></p>`);
+});
+$("#notepad-table-btn").addEventListener("click", () => insertNotepadHtml("<table><thead><tr><th>Item</th><th>Value</th><th>Note</th></tr></thead><tbody><tr><td>Draft</td><td></td><td></td></tr><tr><td>Draft</td><td></td><td></td></tr></tbody></table><p><br></p>"));
+$("#notepad-link-btn").addEventListener("click", () => {
+  const artifact = prompt("Link to artifact: architecture, hazards, situations, hara, fmea, fmeda, quantitative, requirements, workflow");
+  const views = ["architecture", "hazards", "situations", "hara", "fmea", "fmeda", "quantitative", "requirements", "workflow"];
+  if (!artifact || !views.includes(artifact.toLowerCase()))
+    return alert("Enter a valid artifact name.");
+  const view = artifact.toLowerCase();
+  insertNotepadHtml(`<a href="#${view}" data-go="${view}" data-notepad-artifact="${view}">${esc(artifact)}</a>`);
+});
+$("#notepad-figure-btn").addEventListener("click", () => $("#notepad-figure-input").click());
+$("#notepad-figure-input").addEventListener("change", (event) => {
+  const input = event.target;
+  const file = input.files?.[0];
+  if (!file)
+    return;
+  const reader = new FileReader;
+  reader.onload = () => {
+    const caption = prompt("Figure caption:") || file.name;
+    insertNotepadHtml(`<figure><img src="${esc(String(reader.result))}" alt="${esc(caption)}"><figcaption>${esc(caption)}</figcaption></figure><p><br></p>`);
+    input.value = "";
+  };
+  reader.readAsDataURL(file);
+});
+$("#brainstorm-type").addEventListener("change", (event) => {
+  state.notepad.brainstormType = event.target.value;
+  save();
+});
+$("#notepad-add-table-btn").addEventListener("click", () => {
+  state.notepad.brainstormRows.push(blankBrainstormRow());
+  save();
+});
+$("#brainstorm-clean-btn").addEventListener("click", cleanupBrainstormRows);
+$("#brainstorm-import-btn").addEventListener("click", importBrainstormRows);
 $("#add-workflow-phase-btn").addEventListener("click", () => {
   $("#workflow-phase-form").reset();
   $("#workflow-phase-dialog").showModal();
@@ -1113,6 +1437,11 @@ window.addEventListener("storage", (event) => {
 });
 document.addEventListener("click", (event) => {
   const target = eventElement(event);
+  const removeBrainstorm = target.closest("[data-delete-brainstorm]");
+  if (removeBrainstorm) {
+    state.notepad.brainstormRows = state.notepad.brainstormRows.filter((row) => row.id !== removeBrainstorm.dataset.deleteBrainstorm);
+    save();
+  }
   const close = target.closest("[data-close-dialog]");
   if (close)
     close.closest("dialog")?.close();
@@ -1232,6 +1561,16 @@ document.addEventListener("click", (event) => {
       state.fmeda.constants = state.fmeda.constants.filter((item) => item.symbol !== symbol);
       save();
     }
+  }
+});
+$("#brainstorm-body").addEventListener("input", (event) => {
+  const input = event.target;
+  const rowId = input.closest("[data-brainstorm-row]")?.dataset.brainstormRow;
+  const field = input.dataset.brainstormField;
+  const row = state.notepad.brainstormRows.find((item) => item.id === rowId);
+  if (row && field) {
+    row[field] = input.value;
+    persistState();
   }
 });
 $("#workflow-phase-form").addEventListener("submit", (event) => {

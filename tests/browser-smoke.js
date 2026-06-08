@@ -290,11 +290,85 @@ try {
   });
 
   await test("navigation buttons switch all application views", async () => {
-    for (const view of ["workflow", "fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
+    for (const view of ["notepad", "workflow", "fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
       assert(await evaluate(`document.querySelector("#add-fmea-row-btn").hidden`) === (view !== "fmea"), `Add FMEA row visibility was incorrect in ${view} view`);
     }
+  });
+
+  await test("notepad captures rich content and imports cleaned FMEA and HARA drafts", async () => {
+    await click('[data-view="notepad"]');
+    await evaluate(`document.querySelector("#notepad-editor").innerHTML = "<h3>Review notes</h3><p>Raw force calculation</p>"`);
+    await click("#notepad-save-btn");
+    assert(await evaluate(`state.notepad.html.includes("Raw force calculation")`), "rich notes were not saved");
+
+    await evaluate(`window.prompt = message => message.includes("mathematical") ? "F = m * a" : message.includes("artifact") ? "fmea" : "Test figure";`);
+    await click("#notepad-math-btn");
+    await click("#notepad-table-btn");
+    await click("#notepad-link-btn");
+    assert(await count("#notepad-editor pre code") === 1, "mathematical data was not inserted");
+    assert(await count("#notepad-editor table") === 1, "rich table was not inserted");
+    assert(await count('#notepad-editor [data-notepad-artifact="fmea"]') === 1, "artifact link was not inserted");
+
+    await evaluate(`document.querySelector("#notepad-editor table tbody td").dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    assert(!await evaluate(`document.querySelector('[data-table-action="row-below"]').disabled`), "table controls were not enabled after selecting a cell");
+    const tableRows = await count("#notepad-editor table tr");
+    const tableColumns = await count("#notepad-editor table thead tr:first-child > *");
+    await click('[data-table-action="row-below"]');
+    assert(await count("#notepad-editor table tr") === tableRows + 1, "table row was not added");
+    await click('[data-table-action="column-right"]');
+    assert(await count("#notepad-editor table thead tr:first-child > *") === tableColumns + 1, "table column was not added");
+    await click('[data-table-action="delete-column"]');
+    assert(await count("#notepad-editor table thead tr:first-child > *") === tableColumns, "table column was not deleted");
+    await click('[data-table-action="delete-row"]');
+    assert(await count("#notepad-editor table tr") === tableRows, "table row was not deleted");
+
+    await evaluate(`(() => {
+      const editor = document.querySelector("#notepad-editor");
+      editor.insertAdjacentHTML("beforeend", "<p>Live autosave note</p>");
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "Live autosave note" }));
+    })()`);
+    await retry(async () => { assert(await evaluate(`state.notepad.html.includes("Live autosave note")`), "notepad live edits were not auto-saved"); });
+
+    await evaluate(`(async () => {
+      const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")).blob();
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([blob], "cell.png", { type: "image/png" }));
+      const input = document.querySelector("#notepad-figure-input");
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    })()`);
+    await retry(async () => { assert(await count("#notepad-editor figure img") === 1, "figure was not inserted"); });
+
+    const fmeaBefore = await evaluate(`state.fmea.length`);
+    await evaluate(`state.notepad.brainstormType = "fmea"; state.notepad.brainstormRows = [{
+      id: crypto.randomUUID(), kind: "fmea", component: "SCAN", failureMode: "  Stakeholder scanner concern  ", effect: " Missed person detection ",
+      hazard: "H-03", situation: "OS-01", severity: "12", occurrence: "2.4", detection: "3", action: " Add diagnostic review "
+    }]; renderNotepad();`);
+    await click("#brainstorm-clean-btn");
+    assert(await evaluate(`state.notepad.brainstormRows[0].severity`) === "10", "FMEA cleanup did not normalize ratings");
+    await click("#brainstorm-import-btn");
+    assert(await evaluate(`state.fmea.length`) === fmeaBefore + 1, "cleaned FMEA row was not imported");
+    assert(await evaluate(`state.fmea.at(-1).failureMode`) === "Stakeholder scanner concern", "FMEA text was not cleaned");
+
+    const haraBefore = await evaluate(`state.hara.length`);
+    await evaluate(`state.notepad.brainstormType = "hara"; state.notepad.brainstormRows = [{
+      id: crypto.randomUUID(), kind: "hara", eventId: "HE-NOTE", hazard: "H-01", situation: "OS-03",
+      malfunction: " Unexpected motion during intervention ", consequence: " Hand injury ", severity: "S3", exposure: "E3", controllability: "C2", safetyGoal: "SG-01"
+    }]; renderNotepad();`);
+    await click("#brainstorm-clean-btn");
+    await click("#brainstorm-import-btn");
+    assert(await evaluate(`state.hara.length`) === haraBefore + 1, "cleaned HARA row was not imported");
+    assert(await evaluate(`state.hara.at(-1).eventId`) === "HE-NOTE", "HARA event ID was not imported");
+
+    await click('[data-view="notepad"]');
+    const linkResult = await evaluate(`(() => {
+      const link = document.querySelector('#notepad-editor [data-notepad-artifact="fmea"]');
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      return { target: link.dataset.go, active: document.querySelector("#fmea-view").classList.contains("active") };
+    })()`);
+    assert(linkResult.target === "fmea" && linkResult.active, "notepad artifact link did not navigate");
   });
 
   await test("engineering workflow manages phases, safety gates, evidence, and analysis links", async () => {
