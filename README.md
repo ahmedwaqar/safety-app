@@ -13,7 +13,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | Workspace | Capabilities |
 | --- | --- |
 | Overview | Safety-case metrics, residual-risk summary, high-priority failure modes, analysis coverage, and architecture components in scope |
-| Notepad | Capture rich text, equations, tables, figures, artifact links, and stakeholder FMEA/HARA drafts that can be cleaned and imported |
+| Engineering notes | Capture rich text, equations, tables, figures, artifact links, and stakeholder FMEA/HARA drafts that can be cleaned and imported |
 | Engineering workflow | Configure development phases and activities, insert safety checkpoints, define gate criteria, record evidence, assign owners, and launch linked analyses |
 | Architecture | Paste PlantUML source, render an SVG diagram locally, and import component aliases as reusable references |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
@@ -91,9 +91,9 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 
 ## Using Each Workspace
 
-### Notepad
+### Engineering Notes
 
-Use the notepad for raw engineering thinking before information is mature enough for a controlled worksheet. Rich notes can include headings, emphasis, lists, equations, editable tables, embedded figures, and links to other Praxis Studio artifacts. Notes auto-save while you type. Select a table cell to add or delete surrounding rows and columns, or remove the complete table.
+Use the Engineering notes workspace for raw engineering thinking before information is mature enough for a controlled worksheet. Rich notes can include headings, emphasis, lists, equations, editable tables, embedded figures, and links to other Praxis Studio artifacts. Notes auto-save while you type. Select a table cell to add or delete surrounding rows and columns, or remove the complete table.
 
 For stakeholder reviews, select an **FMEA draft** or **HARA draft**, add rows, and capture ideas collaboratively. **Clean up table** trims text, removes empty drafts, normalizes ratings, and identifies missing references. **Import cleaned rows** promotes valid entries into the formal FMEA or HARA worksheet while retaining incomplete rows for correction.
 

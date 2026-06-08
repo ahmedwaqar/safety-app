@@ -18,7 +18,7 @@
       </div>
       <nav id="main-nav">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
-        <button class="nav-item" data-view="notepad"><span class="nav-icon">✎</span>Notepad</button>
+        <button class="nav-item" data-view="notepad"><span class="nav-icon">✎</span>Engineering notes</button>
         <button class="nav-item" data-view="workflow"><span class="nav-icon">↳</span>Engineering workflow</button>
         <button class="nav-item" data-view="architecture"><span class="nav-icon">⌘</span>Architecture</button>
         <button class="nav-item" data-view="situations"><span class="nav-icon">◎</span>Operational situations</button>
@@ -101,8 +101,8 @@
 
       <section class="view" id="notepad-view">
         <div class="catalog-intro">
-          <div><p class="eyebrow">Engineering thinking space</p><h2>Notepad</h2><p>Capture raw notes, calculations, figures, links, and stakeholder brainstorming before promoting mature rows into FMEA or HARA.</p></div>
-          <div class="toolbar-actions"><button class="button secondary" id="notepad-save-btn">Save notes</button><button class="button primary" id="notepad-add-table-btn">Add brainstorm row</button></div>
+          <div><p class="eyebrow">Engineering notes</p><h2>Live capture</h2><p>Record design reasoning, calculations, figures, links, and stakeholder input before promoting mature findings into controlled analyses.</p></div>
+          <div class="notepad-actions"><span class="notepad-save-status" id="notepad-save-status" role="status">All changes saved</span><div class="toolbar-actions"><button class="button secondary" id="notepad-save-btn">Save now</button><button class="button primary" id="notepad-add-brainstorm-row-btn">Add brainstorm row</button></div></div>
         </div>
         <section class="card notepad-card">
           <div class="notepad-toolbar" id="notepad-toolbar">
@@ -113,27 +113,36 @@
             <button type="button" data-command="undo">Undo</button>
             <button type="button" data-command="redo">Redo</button>
             <button type="button" id="notepad-heading-btn">Heading</button>
-            <button type="button" id="notepad-math-btn">Math</button>
-            <button type="button" id="notepad-table-btn">Table</button>
-            <button type="button" id="notepad-link-btn">Artifact link</button>
-            <button type="button" id="notepad-figure-btn">Figure</button>
+            <button type="button" id="notepad-math-btn">Insert equation</button>
+            <button type="button" id="notepad-table-btn">Insert table</button>
+            <button type="button" id="notepad-link-btn">Link artifact</button>
+            <button type="button" id="notepad-figure-btn">Insert figure</button>
           </div>
           <div class="notepad-table-toolbar" id="notepad-table-toolbar">
             <span id="notepad-table-status">Select a table cell to edit its structure</span>
-            <button type="button" data-table-action="row-above" disabled>Row above</button>
-            <button type="button" data-table-action="row-below" disabled>Row below</button>
-            <button type="button" data-table-action="column-left" disabled>Column left</button>
-            <button type="button" data-table-action="column-right" disabled>Column right</button>
-            <button type="button" data-table-action="delete-row" disabled>Delete row</button>
-            <button type="button" data-table-action="delete-column" disabled>Delete column</button>
-            <button type="button" data-table-action="delete-table" disabled>Delete table</button>
+            <label class="notepad-table-menu">
+              <select id="notepad-table-action" aria-label="Table structure action" disabled>
+                <option value="">Table options...</option>
+                <optgroup label="Insert">
+                  <option value="row-above">Insert row above</option>
+                  <option value="row-below">Insert row below</option>
+                  <option value="column-left">Insert column to the left</option>
+                  <option value="column-right">Insert column to the right</option>
+                </optgroup>
+                <optgroup label="Remove">
+                  <option value="delete-row">Remove selected row</option>
+                  <option value="delete-column">Remove selected column</option>
+                  <option value="delete-table">Remove entire table</option>
+                </optgroup>
+              </select>
+            </label>
           </div>
           <div class="notepad-editor" id="notepad-editor" contenteditable="true" aria-label="Rich engineering notes"></div>
           <input type="file" id="notepad-figure-input" accept="image/*" hidden />
         </section>
         <section class="card brainstorm-card">
           <div class="card-header">
-            <div><p class="eyebrow">Stakeholder brainstorming</p><h3>Draft analysis table</h3></div>
+            <div><p class="eyebrow">Stakeholder brainstorming</p><h3>Analysis drafting table</h3></div>
             <div class="toolbar-actions">
               <select id="brainstorm-type"><option value="fmea">FMEA draft</option><option value="hara">HARA draft</option></select>
               <button class="button secondary" id="brainstorm-clean-btn" type="button">Clean up table</button>

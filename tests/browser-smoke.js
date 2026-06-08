@@ -94,6 +94,20 @@ try {
     assert(await evaluate(`document.title.endsWith("| Praxis Studio")`), "browser tab title is incorrect");
   });
 
+  await test("application shell has unique identifiers and navigation routes", async () => {
+    const duplicates = await evaluate(`(() => {
+      const repeated = values => [...new Set(values.filter((value, index) => values.indexOf(value) !== index))];
+      return {
+        ids: repeated([...document.querySelectorAll("[id]")].map(element => element.id)),
+        routes: repeated([...document.querySelectorAll("#main-nav [data-view]")].map(element => element.dataset.view))
+      };
+    })()`);
+    assert(!duplicates.ids.length, `duplicate element IDs found: ${duplicates.ids.join(", ")}`);
+    assert(!duplicates.routes.length, `duplicate navigation routes found: ${duplicates.routes.join(", ")}`);
+    assert(await count('[data-view="notepad"]') === 1, "Engineering notes appears more than once in navigation");
+    assert(await count("#notepad-view") === 1, "Engineering notes view appears more than once");
+  });
+
   await test("workspace manager creates, switches, and isolates local projects", async () => {
     const original = await evaluate(`document.querySelector("#workspace-select").value`);
     await evaluate(`createWorkspace("Warehouse AMR project")`);
@@ -302,6 +316,8 @@ try {
     await evaluate(`document.querySelector("#notepad-editor").innerHTML = "<h3>Review notes</h3><p>Raw force calculation</p>"`);
     await click("#notepad-save-btn");
     assert(await evaluate(`state.notepad.html.includes("Raw force calculation")`), "rich notes were not saved");
+    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "All changes saved", "note save status was not updated");
+    assert(await evaluate(`document.querySelector("#brainstorm-status").textContent.includes("Use this table")`), "saving notes overwrote brainstorming guidance");
 
     await evaluate(`window.prompt = message => message.includes("mathematical") ? "F = m * a" : message.includes("artifact") ? "fmea" : "Test figure";`);
     await click("#notepad-math-btn");
@@ -312,16 +328,18 @@ try {
     assert(await count('#notepad-editor [data-notepad-artifact="fmea"]') === 1, "artifact link was not inserted");
 
     await evaluate(`document.querySelector("#notepad-editor table tbody td").dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
-    assert(!await evaluate(`document.querySelector('[data-table-action="row-below"]').disabled`), "table controls were not enabled after selecting a cell");
+    assert(!await evaluate(`document.querySelector("#notepad-table-action").disabled`), "table options were not enabled after selecting a cell");
+    assert(await count("#notepad-table-action optgroup") === 2, "table options were not grouped professionally");
     const tableRows = await count("#notepad-editor table tr");
     const tableColumns = await count("#notepad-editor table thead tr:first-child > *");
-    await click('[data-table-action="row-below"]');
+    await fill("#notepad-table-action", "row-below");
     assert(await count("#notepad-editor table tr") === tableRows + 1, "table row was not added");
-    await click('[data-table-action="column-right"]');
+    assert(await evaluate(`document.querySelector("#notepad-table-action").value`) === "", "table options did not reset after use");
+    await fill("#notepad-table-action", "column-right");
     assert(await count("#notepad-editor table thead tr:first-child > *") === tableColumns + 1, "table column was not added");
-    await click('[data-table-action="delete-column"]');
+    await fill("#notepad-table-action", "delete-column");
     assert(await count("#notepad-editor table thead tr:first-child > *") === tableColumns, "table column was not deleted");
-    await click('[data-table-action="delete-row"]');
+    await fill("#notepad-table-action", "delete-row");
     assert(await count("#notepad-editor table tr") === tableRows, "table row was not deleted");
 
     await evaluate(`(() => {
@@ -329,7 +347,9 @@ try {
       editor.insertAdjacentHTML("beforeend", "<p>Live autosave note</p>");
       editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "Live autosave note" }));
     })()`);
+    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "Saving...", "autosave progress was not shown");
     await retry(async () => { assert(await evaluate(`state.notepad.html.includes("Live autosave note")`), "notepad live edits were not auto-saved"); });
+    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "All changes saved", "autosave completion was not shown");
 
     await evaluate(`(async () => {
       const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")).blob();

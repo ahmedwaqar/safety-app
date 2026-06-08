@@ -592,14 +592,13 @@ function sanitizeRichHtml(html) {
 function saveNotepad() {
   state.notepad.html = sanitizeRichHtml($("#notepad-editor").innerHTML);
   persistState();
-  $("#brainstorm-status").textContent = "Notes saved in this project.";
+  $("#notepad-save-status").textContent = "All changes saved";
 }
 function scheduleNotepadSave() {
   clearTimeout(notepadSaveTimer);
-  $("#notepad-table-status").textContent = activeNotepadCell ? "Table cell selected · saving changes..." : "Saving notes...";
+  $("#notepad-save-status").textContent = "Saving...";
   notepadSaveTimer = setTimeout(() => {
     saveNotepad();
-    updateNotepadTableControls();
   }, 400);
 }
 function insertNotepadHtml(html) {
@@ -624,7 +623,7 @@ function selectNotepadCell(cell: HTMLTableCellElement | null) {
 }
 function updateNotepadTableControls() {
   const available = Boolean(activeNotepadCell?.isConnected);
-  $$<HTMLButtonElement>("#notepad-table-toolbar button").forEach(button => button.disabled = !available);
+  $("#notepad-table-action").disabled = !available;
   $("#notepad-table-status").textContent = available
     ? `Selected row ${(activeNotepadCell!.parentElement as HTMLTableRowElement).rowIndex + 1}, column ${activeNotepadCell!.cellIndex + 1}`
     : "Select a table cell to edit its structure";
@@ -746,7 +745,7 @@ function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = ({ notepad: "Notepad", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#page-title").textContent = ({ notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
 }
 
@@ -1080,9 +1079,10 @@ $("#notepad-editor").addEventListener("click", event => {
   if (artifact) { event.preventDefault(); showView(artifact.dataset.notepadArtifact); }
 });
 $("#notepad-editor").addEventListener("input", scheduleNotepadSave);
-$("#notepad-table-toolbar").addEventListener("click", event => {
-  const action = eventElement(event).closest<HTMLButtonElement>("[data-table-action]")?.dataset.tableAction;
-  if (action) editNotepadTable(action);
+$("#notepad-table-action").addEventListener("change", event => {
+  const menu = event.target as HTMLSelectElement;
+  if (menu.value) editNotepadTable(menu.value);
+  menu.value = "";
 });
 $("#notepad-heading-btn").addEventListener("click", () => { $("#notepad-editor").focus(); document.execCommand("formatBlock", false, "h3"); saveNotepad(); });
 $("#notepad-math-btn").addEventListener("click", () => {
@@ -1114,7 +1114,7 @@ $("#brainstorm-type").addEventListener("change", event => {
   state.notepad.brainstormType = (event.target as HTMLSelectElement).value;
   save();
 });
-$("#notepad-add-table-btn").addEventListener("click", () => {
+$("#notepad-add-brainstorm-row-btn").addEventListener("click", () => {
   state.notepad.brainstormRows.push(blankBrainstormRow());
   save();
 });
