@@ -13,18 +13,21 @@ After completing the course, a learner should be able to:
 5. Estimate a target SIL for an AMR safety function with the app's C/F/P/W risk graph.
 6. Record a component-level failure mode in the FMEA worksheet.
 7. Write a testable safety requirement and identify suitable validation evidence.
+8. Use Engineering notes to capture a review, structure a live table, and promote a cleaned FMEA draft into formal analysis.
+9. Use Engineering workflow checkpoints and evidence to show why an activity is ready to progress.
+10. Create, save, reopen, and work with projects in independent browser tabs.
 
 ## Course Structure
 
 | Module | Topic | Practical output |
 | --- | --- | --- |
-| 1 | AMR safety foundations | Identify system boundary and people at risk |
+| 1 | AMR safety foundations and project setup | Create a project, workflow record, and engineering note |
 | 2 | Hazards and operating zones | Create operational situations and hazards |
 | 3 | Safety functions and SIL | Create an AMR SIL assessment |
-| 4 | FMEA and requirements | Create a failure mode and testable requirement |
+| 4 | FMEA and requirements | Promote a reviewed draft, create a failure mode, and write a testable requirement |
 | 5 | Capstone assessment | Complete a small warehouse AMR safety analysis |
 
-Allow approximately 3 to 4 hours for the complete course.
+Allow approximately 4 to 5 hours for the complete course.
 
 ## Prerequisites
 
@@ -41,6 +44,15 @@ http://localhost:8080
 ```
 
 The course example PlantUML model is available at [`examples/warehouse-amr.puml`](examples/warehouse-amr.puml).
+
+Create a blank project before starting:
+
+1. Select **File > New**.
+2. Name the project `Warehouse AMR Training - <your name>`.
+3. Confirm that the project appears once in the workspace selector. Praxis Studio rejects duplicate project names.
+4. Select **File > Save** after each module to download a portable `.praxis.json` checkpoint.
+
+Use **Open in new tab** when you need to compare two projects or preserve one view while working in another. Each tab has its own active workspace. **Close workspace** removes the project from the current tab only; it does not delete the stored project or close it in other tabs.
 
 ## Important Scope Note
 
@@ -89,6 +101,24 @@ In **Architecture**, paste the content of [`examples/warehouse-amr.puml`](exampl
 2. **Import components**
 
 Expected result: seven architecture components appear in the imported model.
+
+### 1.4 Record The Engineering Intent
+
+Open **Engineering notes** and replace the starter content with:
+
+- A heading named `AMR system definition review`
+- The intended transport task and payload
+- The people who may enter the operating zone
+- Three open assumptions about route geometry, floor condition, traffic, or charging
+- A link to the **Architecture** artifact
+
+Insert a table with the columns `Assumption`, `Owner`, and `Evidence needed`. Select a table cell and use **Table options** to insert one row and one column, then remove the extra column. Confirm that the save indicator returns to **All changes saved**.
+
+Open **Engineering workflow** and update **Define system purpose and boundary**:
+
+- Assign an owner.
+- Record the note and architecture review as inputs or evidence.
+- Do not mark the activity complete while important boundary assumptions remain unresolved.
 
 ### Checkpoint 1
 
@@ -264,6 +294,19 @@ Rewrite these weak requirements so each is testable:
 2. `The AMR shall be safe at intersections.`
 3. `The battery shall not cause problems.`
 
+### 4.3 Promote A Brainstormed FMEA Draft
+
+Open **Engineering notes** and select **FMEA draft** in the Analysis drafting table.
+
+1. Add a brainstorm row for a wheel-speed sensor that reports an incorrect speed.
+2. Use the exact component, hazard, and operational-situation identifiers already present in the project.
+3. Select **Clean up table**.
+4. Correct any row retained for missing or invalid references.
+5. Select **Import cleaned rows**.
+6. Open **FMEA worksheet** and confirm that the promoted row appears only once.
+
+The drafting table is for collaborative capture. The formal worksheet remains the controlled analysis record. Use the HARA draft only when ISO 26262 HARA is applicable to the system context.
+
 ## Module 5: Capstone Assessment
 
 ### Scenario
@@ -280,7 +323,9 @@ Use Praxis Studio to create:
 4. Three AMR SIL assessments for distinct safety functions.
 5. Three FMEA rows linked to architecture components and catalogue entries.
 6. Three testable safety requirements with verification methods.
-7. A JSON export of the completed workspace.
+7. An Engineering notes decision log containing assumptions, one editable table, one equation or calculation, and links to at least two artifacts.
+8. Engineering workflow evidence for the boundary, hazard-analysis, and requirements activities.
+9. A JSON export of the completed workspace.
 
 ### Review Checklist
 
@@ -290,8 +335,10 @@ Before submitting your work, confirm:
 - Every SIL assessment links a hazard and operational situation.
 - C/F/P/W choices have written rationale in your notes.
 - Every FMEA row names a component-level failure mode.
+- Brainstormed rows were cleaned and checked before import, with no duplicate formal records.
 - Every safety requirement can be tested or inspected.
-- The exported JSON file opens and contains `silAssessments`, `fmea`, and `requirements`.
+- Completed workflow activities contain evidence and satisfy their completion criteria.
+- The exported JSON file reopens and contains `notepad`, `workflow`, `silAssessments`, `fmea`, and `requirements`.
 
 ## Knowledge Check
 
@@ -305,6 +352,8 @@ Answer without using the answer key:
 6. What does RPN prioritize in an FMEA?
 7. Why is `The AMR shall be safe` not a good safety requirement?
 8. Does the app's target SIL estimate prove compliance? Explain.
+9. Why should raw workshop notes be reviewed before they are imported into a controlled analysis?
+10. What is the difference between closing a workspace and deleting it?
 
 ## Answer Key
 

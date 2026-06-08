@@ -244,13 +244,18 @@ try {
         requirements: project.data.requirements.length,
         sil: project.data.silAssessments.length,
         fmea: project.data.fmea.length,
-        fmeda: project.data.fmeda.rows.length
+        fmeda: project.data.fmeda.rows.length,
+        noteTables: (project.data.notepad.html.match(/<table/g) || []).length,
+        noteLinks: (project.data.notepad.html.match(/data-notepad-artifact/g) || []).length,
+        brainstormRows: project.data.notepad.brainstormRows.length
       };
     })()`);
     assert(summary.name === "Palletizing Cell Training Project", "training project name is incorrect");
     assert(summary.phases >= 6 && summary.activities >= 12, "training project workflow is incomplete");
     assert(summary.components >= 12 && summary.situations >= 8 && summary.hazards >= 8, "training project system context is incomplete");
     assert(summary.requirements >= 7 && summary.sil >= 3 && summary.fmea >= 6 && summary.fmeda >= 5, "training project analyses are incomplete");
+    assert(summary.noteTables >= 1 && summary.noteLinks >= 2, "training project Engineering notes exercise is incomplete");
+    assert(summary.brainstormRows >= 1, "training project has no analysis draft to clean and import");
   });
 
   await test("portable JSON import activates an existing project without duplicating it", async () => {

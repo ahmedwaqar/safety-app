@@ -85,6 +85,13 @@
           { "id": "fmeda-05", "component": "GATE", "failureMode": "Both interlock channels falsely indicate closed", "localEffect": "Open gate is not detected", "endEffect": "Hazardous motion may remain enabled", "classification": "dangerous_undetected", "diagnostic": "Residual common or coincident failure", "expression": "lambda_gate * frac_gate_d * (1 - dc_gate)" }
         ]
       },
+      "notepad": {
+        "html": "<h3>System boundary workshop</h3><p><strong>Purpose:</strong> Capture unresolved integration assumptions before they become controlled project records.</p><table><thead><tr><th>Assumption</th><th>Owner</th><th>Evidence needed</th></tr></thead><tbody><tr><td>Forklift traffic is controlled during pallet exchange</td><td>Production</td><td>Approved traffic-management plan</td></tr><tr><td>All carton variants remain within the validated gripper envelope</td><td>Mechanical</td><td>Carton specification and retention test</td></tr></tbody></table><p>Review the <a href=\"#architecture\" data-go=\"architecture\" data-notepad-artifact=\"architecture\">Architecture</a> and <a href=\"#workflow\" data-go=\"workflow\" data-notepad-artifact=\"workflow\">Engineering workflow</a> before closing these assumptions.</p>",
+        "brainstormType": "fmea",
+        "brainstormRows": [
+          { "id": "note-fmea-01", "kind": "fmea", "component": "CONV", "failureMode": "Unexpected conveyor start during jam recovery", "effect": "Hands or clothing can be drawn into conveyor pinch points while an operator clears a carton", "hazard": "H-05", "situation": "OS-03", "severity": "8", "occurrence": "3", "detection": "4", "action": "Define a deliberate hold-to-run recovery mode and inhibit robot automatic motion" }
+        ]
+      },
       "workflow": {
         "phases": [
           { "id": "phase-define", "name": "Define", "purpose": "Agree intended use, boundaries, stakeholders, lifecycle, standards, and project responsibilities." },

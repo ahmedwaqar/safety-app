@@ -6,7 +6,7 @@ The exercise uses an automated carton-palletizing cell and the completed Praxis 
 
 [`examples/palletizing-cell.praxis.json`](examples/palletizing-cell.praxis.json)
 
-Allow **10 to 14 hours** for the complete practicum. The goal is not to memorize forms. The goal is to practice the engineering reasoning, cross-functional communication, traceability, and evidence expected on a real robotics project.
+Allow **11 to 15 hours** for the complete practicum. The goal is not to memorize forms. The goal is to practice the engineering reasoning, cross-functional communication, traceability, and evidence expected on a real robotics project.
 
 ## Learning Outcomes
 
@@ -21,6 +21,8 @@ After completing the practicum, a learner should be able to:
 7. Build a commissioning and validation plan.
 8. Assess the impact of production changes on previous safety evidence.
 9. Explain why compliance evidence must emerge from engineering work rather than being assembled only at project end.
+10. Capture multidisciplinary review input in Engineering notes and promote mature findings into controlled analyses.
+11. Manage portable projects and independent browser tabs without mixing project context.
 
 ## Current Standards Context
 
@@ -76,8 +78,59 @@ On a real project, these responsibilities may be distributed differently. The im
 4. Open `training/examples/palletizing-cell.praxis.json`.
 5. Confirm that **Palletizing Cell Training Project** appears in the workspace selector.
 6. Open **Engineering workflow** and review the six phases.
+7. Select **File > Save** to create a portable checkpoint before editing.
 
 Do not edit the original example file. Save your working project under a new name outside the repository when you want to retain your exercise results.
+
+### Workspace Handling Drill
+
+1. Select **Open in new tab** and confirm that the palletizing project opens there.
+2. In the new tab, open **Architecture**. In the original tab, keep **Engineering workflow** open.
+3. Confirm that navigation in one tab does not switch the active view in the other.
+4. Select **Close workspace** in the new tab. Confirm that the original tab remains open and the stored project is still available.
+
+Use **Delete** only when you intend to remove stored project data. Praxis Studio prevents duplicate project names and reactivates an already imported project instead of creating a redundant copy.
+
+## Module 0: Engineering Notes And Review Capture
+
+**Estimated time:** 45 minutes
+
+Engineering notes is the working area for incomplete reasoning, meeting observations, calculations, figures, and structured brainstorming. It is not a substitute for a controlled FMEA, requirement, or validation record.
+
+### Exercise 0.1: Review The Seeded Workshop Note
+
+Open **Engineering notes**.
+
+1. Review the seeded system-boundary note and assumptions table.
+2. Add the heading `Kickoff review actions`.
+3. Record one action for mechanical, controls, production, and maintenance.
+4. Insert a link to **Engineering workflow**.
+5. Insert an equation or calculation relevant to the project, such as `moment = carton_mass * horizontal_offset`.
+6. Confirm that the save status returns to **All changes saved**.
+
+### Exercise 0.2: Edit A Live Table
+
+Select a cell in the assumptions table. Use **Table options** to:
+
+1. Insert a row below.
+2. Insert a column to the right.
+3. Name the new column `Due date`.
+4. Remove the added column after discussing whether due dates belong in the note or the controlled action system.
+
+The menu remains disabled until a table cell is selected. The **Insert** and **Remove** groups reduce accidental structural changes during a live review.
+
+### Exercise 0.3: Capture Versus Control
+
+For each item below, decide where it belongs:
+
+| Information | Working location | Controlled destination |
+| --- | --- | --- |
+| Unconfirmed operator observation | Engineering notes | Operational situation or hazard after review |
+| Candidate conveyor failure | FMEA draft | FMEA worksheet after cleanup |
+| Proposed test acceptance limit | Engineering notes | Safety requirement or validation plan after approval |
+| Review completion evidence | Engineering workflow | Workflow activity evidence |
+
+Do not import a draft merely because the fields are complete. Confirm technical meaning, identifiers, ownership, and traceability first.
 
 ## Module 1: Project Definition And Boundary
 
@@ -169,6 +222,13 @@ Open **Hazard catalogue**. For each hazard, ask:
 5. Which assumptions need site evidence?
 
 Add a hazard associated with sharp damaged cartons, broken pallets, or housekeeping. This demonstrates that robot projects include application and environment hazards, not only robot motion.
+
+Use **Engineering notes** during the discussion:
+
+1. Insert a table with `Observation`, `Potential harm`, `Situation`, `Decision`, and `Owner`.
+2. Add at least four raw stakeholder observations.
+3. Link the note to **Hazard catalogue** and **Operational situations**.
+4. Keep uncertain statements in the note until the team agrees they are suitable catalogue entries.
 
 ### Exercise 2.3: Build A Hazardous-Event Narrative
 
@@ -311,16 +371,25 @@ For each seeded row, check:
 - Owner
 - Verification reference
 
-### Exercise 5.2: Add Conveyor Failure Modes
+### Exercise 5.2: Promote The Seeded Workshop Draft
 
-Add two FMEA rows:
+Open **Engineering notes** and review the seeded FMEA draft for unexpected conveyor start during jam recovery.
 
-1. Conveyor starts during jam recovery.
-2. Carton position sensor remains occupied or clear.
+1. Confirm that `CONV`, `H-05`, and `OS-03` are valid identifiers.
+2. Select **Clean up table**.
+3. Resolve any reported validation issue.
+4. Select **Import cleaned rows**.
+5. Open **FMEA worksheet** and confirm that the row appears once and the draft no longer remains in Engineering notes.
 
-At least one action must change the design rather than only adding a warning.
+Discuss why cleanup can normalize ratings and trim text but cannot establish that the engineering conclusion is correct.
 
-### Exercise 5.3: Review FMEDA Assumptions
+### Exercise 5.3: Add A Conveyor Sensor Failure
+
+Add an FMEA row for a carton position sensor that remains occupied or clear.
+
+The recommended action must change the design rather than only adding a warning.
+
+### Exercise 5.4: Review FMEDA Assumptions
 
 Open **FMEDA worksheet**.
 
@@ -332,7 +401,7 @@ Open **FMEDA worksheet**.
 
 The seeded values are educational assumptions, not approved component data.
 
-### Exercise 5.4: Quantitative Sensitivity
+### Exercise 5.5: Quantitative Sensitivity
 
 Open **Quantitative safety**.
 
@@ -498,7 +567,9 @@ Prepare a project handover containing:
 8. Validation outlines for all requirements.
 9. Completed workflow evidence for finished activities.
 10. A change-impact decision for the heavy-carton recipe.
-11. Exported `.praxis.json` project.
+11. An Engineering notes decision log with assumptions, stakeholder actions, calculations, and artifact links.
+12. At least one FMEA draft cleaned and promoted without creating a duplicate record.
+13. Exported `.praxis.json` project that reopens successfully.
 
 ## Peer Review Questions
 
@@ -514,6 +585,8 @@ The reviewer should ask:
 8. Are all completed workflow gates supported by evidence?
 9. Which supplier claims have been independently checked?
 10. What would prevent release today?
+11. Which statements remain raw notes, and which have been promoted into controlled records?
+12. Can each completed workflow status be defended with evidence rather than activity alone?
 
 ## Completion Standard
 
@@ -530,6 +603,7 @@ The learner has completed the practicum when they can:
 For a coached course:
 
 - Run design reviews after Modules 2, 4, 6, and 7.
+- Use Module 0 to demonstrate the difference between collaborative capture and approved engineering records.
 - Assign different learners the systems, mechanical, controls, validation, and production roles.
 - Introduce one surprise fault or change request during commissioning.
 - Reward clear assumptions and justified no-release decisions.

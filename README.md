@@ -46,7 +46,7 @@ The shorter [`AMR Robot Safety Training`](training/README.md) remains available 
 
 - Five beginner modules
 - A runnable warehouse-AMR PlantUML example
-- A detailed palletizing-cell project covering workflow, architecture, hazards, safety functions, FMEA, FMEDA, requirements, validation, and change impact
+- A detailed palletizing-cell project covering Engineering notes, workflow, architecture, hazards, safety functions, FMEA, FMEDA, requirements, validation, and change impact
 - Working SIL, FMEA, and safety-requirement examples
 - Student tasks and a capstone assessment
 - A separate instructor answer key

@@ -8,6 +8,18 @@ Use this guide after the learner completes the exercises. Several tasks allow mo
 2. A blind intersection affects whether people or vehicles can detect and avoid a collision. The geometry can change exposure and avoidance assumptions.
 3. `Safety scanner failure` is a failure mode. A resulting hazard could be collision or crushing caused by continued AMR movement.
 
+## Engineering Notes And Workflow
+
+A good Module 1 submission:
+
+- Separates confirmed facts from assumptions and open questions.
+- Gives each assumption an owner and expected evidence.
+- Links the note to Architecture rather than duplicating the complete architecture record.
+- Leaves the boundary workflow activity incomplete when material assumptions remain open.
+- Uses workflow evidence to reference review outputs, not merely to state that a meeting occurred.
+
+The table-editing exercise should leave a usable assumptions table after the temporary column is removed. The save indicator should return to `All changes saved`.
+
 ## Student Task 1: Example Hazards
 
 Valid additions include:
@@ -57,6 +69,19 @@ The learner may choose different values if the assumptions are documented and te
 
    `The charging controller shall inhibit traction motion while the AMR is connected to the charging interface.`
 
+## FMEA Draft Promotion
+
+A defensible wheel-speed sensor draft identifies:
+
+- The architecture component by its exact identifier.
+- A failure mode such as an incorrect, frozen, or implausible speed signal.
+- The vehicle-level effect and linked collision hazard.
+- The operational situation in which the effect matters.
+- Ratings with rationale.
+- A design or diagnostic action that can be verified.
+
+After **Clean up table**, invalid references remain in Engineering notes for correction. After **Import cleaned rows**, valid rows move to the FMEA worksheet and disappear from the draft table. Importing the same finding twice is not acceptable; the learner should verify the formal worksheet before creating another draft.
+
 ## Capstone Review Guidance
 
 A good submission:
@@ -67,6 +92,8 @@ A good submission:
 - Assigns SIL estimates to specific safety functions.
 - Uses measurable safety requirements.
 - Includes verification evidence such as stopping-distance tests, protective-field validation, speed-zone tests, brake tests, or charging-interlock tests.
+- Uses Engineering notes for unresolved reasoning and Engineering workflow for reviewed checkpoints and evidence.
+- Reopens the exported project and confirms that notes, workflow, and analyses were preserved.
 
 ## Knowledge Check
 
@@ -78,6 +105,8 @@ A good submission:
 6. RPN helps prioritize failure modes using severity, occurrence, and detection ratings.
 7. It cannot be verified objectively. A requirement should define observable, testable behaviour.
 8. No. The app provides a documented engineering estimate. Applicable standards, accepted methods, evidence, and competent review are still required.
+9. Raw notes may contain duplicates, invalid identifiers, incomplete assumptions, or statements that stakeholders have not accepted. Cleanup improves structure, but technical review is still required before promotion.
+10. Closing removes the project from the current tab's active workspace list while preserving stored data and other tabs. Deleting removes the stored project and should be deliberate.
 
 ## FMEDA Follow-Up
 
