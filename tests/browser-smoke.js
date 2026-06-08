@@ -258,6 +258,30 @@ try {
     assert(summary.brainstormRows >= 1, "training project has no analysis draft to clean and import");
   });
 
+  await test("EN 50126 railway RAMS training project is complete and importable", async () => {
+    const summary = await evaluate(`(async () => {
+      const project = parseProject(await (await fetch("/training/examples/metro-psd-rams.praxis.json")).text());
+      return {
+        name: project.name,
+        phases: project.data.workflow.phases.length,
+        activities: project.data.workflow.activities.length,
+        components: project.data.components.length,
+        situations: project.data.situations.length,
+        hazards: project.data.hazards.length,
+        requirements: project.data.requirements.length,
+        fmea: project.data.fmea.length,
+        noteTables: (project.data.notepad.html.match(/<table/g) || []).length,
+        noteLinks: (project.data.notepad.html.match(/data-notepad-artifact/g) || []).length,
+        brainstormRows: project.data.notepad.brainstormRows.length
+      };
+    })()`);
+    assert(summary.name === "Metro PSD EN 50126 Training", "railway training project name is incorrect");
+    assert(summary.phases === 12 && summary.activities === 12, "railway RAMS lifecycle is incomplete");
+    assert(summary.components >= 12 && summary.situations >= 8, "railway system definition is incomplete");
+    assert(summary.hazards >= 8 && summary.requirements >= 8 && summary.fmea >= 5, "railway RAMS analyses are incomplete");
+    assert(summary.noteTables >= 1 && summary.noteLinks >= 3 && summary.brainstormRows >= 1, "railway training exercises are incomplete");
+  });
+
   await test("portable JSON import activates an existing project without duplicating it", async () => {
     const before = await count("#workspace-select option");
     await evaluate(`(() => {

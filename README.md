@@ -51,6 +51,8 @@ The shorter [`AMR Robot Safety Training`](training/README.md) remains available 
 - Student tasks and a capstone assessment
 - A separate instructor answer key
 
+For railway systems engineering, use the [`EN 50126 Railway RAMS Practicum`](training/en-50126-rams-practicum.md) with its completed [`metro-psd-rams.praxis.json`](training/examples/metro-psd-rams.praxis.json) project and [`instructor answer key`](training/en-50126-answer-key.md). It covers the 12-phase RAMS lifecycle, system definition, RAM requirements, hazard control, apportionment, assurance, acceptance, operation, modification, and decommissioning.
+
 ## Start The App
 
 Run:
