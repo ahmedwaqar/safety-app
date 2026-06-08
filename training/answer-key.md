@@ -2,6 +2,8 @@
 
 Use this guide after the learner completes the exercises. Several tasks allow more than one valid answer. Evaluate the reasoning and traceability, not only the selected classification.
 
+For experience-based interview rehearsal, continue with the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md), its [`interview guide`](lifecycle-interview-answer-key.md), and the [`story workbook`](interview-story-workbook.md).
+
 ## Checkpoint 1
 
 1. Examples: operators, maintenance technicians, visitors, forklift drivers, loading-station staff.

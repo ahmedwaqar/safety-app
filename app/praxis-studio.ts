@@ -74,6 +74,33 @@ HMI --> CTRL : task selection
     { id: "SR-03", text: "The end effector shall retain the workpiece following loss of primary power.", hazard: "H-02", component: "TOOL", verification: "Load retention test VT-03", status: "Planned" },
     { id: "SR-04", text: "The emergency-stop function shall achieve a stop category appropriate to the cell risk assessment.", hazard: "H-03", component: "ESTOP", verification: "Stop-time measurement VT-04", status: "Draft" }
   ],
+  assurance: {
+    tests: [
+      { id: "VT-01", title: "Protective-field stop validation", type: "Validation", requirement: "SR-01", objective: "Demonstrate that entry into the protective field initiates the required stop.", method: "Enter each configured field at representative approach speeds and measure the response.", expected: "Protective stop is initiated within the accepted stopping-distance envelope.", actual: "All challenged field positions initiated the protective stop.", configuration: "Cobot cell baseline B1", owner: "Validation engineer", independence: "Independent", status: "Passed", evidence: "EV-01", deviation: "" },
+      { id: "VT-03", title: "Loss-of-power retention test", type: "Validation", requirement: "SR-03", objective: "Confirm workpiece retention after primary power loss.", method: "Interrupt primary power at representative payload and pose.", expected: "The workpiece remains retained without creating a secondary hazard.", actual: "", configuration: "Prototype configuration", owner: "Mechanical test engineer", independence: "Peer reviewed", status: "Ready", evidence: "", deviation: "" }
+    ],
+    evidence: [
+      { id: "EV-01", title: "Protective stop validation report", kind: "Test report", reference: "reports/VT-01.pdf", version: "1.0", owner: "Validation engineer", status: "Approved", description: "Signed results and stopping-time measurements for VT-01." }
+    ],
+    deviations: [],
+    changes: [],
+    baselines: [
+      { id: "BL-01", title: "Cobot cell baseline B1", version: "1.0", scope: "Architecture, hazards, requirements, and validation configuration", status: "Approved", approver: "Chief engineer", date: "2026-01-15", inventory: "Initial example baseline" }
+    ],
+    reviews: [
+      { id: "RV-01", title: "Concept safety review", type: "Safety review", scope: "Hazards, architecture, and safety requirements", owner: "Safety lead", participants: "Systems, controls, mechanical, validation", decision: "Approved with actions", status: "Complete", evidence: "EV-01" }
+    ],
+    interfaces: [
+      { id: "IF-01", title: "Scanner to safety PLC", source: "SCAN", target: "PLC", description: "Dual-channel protective-field state and diagnostic status.", owner: "Controls engineer", failureResponse: "Initiate safe stop on invalid or inconsistent interface state.", status: "Verified" }
+    ],
+    ram: [
+      { id: "RAM-01", title: "Protective-stop availability", measure: "Operational availability", target: "≥ 99.9% during scheduled production", method: "Operational event and downtime monitoring", owner: "RAM engineer", status: "Monitoring" }
+    ],
+    claims: [
+      { id: "CL-01", title: "Personnel are protected from unexpected robot motion", argument: "Hazards are controlled by protective-field detection, safety logic, and validated stopping performance.", evidence: "EV-01", owner: "Safety lead", status: "Supported" }
+    ],
+    audit: []
+  },
   safetyGoals: [
     { id: "SG-01", text: "Prevent unintended robot motion when a person is present in the collaborative workspace.", asil: "ASIL D", safeState: "Controlled stop", ftti: "100 ms" },
     { id: "SG-02", text: "Prevent release of the workpiece during robot motion.", asil: "ASIL B", safeState: "Retain workpiece and stop motion", ftti: "200 ms" }
@@ -130,7 +157,8 @@ function blankWorkspace() {
   return {
     plantuml: "@startuml\n@enduml", components: [], hazards: [], situations: [], requirements: [], safetyGoals: [], hara: [], silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
-    fmeda: { constants: [], rows: [] }, notepad: { html: "", brainstormType: "fmea", brainstormRows: [] }, workflow: engineeringWorkflowTemplate(), customColumns: [], fmea: []
+    fmeda: { constants: [], rows: [] }, notepad: { html: "", brainstormType: "fmea", brainstormRows: [] }, workflow: engineeringWorkflowTemplate(), customColumns: [], fmea: [],
+    assurance: { tests: [], evidence: [], deviations: [], changes: [], baselines: [], reviews: [], interfaces: [], ram: [], claims: [], audit: [] }
   };
 }
 
@@ -163,6 +191,11 @@ const asilClass = asil => `asil-${asil.replace("ASIL ", "").toLowerCase()}`;
 // Validation and migration boundary for stored and imported project data.
 function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   for (const [key, value] of Object.entries(defaults)) workspace[key] ??= structuredClone(value);
+  for (const [key, value] of Object.entries(defaults.assurance)) workspace.assurance[key] ??= structuredClone(value);
+  workspace.hazards.forEach(hazard => {
+    hazard.status ??= "Open"; hazard.owner ??= ""; hazard.control ??= ""; hazard.residualRisk ??= ""; hazard.closureEvidence ??= "";
+  });
+  workspace.workflow.activities.forEach(activity => activity.predecessor ??= "");
   workspace.notepad.brainstormRows.forEach(row => row.id ??= crypto.randomUUID());
   return workspace;
 }
@@ -196,6 +229,7 @@ function validateWorkspaceData(data) {
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows))) throw new Error('Workspace FMEDA fields must be arrays.');
   if (data.notepad !== undefined && (!data.notepad || typeof data.notepad !== "object" || !Array.isArray(data.notepad.brainstormRows))) throw new Error("Workspace notepad brainstorming rows must be an array.");
   if (data.workflow !== undefined && (!data.workflow || typeof data.workflow !== "object" || !Array.isArray(data.workflow.phases) || !Array.isArray(data.workflow.activities))) throw new Error("Workspace workflow phases and activities must be arrays.");
+  if (data.assurance !== undefined && (!data.assurance || typeof data.assurance !== "object" || ["tests", "evidence", "deviations", "changes", "baselines", "reviews", "interfaces", "ram", "claims", "audit"].some(key => !Array.isArray(data.assurance[key])))) throw new Error("Workspace lifecycle assurance fields must be arrays.");
   validateIdentifierCollection(data.components, "id", "Component identifier");
   validateIdentifierCollection(data.hazards, "id", "Hazard identifier");
   validateIdentifierCollection(data.situations, "id", "Situation identifier");
@@ -203,6 +237,9 @@ function validateWorkspaceData(data) {
   validateIdentifierCollection(data.safetyGoals, "id", "Safety-goal identifier");
   validateIdentifierCollection(data.hara, "eventId", "Hazardous-event identifier");
   validateIdentifierCollection(data.silAssessments, "assessmentId", "SIL-assessment identifier");
+  if (data.assurance) {
+    for (const [key, label] of [["tests", "Test"], ["evidence", "Evidence"], ["deviations", "Deviation"], ["changes", "Change"], ["baselines", "Baseline"], ["reviews", "Review"], ["interfaces", "Interface"], ["ram", "RAM objective"], ["claims", "Claim"]]) validateIdentifierCollection(data.assurance[key], "id", `${label} identifier`);
+  }
   data.fmea?.forEach(row => { validateNumber(row.severity, "FMEA severity", { min: 1, max: 10, integer: true }); validateNumber(row.occurrence, "FMEA occurrence", { min: 1, max: 10, integer: true }); validateNumber(row.detection, "FMEA detection", { min: 1, max: 10, integer: true }); });
   data.hara?.forEach(row => { requireEnum(row.severity, "HARA severity", ["S0", "S1", "S2", "S3"]); requireEnum(row.exposure, "HARA exposure", ["E0", "E1", "E2", "E3", "E4"]); requireEnum(row.controllability, "HARA controllability", ["C0", "C1", "C2", "C3"]); });
   data.silAssessments?.forEach(row => { requireEnum(row.consequence, "SIL consequence", ["C1", "C2", "C3", "C4"]); requireEnum(row.frequency, "SIL frequency", ["F1", "F2"]); requireEnum(row.avoidance, "SIL avoidance", ["P1", "P2"]); requireEnum(row.demand, "SIL demand", ["W1", "W2", "W3"]); });
@@ -740,12 +777,136 @@ function importBrainstormRows() {
   $("#brainstorm-status").textContent = `${valid.length} cleaned ${kind.toUpperCase()} row${valid.length === 1 ? "" : "s"} imported. ${rows.length - valid.length} draft row${rows.length - valid.length === 1 ? "" : "s"} retained for correction.`;
 }
 
+// Lifecycle assurance feature: controlled records, derived traceability, and
+// readiness checks spanning requirements, hazards, tests, evidence, and change.
+const assuranceSchemas = {
+  tests: [
+    ["id", "Identifier", "text", "e.g. VT-05"], ["title", "Title", "text", "Test or analysis title"], ["type", "Type", "select", ["Verification", "Validation"]],
+    ["requirement", "Requirement", "requirements"], ["objective", "Objective", "textarea"], ["method", "Method / procedure", "textarea"],
+    ["expected", "Expected result / acceptance criteria", "textarea"], ["actual", "Actual result", "textarea"], ["configuration", "Configuration / baseline", "text"],
+    ["owner", "Owner", "text"], ["independence", "Independence", "select", ["None", "Peer reviewed", "Independent"]],
+    ["status", "Status", "select", ["Draft", "Ready", "Passed", "Failed", "Blocked"]], ["evidence", "Evidence", "evidence"], ["deviation", "Deviation", "deviations"]
+  ],
+  evidence: [
+    ["id", "Identifier", "text", "e.g. EV-05"], ["title", "Title", "text"], ["kind", "Evidence type", "select", ["Test report", "Review record", "Analysis", "Certificate", "Model", "Calculation", "Operational record"]],
+    ["reference", "Reference or URI", "text"], ["version", "Version", "text"], ["owner", "Owner", "text"],
+    ["status", "Status", "select", ["Draft", "In review", "Approved", "Obsolete"]], ["description", "Description", "textarea"]
+  ],
+  deviations: [
+    ["id", "Identifier", "text", "e.g. DEV-01"], ["title", "Issue or deviation", "text"], ["source", "Source record", "text", "Test, review, audit, or field event"],
+    ["severity", "Severity", "select", ["Low", "Medium", "High", "Critical"]], ["owner", "Owner", "text"], ["disposition", "Disposition / corrective action", "textarea"],
+    ["dueDate", "Due date", "date"], ["status", "Status", "select", ["Open", "Investigating", "Corrective action", "Closed"]], ["closureEvidence", "Closure evidence", "evidence"]
+  ],
+  changes: [
+    ["id", "Identifier", "text", "e.g. CR-01"], ["title", "Change", "text"], ["reason", "Reason", "textarea"], ["affectedArtifacts", "Affected artifacts", "text", "IDs separated by commas"],
+    ["safetyImpact", "Safety / RAM impact", "textarea"], ["verificationImpact", "Required regression or V&V", "textarea"], ["owner", "Owner", "text"],
+    ["decision", "Decision", "select", ["Proposed", "Approved", "Rejected", "Implemented"]], ["baseline", "Target baseline", "baselines"], ["evidence", "Approval evidence", "evidence"]
+  ],
+  baselines: [
+    ["id", "Identifier", "text", "e.g. BL-02"], ["title", "Baseline name", "text"], ["version", "Version", "text"], ["scope", "Controlled scope", "textarea"],
+    ["status", "Status", "select", ["Draft", "In review", "Approved", "Superseded"]], ["approver", "Approver", "text"], ["date", "Baseline date", "date"], ["inventory", "Configuration inventory", "textarea"]
+  ],
+  reviews: [
+    ["id", "Identifier", "text", "e.g. RV-02"], ["title", "Review", "text"], ["type", "Review type", "select", ["Design review", "Safety review", "V&V review", "RAM review", "Release review", "Audit"]],
+    ["scope", "Scope and entry criteria", "textarea"], ["owner", "Chair / owner", "text"], ["participants", "Participants and independence", "text"],
+    ["decision", "Decision and actions", "textarea"], ["status", "Status", "select", ["Planned", "In progress", "Complete", "Blocked"]], ["evidence", "Review evidence", "evidence"]
+  ],
+  interfaces: [
+    ["id", "Identifier", "text", "e.g. IF-02"], ["title", "Interface", "text"], ["source", "Source component", "components"], ["target", "Target component", "components"],
+    ["description", "Data, energy, or mechanical contract", "textarea"], ["owner", "Interface owner", "text"], ["failureResponse", "Failure detection and response", "textarea"],
+    ["status", "Status", "select", ["Draft", "Agreed", "Verified"]]
+  ],
+  ram: [
+    ["id", "Identifier", "text", "e.g. RAM-02"], ["title", "RAM objective", "text"], ["measure", "Measure", "select", ["Reliability", "Availability", "Maintainability", "Operational availability", "Failure rate", "Restoration time"]],
+    ["target", "Quantified target", "text"], ["method", "Demonstration / monitoring method", "textarea"], ["owner", "Owner", "text"],
+    ["status", "Status", "select", ["Draft", "Allocated", "Demonstrated", "Monitoring", "Not met"]]
+  ],
+  claims: [
+    ["id", "Identifier", "text", "e.g. CL-02"], ["title", "Claim", "text"], ["parentClaim", "Parent claim", "claims"], ["argument", "Argument / rationale", "textarea"], ["evidence", "Supporting evidence", "evidence"],
+    ["owner", "Claim owner", "text"], ["status", "Status", "select", ["Draft", "Needs evidence", "Supported", "Rejected"]]
+  ],
+  hazard: [
+    ["id", "Hazard", "hazards"], ["owner", "Owner", "text"], ["control", "Implemented control", "textarea"], ["residualRisk", "Residual risk and acceptance rationale", "textarea"],
+    ["closureEvidence", "Closure evidence", "evidence"], ["status", "Status", "select", ["Open", "Controlled", "Accepted", "Closed"]]
+  ]
+};
+const assuranceLabels = { tests: "V&V", evidence: "Evidence", deviations: "Deviations", changes: "Changes", baselines: "Baselines", reviews: "Reviews", interfaces: "Interfaces", ram: "RAM objectives", claims: "Safety-case claims" };
+function assuranceItems(kind) { return kind === "hazard" ? state.hazards : state.assurance[kind]; }
+function assuranceOptions(kind, selected = "") {
+  const source = kind === "requirements" ? state.requirements : kind === "components" ? state.components : kind === "hazards" ? state.hazards : state.assurance[kind];
+  return `<option value="">Not linked</option>${source.map(item => `<option value="${esc(item.id)}" ${item.id === selected ? "selected" : ""}>${esc(item.id)} · ${esc(item.title || item.text || item.name || "")}</option>`).join("")}`;
+}
+function assuranceStatusClass(status = "") {
+  if (["Passed", "Approved", "Complete", "Closed", "Verified", "Demonstrated", "Monitoring", "Supported", "Accepted"].includes(status)) return "verified";
+  if (["Ready", "In review", "In progress", "Investigating", "Corrective action", "Allocated", "Agreed", "Controlled", "Proposed"].includes(status)) return "planned";
+  return "draft";
+}
+function auditAssurance(action, kind, id, detail = "") {
+  state.assurance.audit.unshift({ id: crypto.randomUUID(), timestamp: new Date().toISOString(), action, kind, record: id, detail });
+  state.assurance.audit = state.assurance.audit.slice(0, 100);
+}
+function approvedEvidence(id) { return state.assurance.evidence.some(item => item.id === id && item.status === "Approved"); }
+function testCoverage(requirementId) {
+  const tests = state.assurance.tests.filter(test => test.requirement === requirementId);
+  const passed = tests.filter(test => test.status === "Passed" && approvedEvidence(test.evidence));
+  return { tests, passed, covered: passed.length > 0 };
+}
+function hazardClosureReady(hazard) {
+  return Boolean(String(hazard.control || "").trim() && String(hazard.residualRisk || "").trim() && approvedEvidence(hazard.closureEvidence));
+}
+function lifecycleReadiness() {
+  const requirementsCovered = state.requirements.filter(requirement => testCoverage(requirement.id).covered).length;
+  const hazardsClosed = state.hazards.filter(hazard => hazard.status === "Closed" && hazardClosureReady(hazard)).length;
+  const openDeviations = state.assurance.deviations.filter(item => item.status !== "Closed").length;
+  const supportedClaims = state.assurance.claims.filter(item => item.status === "Supported" && approvedEvidence(item.evidence)).length;
+  return { requirementsCovered, hazardsClosed, openDeviations, supportedClaims };
+}
+function renderAssurance() {
+  const readiness = lifecycleReadiness();
+  const totalRecords = Object.keys(assuranceLabels).reduce((total, key) => total + state.assurance[key].length, 0);
+  $("#assurance-summary").innerHTML = [
+    [readiness.requirementsCovered, `Covered requirements / ${state.requirements.length}`],
+    [readiness.hazardsClosed, `Closed hazards / ${state.hazards.length}`],
+    [readiness.openDeviations, "Open deviations"],
+    [state.assurance.baselines.filter(item => item.status === "Approved").length, "Approved baselines"],
+    [readiness.supportedClaims, `Supported claims / ${state.assurance.claims.length}`]
+  ].map(([value, label]) => `<div class="workflow-stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+  const releaseReady = state.requirements.length > 0 && readiness.requirementsCovered === state.requirements.length && readiness.openDeviations === 0 && state.hazards.every(hazard => hazard.status === "Closed" && hazardClosureReady(hazard)) && state.assurance.claims.every(claim => claim.status === "Supported" && approvedEvidence(claim.evidence));
+  $("#assurance-health").innerHTML = `<div class="card-header"><div><p class="eyebrow">Release readiness</p><h3>${releaseReady ? "Lifecycle evidence supports release review" : "Lifecycle closure is incomplete"}</h3></div><span class="status ${releaseReady ? "verified" : "planned"}">${releaseReady ? "Ready" : "Action required"}</span></div><p>${totalRecords} controlled lifecycle records. Release readiness requires every requirement to have a passed V&amp;V record with approved evidence, every hazard to have justified closure, no open deviations, and every safety-case claim to be supported.</p>`;
+  $("#traceability-body").innerHTML = state.requirements.map(requirement => {
+    const coverage = testCoverage(requirement.id);
+    return `<tr><td><strong>${esc(requirement.id)}</strong><span class="subtext">${esc(requirement.text)}</span></td><td>${esc(requirement.hazard || "—")}</td><td>${esc(requirement.component || "—")}</td><td>${coverage.tests.map(test => `${esc(test.id)} · ${esc(test.status)}`).join("<br>") || "No V&V record"}</td><td>${coverage.tests.map(test => esc(test.evidence || "—")).join("<br>") || "—"}</td><td><span class="status ${coverage.covered ? "verified" : "draft"}">${coverage.covered ? "Covered" : "Gap"}</span></td></tr>`;
+  }).join("");
+  $("#hazard-log-body").innerHTML = state.hazards.map(hazard => `<tr><td><strong>${esc(hazard.id)} · ${esc(hazard.name)}</strong></td><td>${esc(hazard.owner || "Unassigned")}</td><td>${esc(hazard.control || "Not recorded")}</td><td>${esc(hazard.residualRisk || "Not assessed")}</td><td><span class="status ${hazard.status === "Closed" && hazardClosureReady(hazard) ? "verified" : assuranceStatusClass(hazard.status)}">${esc(hazard.status)}${hazard.status === "Closed" && !hazardClosureReady(hazard) ? " · incomplete" : ""}</span></td><td><button class="mini-btn" title="Update hazard lifecycle" data-edit-assurance="hazard:${esc(hazard.id)}">✎</button></td></tr>`).join("");
+  $("#assurance-board").innerHTML = Object.entries(assuranceLabels).map(([kind, label]) => `<section class="assurance-record-group"><div class="assurance-group-header"><div><p class="eyebrow">${esc(label)}</p><h3>${state.assurance[kind].length} record${state.assurance[kind].length === 1 ? "" : "s"}</h3></div><button class="button secondary small" data-add-assurance="${kind}">Add</button></div><div class="assurance-record-list">${state.assurance[kind].length ? state.assurance[kind].map(record => `<article class="assurance-record"><div><strong>${esc(record.id)} · ${esc(record.title)}</strong><p>${esc(record.objective || record.description || record.reason || record.scope || record.argument || record.target || record.failureResponse || record.decision || "")}</p><span>${esc(record.owner || record.approver || "")}${record.requirement ? ` · ${esc(record.requirement)}` : ""}${record.evidence ? ` · ${esc(record.evidence)}` : ""}</span></div><div class="assurance-record-actions"><span class="status ${assuranceStatusClass(record.status || record.decision)}">${esc(record.status || record.decision || "Recorded")}</span><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-assurance="${kind}:${esc(record.id)}">✎</button><button class="mini-btn" title="Delete" data-delete-assurance="${kind}:${esc(record.id)}">×</button></div></div></article>`).join("") : '<p class="workflow-empty">No controlled records yet.</p>'}</div></section>`).join("");
+  $("#assurance-audit").innerHTML = state.assurance.audit.length ? state.assurance.audit.slice(0, 20).map(entry => `<div class="audit-entry"><time>${esc(new Date(entry.timestamp).toLocaleString())}</time><strong>${esc(entry.action)} ${esc(assuranceLabels[entry.kind] || entry.kind)}</strong><span>${esc(entry.record)}${entry.detail ? ` · ${esc(entry.detail)}` : ""}</span></div>`).join("") : '<p class="workflow-empty">Lifecycle record changes will appear here.</p>';
+}
+function assuranceFieldHtml(field, record) {
+  const [name, label, kind, values] = field;
+  const value = record[name] || "";
+  let control;
+  if (kind === "textarea") control = `<textarea name="${name}">${esc(value)}</textarea>`;
+  else if (kind === "select") control = `<select name="${name}">${values.map(option => `<option ${option === value ? "selected" : ""}>${esc(option)}</option>`).join("")}</select>`;
+  else if (["requirements", "components", "hazards", "evidence", "deviations", "baselines", "claims"].includes(kind)) control = `<select name="${name}">${assuranceOptions(kind, value)}</select>`;
+  else control = `<input type="${kind === "date" ? "date" : "text"}" name="${name}" value="${esc(value)}" placeholder="${esc(values || "")}" />`;
+  return `<label class="${kind === "textarea" ? "wide" : ""}"><span>${esc(label)}</span>${control}</label>`;
+}
+function fillAssuranceForm(kind = "tests", record: FeatureRecord = {}) {
+  const form = $("#assurance-form"); form.reset();
+  form.elements.recordType.value = kind; form.elements.recordId.value = record.id || "";
+  $("#assurance-record-type").disabled = kind === "hazard" || Boolean(record.id);
+  $("#assurance-dialog-title").textContent = record.id ? `Edit ${kind === "hazard" ? "hazard lifecycle" : assuranceLabels[kind]}` : `Add ${assuranceLabels[kind]}`;
+  $("#assurance-fields").innerHTML = assuranceSchemas[kind].map(field => assuranceFieldHtml(field, record)).join("");
+  if (record.id) $("#assurance-fields").querySelector("[name=id]")?.setAttribute("readonly", "");
+  $("#assurance-dialog").showModal();
+}
+
 // Application shell: navigation is independent of individual feature renderers.
 function showView(name) {
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = ({ notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", architecture: "Architecture" })[name] || "Overview";
+  $("#page-title").textContent = ({ notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" })[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
 }
 
@@ -891,22 +1052,29 @@ function renderHara() {
 
 // Safety requirements feature.
 function renderRequirements() {
-  $("#requirement-list").innerHTML = state.requirements.map(req => `<article class="requirement">
+  $("#requirement-list").innerHTML = state.requirements.map(req => {
+    const coverage = testCoverage(req.id);
+    const status = coverage.covered ? "Verified" : req.status === "Verified" ? "Planned" : req.status;
+    return `<article class="requirement">
     <span class="requirement-id">${esc(req.id)}</span>
     <div><p>${esc(req.text)}</p><span class="requirement-meta">Source: ${esc(req.hazard)} · ${esc(named("hazards", req.hazard))} &nbsp; / &nbsp; Allocation: ${esc(named("components", req.component))}</span></div>
-    <div class="req-side"><span class="status ${req.status.toLowerCase()}">${esc(req.status)}</span><span class="requirement-meta">${esc(req.verification || "Verification TBD")}</span></div>
-  </article>`).join("");
+    <div class="req-side"><span class="status ${status.toLowerCase()}">${esc(status)}</span><span class="requirement-meta">${coverage.covered ? `${coverage.passed.length} passed V&V record(s)` : esc(req.verification || "Verification TBD")}</span><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-requirement="${esc(req.id)}">✎</button><button class="mini-btn" title="Delete" data-delete-requirement="${esc(req.id)}">×</button></div></div>
+  </article>`;
+  }).join("");
 }
 
 // Engineering workflow and safety-checkpoint feature.
-function workflowGateReady(activity) {
-  return activity.status === "Complete" && (!activity.safetyCheckpoint || String(activity.evidence || "").trim()) && String(activity.completionCriteria || "").trim();
+function workflowGateReady(activity, visited = new Set()) {
+  if (visited.has(activity.id)) return false;
+  visited.add(activity.id);
+  const predecessor = activity.predecessor ? state.workflow.activities.find(item => item.id === activity.predecessor) : null;
+  return activity.status === "Complete" && (!predecessor || workflowGateReady(predecessor, visited)) && (!activity.safetyCheckpoint || String(activity.evidence || "").trim()) && String(activity.completionCriteria || "").trim();
 }
 function renderWorkflow() {
   const activities = state.workflow.activities;
   const completed = activities.filter(activity => activity.status === "Complete").length;
   const safetyChecks = activities.filter(activity => String(activity.safetyCheckpoint || "").trim()).length;
-  const ready = activities.filter(workflowGateReady).length;
+  const ready = activities.filter(activity => workflowGateReady(activity)).length;
   const gaps = activities.filter(activity => activity.status === "Complete" && !workflowGateReady(activity)).length;
   $("#workflow-summary").innerHTML = [
     [state.workflow.phases.length, "Engineering phases"], [activities.length, "Activities"], [safetyChecks, "Safety checkpoints"], [ready, "Gates ready"]
@@ -915,7 +1083,7 @@ function renderWorkflow() {
   $("#workflow-guidance").innerHTML = `<div class="card-header"><div><p class="eyebrow">Workflow health</p><h3>${percent}% complete · ${gaps} gate gap${gaps === 1 ? "" : "s"}</h3></div><span class="status ${gaps ? "planned" : completed === activities.length && activities.length ? "verified" : "draft"}">${gaps ? "Needs evidence" : "On track"}</span></div><p>Complete an activity only when its engineering output and completion criteria are satisfied. A completed safety checkpoint also needs recorded evidence before its gate is ready.</p>`;
   $("#workflow-board").innerHTML = state.workflow.phases.map((phase, phaseIndex) => {
     const phaseActivities = activities.filter(activity => activity.phaseId === phase.id);
-    const phaseReady = phaseActivities.length && phaseActivities.every(workflowGateReady);
+    const phaseReady = phaseActivities.length && phaseActivities.every(activity => workflowGateReady(activity));
     return `<section class="workflow-phase">
       <div class="workflow-phase-header"><div><p class="eyebrow">Phase ${phaseIndex + 1}</p><h3>${esc(phase.name)}</h3><p>${esc(phase.purpose)}</p></div><div class="workflow-phase-actions"><span class="status ${phaseReady ? "verified" : "draft"}">${phaseReady ? "Gate ready" : `${phaseActivities.filter(activity => activity.status === "Complete").length}/${phaseActivities.length} complete`}</span><button class="mini-btn" title="Delete phase" data-delete-workflow-phase="${phase.id}">×</button></div></div>
       <div class="workflow-activity-list">${phaseActivities.length ? phaseActivities.map(activity => {
@@ -923,7 +1091,7 @@ function renderWorkflow() {
         const statusClass = activity.status === "Complete" ? "verified" : activity.status === "In progress" ? "planned" : "draft";
         return `<article class="workflow-activity">
           <input class="workflow-check" type="checkbox" title="Mark complete" data-toggle-workflow-activity="${activity.id}" ${activity.status === "Complete" ? "checked" : ""} />
-          <div><h3>${esc(activity.title)}</h3><p>${esc(activity.objective)}</p><div class="workflow-meta"><span class="status ${statusClass}">${esc(activity.status)}</span>${activity.owner ? `<span class="tag">${esc(activity.owner)}</span>` : ""}${activity.analysis ? `<span class="tag">${esc(activity.analysis.toUpperCase())}</span>` : ""}${activity.standardReference ? `<span class="tag">${esc(activity.standardReference)}</span>` : ""}</div></div>
+          <div><h3>${esc(activity.title)}</h3><p>${esc(activity.objective)}</p><div class="workflow-meta"><span class="status ${statusClass}">${esc(activity.status)}</span>${activity.owner ? `<span class="tag">${esc(activity.owner)}</span>` : ""}${activity.analysis ? `<span class="tag">${esc(activity.analysis.toUpperCase())}</span>` : ""}${activity.standardReference ? `<span class="tag">${esc(activity.standardReference)}</span>` : ""}${activity.predecessor ? `<span class="tag">After ${esc(state.workflow.activities.find(item => item.id === activity.predecessor)?.title || "missing gate")}</span>` : ""}</div></div>
           <div class="workflow-checkpoint"><strong>Safety checkpoint</strong><p>${esc(activity.safetyCheckpoint || "No checkpoint defined. Review whether this decision can affect risk.")}</p></div>
           <div class="workflow-row-actions"><div class="workflow-evidence ${activity.status === "Complete" && !ready ? "missing" : ""}"><strong>${ready ? "Gate evidence ready" : "Gate requirements"}</strong>${esc(activity.evidence || activity.completionCriteria || "Add completion criteria and evidence.")}</div>${activity.analysis ? `<button class="button secondary small" data-open-workflow-analysis="${activity.analysis}">Open analysis</button>` : ""}<div class="row-actions"><button class="mini-btn" title="Edit" data-edit-workflow-activity="${activity.id}">✎</button><button class="mini-btn" title="Delete" data-delete-workflow-activity="${activity.id}">×</button></div></div>
         </article>`;
@@ -955,6 +1123,7 @@ const FEATURE_RENDERERS = [
   () => renderCatalog("hazards"),
   () => renderCatalog("situations"),
   renderRequirements,
+  renderAssurance,
   renderHara,
   renderSil,
   renderQuantitative,
@@ -981,7 +1150,8 @@ function fillWorkflowActivityForm(activity: FeatureRecord = {}) {
   $("#workflow-activity-title").textContent = activity.id ? "Edit activity" : "Add activity";
   form.elements.id.value = activity.id || "";
   form.elements.phaseId.innerHTML = state.workflow.phases.map(phase => `<option value="${esc(phase.id)}">${esc(phase.name)}</option>`).join("");
-  ["phaseId", "owner", "title", "objective", "inputs", "outputs", "safetyCheckpoint", "analysis", "status", "standardReference", "completionCriteria", "evidence"].forEach(key => { if (activity[key] !== undefined) form.elements[key].value = activity[key]; });
+  form.elements.predecessor.innerHTML = `<option value="">No predecessor</option>${state.workflow.activities.filter(item => item.id !== activity.id).map(item => `<option value="${esc(item.id)}">${esc(item.title)}</option>`).join("")}`;
+  ["phaseId", "owner", "predecessor", "title", "objective", "inputs", "outputs", "safetyCheckpoint", "analysis", "status", "standardReference", "completionCriteria", "evidence"].forEach(key => { if (activity[key] !== undefined) form.elements[key].value = activity[key]; });
   $("#workflow-activity-dialog").showModal();
 }
 
@@ -991,6 +1161,15 @@ function openCatalog(group) {
   $("#catalog-title").textContent = group === "hazards" ? "Add hazard" : "Add operational situation";
   $("#category-field").style.display = group === "hazards" ? "" : "none";
   $("#catalog-dialog").showModal();
+}
+function fillRequirementForm(requirement: FeatureRecord = {}) {
+  const form = $("#requirement-form"); form.reset();
+  $("#requirement-dialog-title").textContent = requirement.id ? "Edit requirement" : "Add requirement";
+  form.elements.originalId.value = requirement.id || "";
+  form.elements.hazard.innerHTML = options(state.hazards, requirement.hazard);
+  form.elements.component.innerHTML = options(state.components, requirement.component);
+  ["id", "status", "text", "verification"].forEach(key => { if (requirement[key] !== undefined) form.elements[key].value = requirement[key]; });
+  $("#requirement-dialog").showModal();
 }
 function renderColumns() {
   $("#column-list").innerHTML = state.customColumns.length ? state.customColumns.map(x => `<div class="column-entry"><span>${esc(x.label)}</span><button type="button" class="remove-column" data-delete-column="${x.key}">Remove</button></div>`).join("") : `<p class="dialog-copy">No additional columns yet.</p>`;
@@ -1091,8 +1270,8 @@ $("#notepad-math-btn").addEventListener("click", () => {
 });
 $("#notepad-table-btn").addEventListener("click", () => insertNotepadHtml("<table><thead><tr><th>Item</th><th>Value</th><th>Note</th></tr></thead><tbody><tr><td>Draft</td><td></td><td></td></tr><tr><td>Draft</td><td></td><td></td></tr></tbody></table><p><br></p>"));
 $("#notepad-link-btn").addEventListener("click", () => {
-  const artifact = prompt("Link to artifact: architecture, hazards, situations, hara, fmea, fmeda, quantitative, requirements, workflow");
-  const views = ["architecture", "hazards", "situations", "hara", "fmea", "fmeda", "quantitative", "requirements", "workflow"];
+  const artifact = prompt("Link to artifact: architecture, hazards, situations, hara, fmea, fmeda, quantitative, requirements, workflow, assurance");
+  const views = ["architecture", "hazards", "situations", "hara", "fmea", "fmeda", "quantitative", "requirements", "workflow", "assurance"];
   if (!artifact || !views.includes(artifact.toLowerCase())) return alert("Enter a valid artifact name.");
   const view = artifact.toLowerCase();
   insertNotepadHtml(`<a href="#${view}" data-go="${view}" data-notepad-artifact="${view}">${esc(artifact)}</a>`);
@@ -1126,6 +1305,13 @@ $("#add-workflow-phase-btn").addEventListener("click", () => { $("#workflow-phas
 $("#add-workflow-activity-btn").addEventListener("click", () => {
   if (!state.workflow.phases.length) return alert("Add an engineering phase before creating an activity.");
   fillWorkflowActivityForm();
+});
+$("#add-assurance-btn").addEventListener("click", () => fillAssuranceForm("tests"));
+$("#assurance-record-type").addEventListener("change", event => {
+  const kind = (event.target as HTMLSelectElement).value;
+  $("#assurance-form").elements.recordId.value = "";
+  $("#assurance-dialog-title").textContent = `Add ${kind === "hazard" ? "hazard lifecycle update" : assuranceLabels[kind]}`;
+  $("#assurance-fields").innerHTML = assuranceSchemas[kind].map(field => assuranceFieldHtml(field, {})).join("");
 });
 $("#help-btn").addEventListener("click", () => $("#help-dialog").showModal());
 
@@ -1161,6 +1347,23 @@ document.addEventListener("click", event => {
   const close = target.closest("[data-close-dialog]"); if (close) close.closest<HTMLDialogElement>("dialog")?.close();
   const go = target.closest<HTMLElement>("[data-go]"); if (go) showView(go.dataset.go);
   const workflowAnalysis = target.closest<HTMLElement>("[data-open-workflow-analysis]"); if (workflowAnalysis) showView(workflowAnalysis.dataset.openWorkflowAnalysis);
+  const addAssurance = target.closest<HTMLElement>("[data-add-assurance]"); if (addAssurance) fillAssuranceForm(addAssurance.dataset.addAssurance);
+  const editAssurance = target.closest<HTMLElement>("[data-edit-assurance]");
+  if (editAssurance) {
+    const [kind, id] = editAssurance.dataset.editAssurance.split(":");
+    fillAssuranceForm(kind, assuranceItems(kind).find(item => item.id === id));
+  }
+  const removeAssurance = target.closest<HTMLElement>("[data-delete-assurance]");
+  if (removeAssurance) {
+    const [kind, id] = removeAssurance.dataset.deleteAssurance.split(":");
+    const record = state.assurance[kind].find(item => item.id === id);
+    const linkedEvidence = kind === "evidence" && (state.assurance.tests.some(item => item.evidence === id) || state.assurance.deviations.some(item => item.closureEvidence === id) || state.assurance.changes.some(item => item.evidence === id) || state.assurance.reviews.some(item => item.evidence === id) || state.assurance.claims.some(item => item.evidence === id) || state.hazards.some(item => item.closureEvidence === id));
+    const linkedRecord = kind === "deviations" && state.assurance.tests.some(item => item.deviation === id) || kind === "baselines" && state.assurance.changes.some(item => item.baseline === id) || kind === "claims" && state.assurance.claims.some(item => item.parentClaim === id);
+    const controlled = kind === "evidence" && record?.status === "Approved" || kind === "baselines" && record?.status === "Approved" || kind === "reviews" && record?.status === "Complete" || kind === "tests" && ["Passed", "Failed"].includes(record?.status) || kind === "changes" && record?.decision === "Implemented";
+    if (linkedEvidence || linkedRecord) alert("This lifecycle record is referenced and cannot be deleted.");
+    else if (controlled) alert("Completed or approved lifecycle records cannot be deleted. Supersede or replace the controlled record instead.");
+    else if (confirm(`Delete lifecycle record "${id}"?`)) { state.assurance[kind] = state.assurance[kind].filter(item => item.id !== id); auditAssurance("Deleted", kind, id); save(); }
+  }
   const editWorkflow = target.closest<HTMLElement>("[data-edit-workflow-activity]"); if (editWorkflow) fillWorkflowActivityForm(state.workflow.activities.find(activity => activity.id === editWorkflow.dataset.editWorkflowActivity));
   const toggleWorkflow = target.closest<HTMLInputElement>("[data-toggle-workflow-activity]");
   if (toggleWorkflow) {
@@ -1179,6 +1382,13 @@ document.addEventListener("click", event => {
   const catalog = target.closest<HTMLElement>("[data-open-catalog]"); if (catalog) openCatalog(catalog.dataset.openCatalog);
   const edit = target.closest<HTMLElement>("[data-edit-row]"); if (edit) fillRowForm(state.fmea.find(x => x.id === edit.dataset.editRow));
   const remove = target.closest<HTMLElement>("[data-delete-row]"); if (remove && confirm("Delete this failure mode?")) { state.fmea = state.fmea.filter(x => x.id !== remove.dataset.deleteRow); save(); }
+  const editRequirement = target.closest<HTMLElement>("[data-edit-requirement]"); if (editRequirement) fillRequirementForm(state.requirements.find(item => item.id === editRequirement.dataset.editRequirement));
+  const removeRequirement = target.closest<HTMLElement>("[data-delete-requirement]");
+  if (removeRequirement) {
+    const id = removeRequirement.dataset.deleteRequirement;
+    if (state.assurance.tests.some(test => test.requirement === id)) alert("This requirement is referenced by V&V records and cannot be deleted.");
+    else if (confirm(`Delete requirement "${id}"?`)) { state.requirements = state.requirements.filter(item => item.id !== id); save(); }
+  }
   const removeCatalog = target.closest<HTMLElement>("[data-delete-catalog]");
   if (removeCatalog) {
     const [group, id] = removeCatalog.dataset.deleteCatalog.split(":");
@@ -1238,6 +1448,7 @@ $("#workflow-activity-form").addEventListener("submit", event => {
       title: requireValue(data.title, "Activity"),
       objective: requireValue(data.objective, "Objective"),
       owner: data.owner.trim(), inputs: data.inputs.trim(), outputs: data.outputs.trim(),
+      predecessor: data.predecessor,
       safetyCheckpoint: data.safetyCheckpoint.trim(), analysis: data.analysis,
       standardReference: data.standardReference.trim(),
       completionCriteria: data.completionCriteria.trim(), evidence: data.evidence.trim(),
@@ -1245,6 +1456,15 @@ $("#workflow-activity-form").addEventListener("submit", event => {
     };
   } catch (error) { return handleFormError(error); }
   const existing = state.workflow.activities.find(item => item.id === data.id);
+  if (activity.predecessor) {
+    const visited = new Set([activity.id]);
+    let predecessor = state.workflow.activities.find(item => item.id === activity.predecessor);
+    while (predecessor) {
+      if (visited.has(predecessor.id)) return handleFormError(new Error("Workflow dependencies cannot form a cycle."));
+      visited.add(predecessor.id);
+      predecessor = state.workflow.activities.find(item => item.id === predecessor.predecessor);
+    }
+  }
   if (existing) Object.assign(existing, activity); else state.workflow.activities.push(activity);
   $("#workflow-activity-dialog").close(); save();
 });
@@ -1270,17 +1490,77 @@ $("#catalog-form").addEventListener("submit", event => {
   state[group].push({ id, name, description, category: group === "hazards" ? data.category : "Operational context" });
   $("#catalog-dialog").close(); save();
 });
-$("#add-requirement-btn").addEventListener("click", () => {
-  const form = $("#requirement-form"); form.reset();
-  form.elements.hazard.innerHTML = options(state.hazards); form.elements.component.innerHTML = options(state.components);
-  $("#requirement-dialog").showModal();
-});
+$("#add-requirement-btn").addEventListener("click", () => fillRequirementForm());
 $("#requirement-form").addEventListener("submit", event => {
   event.preventDefault();
   if (event.submitter?.value === "cancel") { $("#requirement-dialog").close(); return; }
   const data = formValues(event.target as HTMLFormElement);
-  try { data.id = requireUniqueIdentifier(state.requirements, requireIdentifier(data.id, "Requirement identifier"), "Requirement identifier"); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
-  state.requirements.push(data); $("#requirement-dialog").close(); save();
+  try { data.id = requireUniqueIdentifier(state.requirements, requireIdentifier(data.id, "Requirement identifier"), "Requirement identifier", { ignoreField: "id", ignoreValue: data.originalId }); data.text = requireValue(data.text, "Requirement statement"); data.hazard = requireValue(data.hazard, "Source hazard"); data.component = requireValue(data.component, "Allocated component"); } catch (error) { return handleFormError(error); }
+  const existing = state.requirements.find(item => item.id === data.originalId);
+  const requirement = { id: data.id, text: data.text, hazard: data.hazard, component: data.component, verification: data.verification, status: data.status };
+  if (existing) {
+    Object.assign(existing, requirement);
+    if (data.originalId !== data.id) state.assurance.tests.forEach(test => { if (test.requirement === data.originalId) test.requirement = data.id; });
+  } else state.requirements.push(requirement);
+  $("#requirement-dialog").close(); save();
+});
+
+$("#assurance-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const form = event.target as HTMLFormElement;
+  const data = formValues(form);
+  const kind = $("#assurance-record-type").value;
+  const existingId = data.recordId;
+  try {
+    data.id = requireIdentifier(data.id, kind === "hazard" ? "Hazard identifier" : "Record identifier");
+    if (kind !== "hazard") {
+      data.id = requireUniqueIdentifier(state.assurance[kind], data.id, "Record identifier", { ignoreField: "id", ignoreValue: existingId });
+      data.title = requireValue(data.title, "Title");
+    }
+    if (kind === "tests") {
+      data.requirement = requireValue(data.requirement, "Linked requirement");
+      data.objective = requireValue(data.objective, "Objective");
+      data.expected = requireValue(data.expected, "Expected result");
+      data.configuration = requireValue(data.configuration, "Configuration");
+      if (data.status === "Passed" && (!data.actual.trim() || !approvedEvidence(data.evidence))) throw new Error("A passed V&V record needs an actual result and approved evidence.");
+      if (data.status === "Failed" && !data.deviation) throw new Error("A failed V&V record must link an issue or deviation.");
+    }
+    if (kind === "evidence") {
+      data.reference = requireValue(data.reference, "Evidence reference");
+      data.version = requireValue(data.version, "Evidence version");
+    }
+    if (kind === "deviations" && data.status === "Closed" && (!data.disposition.trim() || !approvedEvidence(data.closureEvidence))) throw new Error("A closed deviation needs a disposition and approved closure evidence.");
+    if (kind === "changes" && ["Approved", "Implemented"].includes(data.decision) && (!data.safetyImpact.trim() || !approvedEvidence(data.evidence))) throw new Error("An approved or implemented change needs an impact assessment and approved evidence.");
+    if (kind === "baselines" && data.status === "Approved" && (!data.approver.trim() || !data.date)) throw new Error("An approved baseline needs an approver and baseline date.");
+    if (kind === "reviews" && data.status === "Complete" && (!data.decision.trim() || !approvedEvidence(data.evidence))) throw new Error("A completed review needs a decision and approved review evidence.");
+    if (kind === "interfaces" && data.status === "Verified" && !data.failureResponse.trim()) throw new Error("A verified interface needs a documented failure response.");
+    if (kind === "ram" && data.status === "Demonstrated" && !data.method.trim()) throw new Error("A demonstrated RAM objective needs a demonstration method.");
+    if (kind === "claims" && data.status === "Supported" && !approvedEvidence(data.evidence)) throw new Error("A supported safety-case claim needs approved evidence.");
+    if (kind === "hazard" && data.status === "Closed" && (!data.control.trim() || !data.residualRisk.trim() || !approvedEvidence(data.closureEvidence))) throw new Error("A closed hazard needs a control, residual-risk rationale, and approved closure evidence.");
+  } catch (error) { return handleFormError(error); }
+  if (kind === "hazard") {
+    const hazard = state.hazards.find(item => item.id === data.id);
+    if (!hazard) return handleFormError(new Error("Select an existing hazard."));
+    Object.assign(hazard, { owner: data.owner, control: data.control, residualRisk: data.residualRisk, closureEvidence: data.closureEvidence, status: data.status });
+    auditAssurance("Updated", "hazard", hazard.id, hazard.status);
+  } else {
+    const record = Object.fromEntries(assuranceSchemas[kind].map(([name]) => [name, data[name] || ""]));
+    const existing = state.assurance[kind].find(item => item.id === existingId);
+    if (kind === "baselines" && record.status === "Approved") {
+      record.inventory ||= `${state.components.length} components, ${state.hazards.length} hazards, ${state.requirements.length} requirements, ${state.workflow.activities.length} workflow activities, ${state.assurance.tests.length} V&V records`;
+      record.snapshot = existing?.snapshot || structuredClone({
+        plantuml: state.plantuml, components: state.components, hazards: state.hazards, situations: state.situations,
+        requirements: state.requirements, safetyGoals: state.safetyGoals, hara: state.hara, silAssessments: state.silAssessments,
+        quantitative: state.quantitative, fmeda: state.fmeda, workflow: state.workflow, fmea: state.fmea,
+        assurance: Object.fromEntries(Object.entries(state.assurance).filter(([key]) => !["baselines", "audit"].includes(key)))
+      });
+    }
+    if (existing) Object.assign(existing, record); else state.assurance[kind].push(record);
+    auditAssurance(existing ? "Updated" : "Created", kind, record.id, record.status || record.decision || "");
+  }
+  $("#assurance-record-type").disabled = false;
+  $("#assurance-dialog").close();
+  save();
 });
 $("#template-btn").addEventListener("click", () => { renderColumns(); $("#template-dialog").showModal(); });
 $("#add-column-btn").addEventListener("click", () => {

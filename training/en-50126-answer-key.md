@@ -2,6 +2,8 @@
 
 Use this guide after the learner completes the exercises. Many answers depend on the railway application, contractual baseline, risk acceptance method, and organizations involved. Assess reasoning, traceability, ownership, and evidence quality.
 
+For interview rehearsal, continue with the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md), its [`interview guide`](lifecycle-interview-answer-key.md), and the [`story workbook`](interview-story-workbook.md).
+
 ## Module 1: RAMS Foundations
 
 ### Statement Classification

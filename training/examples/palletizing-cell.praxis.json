@@ -116,6 +116,37 @@
           { "id": "wf-12", "phaseId": "phase-release", "title": "Control changes after release", "objective": "Assess the safety impact of new cartons, pallet patterns, speeds, tools, software, and layout changes.", "owner": "Cell owner", "inputs": "Change request and current safety baseline", "outputs": "Impact assessment and revalidation scope", "safetyCheckpoint": "Could the change invalidate stopping distance, reach prevention, payload retention, scanner fields, or prior evidence?", "analysis": "workflow", "standardReference": "Engineering change-control procedure", "completionCriteria": "No safety-relevant change enters production without documented impact assessment and required revalidation.", "evidence": "Open exercise: assess the heavy-carton recipe change", "status": "Not started" }
         ]
       },
+      "assurance": {
+        "tests": [
+          { "id": "VT-01", "title": "Gate interlock and restart prevention", "type": "Validation", "requirement": "SR-01", "objective": "Validate protective stop and restart inhibition for gate access.", "method": "Open the gate during automatic motion, challenge both channels, close the gate, and attempt restart without deliberate reset.", "expected": "Hazardous motion stops and cannot restart until the gate is closed and reset is deliberately commanded.", "actual": "Nominal gate opening passed; channel discrepancy test remains planned.", "configuration": "Cell baseline BL-01", "owner": "Independent validation engineer", "independence": "Independent", "status": "Ready", "evidence": "", "deviation": "" },
+          { "id": "VT-05", "title": "Teach-mode speed and enabling-device validation", "type": "Validation", "requirement": "SR-05", "objective": "Confirm reduced-speed motion and enabling-device behavior inside the safeguarded space.", "method": "Measure speed and challenge released, mid-position, and fully depressed enabling states.", "expected": "Motion remains within the approved limit and stops for invalid enabling states.", "actual": "All conditions passed within the approved limits.", "configuration": "Cell baseline BL-01", "owner": "Validation engineer", "independence": "Peer reviewed", "status": "Passed", "evidence": "EV-05", "deviation": "" }
+        ],
+        "evidence": [
+          { "id": "EV-05", "title": "Teach-mode validation report", "kind": "Test report", "reference": "training/evidence/VT-05-report", "version": "1.0", "owner": "Validation engineer", "status": "Approved", "description": "Training example of configuration-specific validation evidence." }
+        ],
+        "deviations": [
+          { "id": "DEV-02", "title": "Person-sized access possible during pallet muting", "source": "VT-02", "severity": "Critical", "owner": "Safety controls engineer", "disposition": "Redesign muting geometry and repeat intrusion testing before production release.", "dueDate": "2026-07-15", "status": "Open", "closureEvidence": "" }
+        ],
+        "changes": [
+          { "id": "CR-01", "title": "Heavy-carton production recipe", "reason": "Increase carton mass, speed, and pallet height.", "affectedArtifacts": "H-03, H-08, SR-04, SR-06, VT-04, VT-06", "safetyImpact": "Payload retention, stopping performance, pallet stability, and protective-field assumptions require reassessment.", "verificationImpact": "Repeat retention, stopping, path, and pallet-stability validation.", "owner": "Cell owner", "decision": "Proposed", "baseline": "BL-01", "evidence": "" }
+        ],
+        "baselines": [
+          { "id": "BL-01", "title": "Training cell design baseline", "version": "1.0", "scope": "Architecture, safety requirements, safety configuration, and validation setup.", "status": "Approved", "approver": "Chief engineer", "date": "2026-05-01", "inventory": "Training baseline for lifecycle exercises" }
+        ],
+        "reviews": [
+          { "id": "RV-01", "title": "Cell concept safety review", "type": "Safety review", "scope": "System boundary, tasks, hazards, and preliminary safety architecture.", "owner": "Functional safety engineer", "participants": "Systems, controls, mechanical, production, EHS", "decision": "Proceed with actions for pallet opening and retained-energy controls.", "status": "Complete", "evidence": "EV-05" }
+        ],
+        "interfaces": [
+          { "id": "IF-01", "title": "Scanner to safety PLC", "source": "SCAN", "target": "SPLC", "description": "Protective-field, muting, and diagnostic state exchange.", "owner": "Safety controls engineer", "failureResponse": "Invalid, stale, or discrepant state initiates protective stop and inhibits restart.", "status": "Agreed" }
+        ],
+        "ram": [
+          { "id": "RAM-CELL-01", "title": "Safety function diagnostic availability", "measure": "Operational availability", "target": "Safety functions available for at least 99.9% of scheduled production time", "method": "Review event logs, bypass duration, and safety-related downtime monthly.", "owner": "Cell owner", "status": "Allocated" }
+        ],
+        "claims": [
+          { "id": "CL-01", "title": "Safeguarded access prevents exposure to hazardous robot motion", "parentClaim": "", "argument": "Interlocked access, protective fields, restart inhibition, and representative validation control access hazards.", "evidence": "EV-05", "owner": "Safety assurance lead", "status": "Needs evidence" }
+        ],
+        "audit": []
+      },
       "customColumns": [
         { "key": "owner", "label": "Owner" },
         { "key": "verification_ref", "label": "Verification reference" }

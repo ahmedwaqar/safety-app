@@ -8,6 +8,8 @@ The exercise uses an automated carton-palletizing cell and the completed Praxis 
 
 Allow **11 to 15 hours** for the complete practicum. The goal is not to memorize forms. The goal is to practice the engineering reasoning, cross-functional communication, traceability, and evidence expected on a real robotics project.
 
+For interview preparation, complete this course first and then use the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md). It adds timed answers, management pressure, configuration mismatch, failed validation, field incidents, review boards, and challenging follow-up questions.
+
 ## Learning Outcomes
 
 After completing the practicum, a learner should be able to:
@@ -476,7 +478,7 @@ Create a checklist covering:
 
 ### Exercise 7.2: Write Validation Tests
 
-For `SR-01` through `SR-07`, define:
+Open **Lifecycle assurance**. Review seeded records `VT-01`, `VT-05`, `EV-05`, and `DEV-02`, then create V&V records for `SR-01` through `SR-07`. Define:
 
 - Preconditions
 - Test equipment
@@ -485,6 +487,8 @@ For `SR-01` through `SR-07`, define:
 - Acceptance limit
 - Evidence recorded
 - Tester and witness
+
+Set the configuration or approved baseline used for every execution. A test may be marked **Passed** only after recording its actual result and linking approved evidence. Use the traceability matrix to confirm which requirements remain uncovered.
 
 Include realistic variations:
 
@@ -502,11 +506,12 @@ Include realistic variations:
 Assume `VT-02` finds that a small person can enter beside a pallet while muting remains active.
 
 1. Do not mark the requirement verified.
-2. Record the deviation.
+2. Add an **Issue or deviation** record linked from the failed V&V record.
 3. Identify immediate production controls.
 4. Propose design corrections.
 5. Update the risk assessment and validation scope.
 6. Determine which evidence is invalidated.
+7. Close the deviation only after adding the disposition and approved closure evidence.
 
 This is normal engineering work. A failed test is useful evidence when handled transparently.
 
@@ -526,7 +531,7 @@ Production requests:
 
 ### Exercise 8.1: Impact Assessment
 
-Identify impacts on:
+Open seeded change `CR-01` in **Lifecycle assurance**. Identify impacts on:
 
 - Robot payload and stopping behavior
 - Gripper vacuum margin
@@ -547,9 +552,17 @@ Choose one:
 - Approve with restrictions
 - Reject pending evidence
 
-Write the decision, rationale, required actions, owners, and due dates in workflow activity **Control changes after release**.
+Write the decision, rationale, required actions, owners, regression scope, target baseline, and approval evidence in `CR-01`. Record the corresponding decision in workflow activity **Control changes after release**.
 
 A realistic answer should reject immediate unrestricted release until relevant engineering evidence is updated.
+
+### Exercise 8.3: Baseline, Review, And Safety Argument
+
+1. Review approved baseline `BL-01` and identify what would become obsolete after the recipe change.
+2. Add a release review with independent participants, entry criteria, decision, actions, and evidence.
+3. Update hazard ownership, controls, residual-risk rationale, and closure evidence in the hazard log.
+4. Add or refine safety-case claims and link approved evidence.
+5. Check release readiness. Explain every remaining gap instead of changing statuses to make the dashboard green.
 
 ## Capstone: Junior Robotics Engineer Handover
 
@@ -564,12 +577,14 @@ Prepare a project handover containing:
 5. Eight safety requirements.
 6. Eight FMEA rows.
 7. Reviewed FMEDA assumptions.
-8. Validation outlines for all requirements.
-9. Completed workflow evidence for finished activities.
-10. A change-impact decision for the heavy-carton recipe.
-11. An Engineering notes decision log with assumptions, stakeholder actions, calculations, and artifact links.
-12. At least one FMEA draft cleaned and promoted without creating a duplicate record.
-13. Exported `.praxis.json` project that reopens successfully.
+8. Evidence-backed V&V records for all requirements.
+9. Controlled evidence, deviations, reviews, interfaces, and hazard-log updates.
+10. Completed workflow evidence and valid predecessor gates for finished activities.
+11. A change-impact decision and updated baseline plan for the heavy-carton recipe.
+12. A structured safety argument with supported and unsupported claims clearly distinguished.
+13. An Engineering notes decision log with assumptions, stakeholder actions, calculations, and artifact links.
+14. At least one FMEA draft cleaned and promoted without creating a duplicate record.
+15. Exported `.praxis.json` project that reopens successfully.
 
 ## Peer Review Questions
 
@@ -587,6 +602,23 @@ The reviewer should ask:
 10. What would prevent release today?
 11. Which statements remain raw notes, and which have been promoted into controlled records?
 12. Can each completed workflow status be defended with evidence rather than activity alone?
+
+## Robotics Interview Drill
+
+Answer each question in 90 seconds, then ask a reviewer to challenge one assumption:
+
+1. Why is a robot declaration or component certificate insufficient for the integrated cell?
+2. How do you determine whether an operation is collaborative, safeguarded, or prohibited?
+3. How do stopping time, separation distance, payload, tooling, and floor conditions interact?
+4. What is the safe state after loss and restoration of power or compressed air?
+5. How do you validate muting without creating an access path for a person?
+6. What failures can defeat both channels of an interlock or scanner function?
+7. How do you control safety PLC, robot parameter, scanner field, and recipe versions?
+8. When is a production recipe change safety relevant?
+9. How do you validate maintenance and jam-recovery tasks?
+10. What would make you refuse cell release?
+
+Use the answer structure in [`lifecycle-interview-answer-key.md`](lifecycle-interview-answer-key.md). Do not answer only with a standard number; explain the design decision, evidence, configuration, and remaining uncertainty.
 
 ## Completion Standard
 

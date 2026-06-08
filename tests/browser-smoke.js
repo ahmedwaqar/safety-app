@@ -247,7 +247,10 @@ try {
         fmeda: project.data.fmeda.rows.length,
         noteTables: (project.data.notepad.html.match(/<table/g) || []).length,
         noteLinks: (project.data.notepad.html.match(/data-notepad-artifact/g) || []).length,
-        brainstormRows: project.data.notepad.brainstormRows.length
+        brainstormRows: project.data.notepad.brainstormRows.length,
+        tests: project.data.assurance.tests.length,
+        changes: project.data.assurance.changes.length,
+        claims: project.data.assurance.claims.length
       };
     })()`);
     assert(summary.name === "Palletizing Cell Training Project", "training project name is incorrect");
@@ -256,6 +259,7 @@ try {
     assert(summary.requirements >= 7 && summary.sil >= 3 && summary.fmea >= 6 && summary.fmeda >= 5, "training project analyses are incomplete");
     assert(summary.noteTables >= 1 && summary.noteLinks >= 2, "training project Engineering notes exercise is incomplete");
     assert(summary.brainstormRows >= 1, "training project has no analysis draft to clean and import");
+    assert(summary.tests >= 2 && summary.changes >= 1 && summary.claims >= 1, "training project lifecycle assurance exercises are incomplete");
   });
 
   await test("EN 50126 railway RAMS training project is complete and importable", async () => {
@@ -272,7 +276,10 @@ try {
         fmea: project.data.fmea.length,
         noteTables: (project.data.notepad.html.match(/<table/g) || []).length,
         noteLinks: (project.data.notepad.html.match(/data-notepad-artifact/g) || []).length,
-        brainstormRows: project.data.notepad.brainstormRows.length
+        brainstormRows: project.data.notepad.brainstormRows.length,
+        tests: project.data.assurance.tests.length,
+        ram: project.data.assurance.ram.length,
+        interfaces: project.data.assurance.interfaces.length
       };
     })()`);
     assert(summary.name === "Metro PSD EN 50126 Training", "railway training project name is incorrect");
@@ -280,6 +287,7 @@ try {
     assert(summary.components >= 12 && summary.situations >= 8, "railway system definition is incomplete");
     assert(summary.hazards >= 8 && summary.requirements >= 8 && summary.fmea >= 5, "railway RAMS analyses are incomplete");
     assert(summary.noteTables >= 1 && summary.noteLinks >= 3 && summary.brainstormRows >= 1, "railway training exercises are incomplete");
+    assert(summary.tests >= 2 && summary.ram >= 2 && summary.interfaces >= 1, "railway lifecycle assurance exercises are incomplete");
   });
 
   await test("portable JSON import activates an existing project without duplicating it", async () => {
@@ -805,6 +813,53 @@ try {
     assert(await evaluate(`document.querySelector("#diagram-preview img").alt`) === "Rendered PlantUML architecture diagram", "rendered diagram alt text is missing");
   });
 
+  await test("lifecycle assurance executes V&V and derives traceability", async () => {
+    await click('[data-view="assurance"]');
+    assert(await count("#assurance-board .assurance-record-group") === 9, "lifecycle assurance record groups are incomplete");
+    await evaluate(`fillAssuranceForm("evidence")`);
+    await fill('#assurance-fields [name="id"]', "EV-TEST");
+    await fill('#assurance-fields [name="title"]', "Load retention evidence");
+    await fill('#assurance-fields [name="kind"]', "Test report");
+    await fill('#assurance-fields [name="reference"]', "reports/load-retention.pdf");
+    await fill('#assurance-fields [name="version"]', "1.0");
+    await fill('#assurance-fields [name="status"]', "Approved");
+    await click('#assurance-form button[value="default"]');
+    assert(await evaluate(`state.assurance.evidence.some(item => item.id === "EV-TEST" && item.status === "Approved")`), "approved evidence was not saved");
+
+    await evaluate(`fillAssuranceForm("tests")`);
+    await fill('#assurance-fields [name="id"]', "VT-TEST");
+    await fill('#assurance-fields [name="title"]', "Workpiece retention validation");
+    await fill('#assurance-fields [name="requirement"]', "SR-03");
+    await fill('#assurance-fields [name="objective"]', "Validate retention after loss of power");
+    await fill('#assurance-fields [name="expected"]', "Workpiece remains retained");
+    await fill('#assurance-fields [name="actual"]', "Workpiece remained retained in all trials");
+    await fill('#assurance-fields [name="configuration"]', "Baseline B1");
+    await fill('#assurance-fields [name="status"]', "Passed");
+    await fill('#assurance-fields [name="evidence"]', "EV-TEST");
+    await click('#assurance-form button[value="default"]');
+    assert(await evaluate(`testCoverage("SR-03").covered`), "passed V&V with approved evidence did not cover the requirement");
+    assert(await evaluate(`document.querySelector("#traceability-body").textContent.includes("VT-TEST")`), "traceability matrix did not show the V&V record");
+    await click('[data-view="requirements"]');
+    assert(await evaluate(`[...document.querySelectorAll("#requirement-list .requirement")].find(item => item.textContent.includes("SR-03")).textContent.includes("Verified")`), "requirement status was not derived from V&V evidence");
+  });
+
+  await test("lifecycle assurance prevents unsupported closure", async () => {
+    await click('[data-view="assurance"]');
+    await evaluate(`fillAssuranceForm("tests")`);
+    await fill('#assurance-fields [name="id"]', "VT-NO-EVIDENCE");
+    await fill('#assurance-fields [name="title"]', "Unsupported pass");
+    await fill('#assurance-fields [name="requirement"]', "SR-04");
+    await fill('#assurance-fields [name="objective"]', "Attempt unsupported closure");
+    await fill('#assurance-fields [name="expected"]', "A measurable result");
+    await fill('#assurance-fields [name="actual"]', "Claimed pass");
+    await fill('#assurance-fields [name="configuration"]', "Unknown configuration");
+    await fill('#assurance-fields [name="status"]', "Passed");
+    await click('#assurance-form button[value="default"]');
+    assert(await evaluate(`window.__lastAlert.includes("approved evidence")`), "unsupported V&V pass did not report the evidence requirement");
+    assert(!await evaluate(`state.assurance.tests.some(item => item.id === "VT-NO-EVIDENCE")`), "unsupported V&V pass was saved");
+    await evaluate(`document.querySelector("#assurance-dialog").close()`);
+  });
+
   await test("blank workspace clears all preloaded worksheet data", async () => {
     await evaluate(`state = blankWorkspace(); save();`);
     assert(await evaluate(`document.querySelector("#component-count").textContent`) === "0", "reset did not clear architecture components");
@@ -814,6 +869,7 @@ try {
     assert(await count("#sil-body tr") === 0, "reset did not clear SIL assessments");
     assert(await count("#quant-body tr") === 0, "reset did not clear quantitative components");
     assert(await count("#fmeda-body tr") === 0, "reset did not clear FMEDA rows");
+    assert(await evaluate(`Object.values(state.assurance).every(items => items.length === 0)`), "reset did not clear lifecycle assurance records");
   });
 
   await test("existing browser workspaces migrate to include new analysis data", async () => {
@@ -823,6 +879,7 @@ try {
     assert(await count("#sil-body tr") === 1, "legacy workspace did not receive AMR SIL assessment data");
     assert(await count("#quant-body tr") === 3, "legacy workspace did not receive quantitative safety data");
     assert(await count("#fmeda-body tr") === 3, "legacy workspace did not receive FMEDA data");
+    assert(await count("#assurance-board .assurance-record-group") === 9, "legacy workspace did not receive lifecycle assurance data");
   });
 
   await test("save initiates JSON download", async () => {

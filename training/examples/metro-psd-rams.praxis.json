@@ -104,6 +104,38 @@
           { "id": "wf-12", "phaseId": "phase-12", "title": "Plan safe decommissioning", "objective": "Control removal, temporary arrangements, records, interfaces, disposal, and residual responsibilities.", "owner": "Asset change manager", "inputs": "Replacement strategy, asset records, operational constraints", "outputs": "Decommissioning plan and retained records", "safetyCheckpoint": "Can partial removal, temporary wiring, lost data, or transferred responsibility introduce new risk?", "analysis": "workflow", "standardReference": "EN 50126-1 phase 12", "completionCriteria": "Decommissioning hazards, controls, records, and responsibilities are reviewed and approved.", "evidence": "", "status": "Not started" }
         ]
       },
+      "assurance": {
+        "tests": [
+          { "id": "VVT-01", "title": "Platform-secure end-to-end verification", "type": "Verification", "requirement": "SR-01", "objective": "Verify departure permission remains withheld for unsafe door states.", "method": "Inject open, unlocked, isolated, stale-data, and communications-fault states across the signalling interface.", "expected": "Platform-secure remains invalid unless every opening is controlled by the authorized configuration.", "actual": "", "configuration": "PSD integration baseline BL-PSD-01", "owner": "Integration test lead", "independence": "Independent", "status": "Ready", "evidence": "", "deviation": "" },
+          { "id": "VVT-RAM-01", "title": "Operational availability demonstration", "type": "Validation", "requirement": "RAM-01", "objective": "Demonstrate the operational availability target using accepted counting rules.", "method": "Collect scheduled service time, chargeable failures, and downtime for the demonstration period.", "expected": "Operational availability is at least 99.95%.", "actual": "", "configuration": "Operational trial configuration", "owner": "RAM validation manager", "independence": "Peer reviewed", "status": "Draft", "evidence": "", "deviation": "" }
+        ],
+        "evidence": [
+          { "id": "EV-RAMS-01", "title": "System definition review record", "kind": "Review record", "reference": "training/evidence/SDR-01", "version": "1.0", "owner": "Lead systems engineer", "status": "Approved", "description": "Reviewed system boundary, interfaces, actors, and application assumptions." }
+        ],
+        "deviations": [
+          { "id": "DEV-RAMS-01", "title": "Legacy berth-data timing evidence unavailable", "source": "Interface review", "severity": "High", "owner": "Signalling interface manager", "disposition": "Measure latency and freshness behavior during integration and update the interface safety assumptions.", "dueDate": "2026-09-30", "status": "Investigating", "closureEvidence": "" }
+        ],
+        "changes": [
+          { "id": "CR-RAMS-01", "title": "Introduce new rolling-stock type", "reason": "Extend service to a train with different door spacing and berth characteristics.", "affectedArtifacts": "System definition, IF-PSD-01, H-03, SR-02, VVT-01", "safetyImpact": "Alignment tolerance, passenger flow, interface timing, and degraded-operation controls may change.", "verificationImpact": "Repeat alignment boundary, interface fault, dwell-time, and operational validation.", "owner": "Asset change manager", "decision": "Proposed", "baseline": "BL-PSD-01", "evidence": "" }
+        ],
+        "baselines": [
+          { "id": "BL-PSD-01", "title": "PSD system definition baseline", "version": "A", "scope": "System definition, interfaces, assumptions, hazards, and RAMS requirements.", "status": "Approved", "approver": "RAMS authority", "date": "2026-05-15", "inventory": "Training lifecycle baseline" }
+        ],
+        "reviews": [
+          { "id": "RV-RAMS-01", "title": "System definition review", "type": "Design review", "scope": "System under consideration, legacy interfaces, operational contexts, and assumptions.", "owner": "Lead systems engineer", "participants": "Operator, maintainer, signalling, rolling stock, civil, RAMS, independent assessor", "decision": "Accepted for risk analysis with berth-data evidence action.", "status": "Complete", "evidence": "EV-RAMS-01" }
+        ],
+        "interfaces": [
+          { "id": "IF-PSD-01", "title": "Train berth and PSD enable interface", "source": "BERTH", "target": "PSDC", "description": "Train identity, alignment, freshness, and enable state used to authorize door opening.", "owner": "Signalling interface manager", "failureResponse": "Missing, stale, inconsistent, or out-of-tolerance data inhibits automatic opening and raises an alarm.", "status": "Agreed" }
+        ],
+        "ram": [
+          { "id": "RAM-OBJ-01", "title": "PSD operational availability", "measure": "Operational availability", "target": "At least 99.95% during scheduled traffic hours", "method": "Operational demonstration using approved failure and downtime counting rules.", "owner": "RAM manager", "status": "Allocated" },
+          { "id": "RAM-OBJ-02", "title": "Door control unit restoration", "measure": "Restoration time", "target": "Functional restoration within 45 minutes after safe access is granted", "method": "Timed maintainability demonstration with trained staff and production tools.", "owner": "Maintenance engineering", "status": "Draft" }
+        ],
+        "claims": [
+          { "id": "CL-RAMS-01", "title": "The PSD system is acceptably safe for the defined application", "parentClaim": "", "argument": "Application constraints, hazard controls, requirements, V&V, configuration, competence, and residual risks form a coherent safety demonstration.", "evidence": "EV-RAMS-01", "owner": "Safety assurance manager", "status": "Needs evidence" }
+        ],
+        "audit": []
+      },
       "customColumns": [
         { "key": "owner", "label": "Owner" },
         { "key": "evidence_ref", "label": "Evidence reference" }

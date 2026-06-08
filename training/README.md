@@ -16,6 +16,7 @@ After completing the course, a learner should be able to:
 8. Use Engineering notes to capture a review, structure a live table, and promote a cleaned FMEA draft into formal analysis.
 9. Use Engineering workflow checkpoints and evidence to show why an activity is ready to progress.
 10. Create, save, reopen, and work with projects in independent browser tabs.
+11. Execute a requirement-linked V&V record and distinguish planned verification from approved evidence.
 
 ## Course Structure
 
@@ -25,9 +26,11 @@ After completing the course, a learner should be able to:
 | 2 | Hazards and operating zones | Create operational situations and hazards |
 | 3 | Safety functions and SIL | Create an AMR SIL assessment |
 | 4 | FMEA and requirements | Promote a reviewed draft, create a failure mode, and write a testable requirement |
-| 5 | Capstone assessment | Complete a small warehouse AMR safety analysis |
+| 5 | Capstone assessment | Complete a small warehouse AMR safety analysis with lifecycle evidence |
 
 Allow approximately 4 to 5 hours for the complete course.
+
+For a deeper interview path, continue with the [`Robotic Cell Engineering Practicum`](robotic-cell-practicum.md) and the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md).
 
 ## Prerequisites
 

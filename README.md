@@ -26,6 +26,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
 | Custom FMEA templates | Add and remove organization-specific worksheet columns |
 | Safety requirements | Define mitigations, allocate them to architecture components, link source hazards, and track verification status |
+| Lifecycle assurance | Execute verification and validation, derive traceability coverage, control evidence and deviations, assess changes, approve baselines and reviews, manage interfaces and hazard closure, monitor RAM objectives, and build safety-case claims |
 | Workspace data | Switch and delete local projects, and save or open portable project files on disk |
 | Input guidance | Open contextual help for rating scales, failure-rate units, bounded fractions, FMEDA symbols, and project-file handling |
 
@@ -52,6 +53,8 @@ The shorter [`AMR Robot Safety Training`](training/README.md) remains available 
 - A separate instructor answer key
 
 For railway systems engineering, use the [`EN 50126 Railway RAMS Practicum`](training/en-50126-rams-practicum.md) with its completed [`metro-psd-rams.praxis.json`](training/examples/metro-psd-rams.praxis.json) project and [`instructor answer key`](training/en-50126-answer-key.md). It covers the 12-phase RAMS lifecycle, system definition, RAM requirements, hazard control, apportionment, assurance, acceptance, operation, modification, and decommissioning.
+
+For experience-based interview preparation, use the [`Critical Systems Lifecycle Interview Practicum`](training/lifecycle-interview-practicum.md), its [`interview guide`](training/lifecycle-interview-answer-key.md), and the reusable [`story workbook`](training/interview-story-workbook.md). The course provides a two-week practice schedule, fourteen lifecycle simulations, failed-test and field-incident exercises, management-pressure scenarios, timed questions, follow-up probes, and an evidence-based scoring rubric.
 
 ## Start The App
 
@@ -89,7 +92,8 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 10. Use the **FMEDA worksheet** to classify hardware failure modes and evaluate symbolic rate expressions.
 11. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
 12. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
-13. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
+13. Use **Lifecycle assurance** to execute V&V, approve evidence, close deviations and hazards, assess changes, establish baselines, record reviews, and support safety-case claims.
+14. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
 
 ## Using Each Workspace
 
@@ -237,7 +241,25 @@ Use **Customize template** to add organization-specific columns such as owner, r
 
 ### Safety Requirements
 
-Use **Add requirement** to specify the control statement, source hazard, allocated architecture component, verification status, and verification method.
+Use **Add requirement** to specify the control statement, source hazard, allocated architecture component, planning status, and verification method. A requirement is shown as verified only when Lifecycle assurance contains a passed V&V record with approved evidence.
+
+### Lifecycle Assurance
+
+Use **Lifecycle assurance** to turn plans and analyses into controlled lifecycle execution:
+
+- Create verification and validation records linked to requirements, configurations, acceptance criteria, actual results, evidence, and deviations.
+- Use the derived traceability matrix to identify requirements without passed, evidence-backed V&V.
+- Register evidence with an owner, version, reference, and approval state.
+- Track failures, review findings, nonconformities, corrective actions, and approved closure evidence.
+- Assess proposed changes against affected artifacts, safety and RAM impact, regression scope, approval evidence, and target baseline.
+- Approve configuration baselines with scope, inventory, approver, date, and a captured project snapshot.
+- Record design, safety, V&V, RAM, release, and audit reviews with participants, decisions, and evidence.
+- Maintain interface contracts and required fault responses between architecture components.
+- Set reliability, availability, maintainability, restoration-time, and failure-rate objectives with demonstration or monitoring methods.
+- Structure safety-case claims, parent claims, arguments, owners, and supporting evidence.
+- Update hazard ownership, controls, residual-risk rationale, closure evidence, and lifecycle status.
+
+The release-readiness check requires complete requirement coverage, justified hazard closure, no open deviations, and evidence-supported safety-case claims. Passed tests, completed reviews, closed deviations, approved changes, supported claims, and closed hazards are rejected when their required evidence is missing.
 
 ## Workspaces And Portable Project Files
 
@@ -265,7 +287,7 @@ Portable project files use a versioned JSON envelope:
 }
 ```
 
-The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, and requirements. The JSON format is platform-independent and can be moved between browsers and operating systems.
+The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, requirements, and lifecycle-assurance records. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
 Project data is cached in browser `localStorage`, while each tab keeps its own open-project list and active-project selection in `sessionStorage`. In server mode, the browser registry is also mirrored through the `/api/projects` project service to `.praxis-data/projects.json`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
 
@@ -283,6 +305,11 @@ Key rules:
 - Dangerous fractions, diagnostic coverage, and beta factors are between `0` and `1`.
 - Proof-test intervals are positive hours.
 - FMEDA symbols use identifier syntax and symbolic expressions reject unknown names, unsupported characters, division by zero, and negative results.
+- Passed V&V records require an actual result and approved evidence; failed records require a linked deviation.
+- Closed deviations and hazards require dispositions or controls plus approved closure evidence.
+- Approved changes and completed reviews require impact or decision records plus approved evidence.
+- Supported safety-case claims require approved evidence.
+- Workflow activity dependencies cannot contain cycles.
 
 Use the top-bar **?** button for contextual guidance when entering values.
 
@@ -294,7 +321,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, custom columns, catalogue entries, requirements, safety goals, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
 
 Compile-check the browser and server entry points:
 

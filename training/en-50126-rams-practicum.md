@@ -8,6 +8,8 @@ The completed training project is:
 
 Allow **10 to 14 hours** for the complete practicum.
 
+For interview preparation, follow this course with the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md). It adds lifecycle tailoring defense, interface disputes, failed validation, operational incidents, change pressure, acceptance decisions, and timed interviewer follow-ups.
+
 ## Learning Outcomes
 
 After completing the course, a learner should be able to:
@@ -388,7 +390,7 @@ Assess safety, service availability, passenger flow, human error, maintenance ex
 
 ### 7.2 Exercise: Evidence Matrix
 
-Create a table in Engineering notes with:
+Open **Lifecycle assurance** and review seeded records `VVT-01`, `VVT-RAM-01`, `EV-RAMS-01`, and `DEV-RAMS-01`. Create controlled V&V records for the project requirements using:
 
 | Requirement | Verification method | Validation scenario | Evidence | Owner | Independence |
 | --- | --- | --- | --- | --- | --- |
@@ -404,9 +406,11 @@ Include:
 - Maintenance bypass
 - Degraded operation
 
+Record the test configuration, acceptance criteria, actual result, owner, and required independence. A passed result needs approved evidence. Use the traceability matrix to expose uncovered requirements rather than maintaining a separate spreadsheet.
+
 ### 7.3 Safety Case Structure
 
-Draft a safety argument with:
+Use **Safety-case claims** in Lifecycle assurance to draft an argument with:
 
 1. System definition and application constraints
 2. Quality and safety management evidence
@@ -419,6 +423,8 @@ Draft a safety argument with:
 
 A safety case is an argued body of evidence. It is not a folder made credible by its size.
 
+Use parent claims to decompose the top claim. Mark a claim **Supported** only when its linked evidence is approved and configuration relevant.
+
 ### 7.4 Review Gate
 
 Mark **Validate integrated RAMS performance** complete only when:
@@ -430,13 +436,15 @@ Mark **Validate integrated RAMS performance** complete only when:
 - Assumptions are validated
 - Required independent review is complete
 
+Create a V&V review record with the scope, participants, independence, decision, actions, and approved evidence. Confirm predecessor workflow gates are ready before completing the activity.
+
 ## Module 8: Operation, Monitoring, Modification, And Decommissioning
 
 **Estimated time:** 90 minutes
 
 ### 8.1 Performance Monitoring
 
-Define operational indicators for:
+Review the seeded RAM objectives in **Lifecycle assurance**, then define operational indicators for:
 
 - Service-affecting failures
 - Door isolation events
@@ -468,7 +476,9 @@ Perform impact analysis covering:
 - Software and configuration
 - Human factors and procedures
 - Verification, validation, and independent assessment
-- Existing acceptance and safety-case claims
+
+Record the proposal as a **Change and impact assessment**, identify the target baseline, and define regression scope before approval. Update the interface register when rolling-stock or remote-access contracts change.
+- Include existing acceptance decisions and safety-case claims in the impact assessment.
 
 ### 8.3 Decommissioning
 
@@ -511,6 +521,23 @@ Prepare a handover containing:
 8. Are verification, validation, assessment, and acceptance responsibilities independent enough?
 9. What operational data could invalidate a RAMS assumption?
 10. Which proposed change would reopen the largest part of the safety argument?
+
+## Railway RAMS Interview Drill
+
+Answer each question in 90 seconds, then defend the answer against three follow-ups:
+
+1. How do you tailor the EN 50126 lifecycle for a brownfield upgrade?
+2. How do RAM and safety objectives conflict in degraded operation?
+3. What is the difference between verification, validation, independent assessment, and acceptance?
+4. How do you control assumptions owned by signalling, rolling stock, operations, or maintenance?
+5. How do you apportion a system-level safety requirement across organizations and interfaces?
+6. How do you demonstrate an availability or maintainability requirement?
+7. What makes previous-use or generic product evidence applicable?
+8. How do you manage staged integration and mixed configurations?
+9. What operational evidence could invalidate the accepted safety argument?
+10. How do you decide whether a modification requires renewed validation or acceptance?
+
+Use [`lifecycle-interview-answer-key.md`](lifecycle-interview-answer-key.md) to assess decision quality, evidence relevance, configuration control, independence, and acceptance authority.
 
 ## Completion Standard
 
