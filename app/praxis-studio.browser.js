@@ -333,22 +333,35 @@ function validateWorkspaceData(data) {
 function handleFormError(error) {
   alert(error.message);
 }
+var VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "hara", "fmea", "requirements", "assurance"];
 function workspaceId() {
   return `workspace-${crypto.randomUUID()}`;
 }
 function requestedWorkspaceId() {
   return new URLSearchParams(location.search).get("workspace");
 }
+function requestedView() {
+  const view = new URLSearchParams(location.search).get("view");
+  return VIEW_NAMES.includes(view) ? view : "overview";
+}
+function activeView() {
+  return document.querySelector("#main-nav .nav-item.active")?.dataset.view || "overview";
+}
+function updateBrowserLocation(workspace, view, mode = "replace") {
+  if (location.protocol === "file:")
+    return;
+  const url = new URL(location.href);
+  url.searchParams.set("workspace", workspace);
+  url.searchParams.set("view", view);
+  history[mode === "push" ? "pushState" : "replaceState"]({ workspace, view }, "", url);
+}
 function activeWorkspaceId() {
   return sessionStorage.getItem(ACTIVE_WORKSPACE_KEY) || localStorage.getItem(ACTIVE_WORKSPACE_KEY);
 }
-function setActiveWorkspaceId(id, updateUrl = true) {
+function setActiveWorkspaceId(id, historyMode = "replace") {
   sessionStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
-  if (updateUrl && location.protocol !== "file:") {
-    const url = new URL(location.href);
-    url.searchParams.set("workspace", id);
-    history.replaceState(null, "", url);
-  }
+  if (historyMode)
+    updateBrowserLocation(id, activeView(), historyMode);
 }
 function tabWorkspaceIds() {
   const available = new Set(workspaceRegistry.workspaces.map((workspace) => workspace.id));
@@ -457,12 +470,12 @@ function save() {
   persistState();
   renderAll();
 }
-function switchWorkspace(id) {
+function switchWorkspace(id, historyMode = "push") {
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === id))
     return;
   openWorkspaceInTab(id);
-  setActiveWorkspaceId(id);
+  setActiveWorkspaceId(id, historyMode);
   state = migrateWorkspace(structuredClone(activeWorkspace().data));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   renderAll();
@@ -1192,12 +1205,17 @@ function fillAssuranceForm(kind = "tests", record = {}) {
     $("#assurance-fields").querySelector("[name=id]")?.setAttribute("readonly", "");
   $("#assurance-dialog").showModal();
 }
-function showView(name) {
+function showView(name, historyMode = "push") {
+  if (!VIEW_NAMES.includes(name))
+    name = "overview";
+  const previous = activeView();
   $$(".view").forEach((view) => view.classList.remove("active"));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
   $("#page-title").textContent = { notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
+  if (historyMode && (historyMode === "replace" || previous !== name))
+    updateBrowserLocation(activeWorkspace().id, name, historyMode);
 }
 function renderNotepad() {
   const editor = $("#notepad-editor");
@@ -1568,6 +1586,15 @@ $("#main-nav").addEventListener("click", (event) => {
     showView(button.dataset.view);
 });
 $("#workspace-select").addEventListener("change", (event) => switchWorkspace(event.target.value));
+window.addEventListener("popstate", () => {
+  refreshWorkspaceRegistry();
+  const workspace = workspaceRegistry.workspaces.find((item) => item.id === requestedWorkspaceId());
+  if (workspace && workspace.id !== activeWorkspaceId())
+    switchWorkspace(workspace.id, false);
+  showView(requestedView(), false);
+  if (!workspace)
+    updateBrowserLocation(activeWorkspace().id, activeView(), "replace");
+});
 $("#workspace-menu-btn").addEventListener("click", () => {
   const menu = $("#workspace-menu");
   menu.hidden = !menu.hidden;
@@ -2350,4 +2377,5 @@ $("#export-btn").addEventListener("click", () => {
   URL.revokeObjectURL(link.href);
 });
 renderAll();
+showView(requestedView(), "replace");
 hydrateRegistryFromServer();

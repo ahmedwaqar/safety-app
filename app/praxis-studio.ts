@@ -254,14 +254,27 @@ function validateWorkspaceData(data) {
 function handleFormError(error) { alert(error.message); }
 
 // Workspace feature: lifecycle, browser persistence, and portable project files.
+const VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "hara", "fmea", "requirements", "assurance"];
 function workspaceId() { return `workspace-${crypto.randomUUID()}`; }
 function requestedWorkspaceId() { return new URLSearchParams(location.search).get("workspace"); }
+function requestedView() {
+  const view = new URLSearchParams(location.search).get("view");
+  return VIEW_NAMES.includes(view) ? view : "overview";
+}
+function activeView() {
+  return document.querySelector<HTMLElement>("#main-nav .nav-item.active")?.dataset.view || "overview";
+}
+function updateBrowserLocation(workspace, view, mode = "replace") {
+  if (location.protocol === "file:") return;
+  const url = new URL(location.href);
+  url.searchParams.set("workspace", workspace);
+  url.searchParams.set("view", view);
+  history[mode === "push" ? "pushState" : "replaceState"]({ workspace, view }, "", url);
+}
 function activeWorkspaceId() { return sessionStorage.getItem(ACTIVE_WORKSPACE_KEY) || localStorage.getItem(ACTIVE_WORKSPACE_KEY); }
-function setActiveWorkspaceId(id, updateUrl = true) {
+function setActiveWorkspaceId(id, historyMode: string | false = "replace") {
   sessionStorage.setItem(ACTIVE_WORKSPACE_KEY, id);
-  if (updateUrl && location.protocol !== "file:") {
-    const url = new URL(location.href); url.searchParams.set("workspace", id); history.replaceState(null, "", url);
-  }
+  if (historyMode) updateBrowserLocation(id, activeView(), historyMode);
 }
 function tabWorkspaceIds() {
   const available = new Set(workspaceRegistry.workspaces.map(workspace => workspace.id));
@@ -359,11 +372,11 @@ function persistState() {
   persistRegistry(); localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 function save() { persistState(); renderAll(); }
-function switchWorkspace(id) {
+function switchWorkspace(id, historyMode: string | false = "push") {
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some(workspace => workspace.id === id)) return;
   openWorkspaceInTab(id);
-  setActiveWorkspaceId(id); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
+  setActiveWorkspaceId(id, historyMode); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
 }
 function createWorkspace(name, data = blankWorkspace()) {
   refreshWorkspaceRegistry();
@@ -902,12 +915,15 @@ function fillAssuranceForm(kind = "tests", record: FeatureRecord = {}) {
 }
 
 // Application shell: navigation is independent of individual feature renderers.
-function showView(name) {
+function showView(name, historyMode: string | false = "push") {
+  if (!VIEW_NAMES.includes(name)) name = "overview";
+  const previous = activeView();
   $$(".view").forEach(view => view.classList.remove("active"));
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
   $("#page-title").textContent = ({ notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" })[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
+  if (historyMode && (historyMode === "replace" || previous !== name)) updateBrowserLocation(activeWorkspace().id, name, historyMode);
 }
 
 function renderNotepad() {
@@ -1233,6 +1249,13 @@ function closeWorkspaceMenu() {
 // Application shell and workspace events.
 $("#main-nav").addEventListener("click", event => { const button = eventElement(event).closest<HTMLElement>("[data-view]"); if (button) showView(button.dataset.view); });
 $("#workspace-select").addEventListener("change", event => switchWorkspace(event.target.value));
+window.addEventListener("popstate", () => {
+  refreshWorkspaceRegistry();
+  const workspace = workspaceRegistry.workspaces.find(item => item.id === requestedWorkspaceId());
+  if (workspace && workspace.id !== activeWorkspaceId()) switchWorkspace(workspace.id, false);
+  showView(requestedView(), false);
+  if (!workspace) updateBrowserLocation(activeWorkspace().id, activeView(), "replace");
+});
 $("#workspace-menu-btn").addEventListener("click", () => {
   const menu = $("#workspace-menu"); menu.hidden = !menu.hidden;
   $("#workspace-menu-btn").setAttribute("aria-expanded", String(!menu.hidden));
@@ -1716,4 +1739,5 @@ $("#export-btn").addEventListener("click", () => {
 
 // Bootstrap after every feature has registered its renderer and events.
 renderAll();
+showView(requestedView(), "replace");
 void hydrateRegistryFromServer();

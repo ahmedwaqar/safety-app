@@ -348,6 +348,28 @@ try {
     }
   });
 
+  await test("browser back and forward restore views and workspaces in the same tab", async () => {
+    const originalWorkspace = await evaluate(`document.querySelector("#workspace-select").value`);
+    await click('[data-view="architecture"]');
+    await click('[data-view="fmea"]');
+    assert(await evaluate(`new URL(location.href).searchParams.get("view")`) === "fmea", "active view was not written to the URL");
+    await evaluate(`history.back()`);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#architecture-view").classList.contains("active")`), "Back did not restore the previous view"); });
+    await evaluate(`history.forward()`);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#fmea-view").classList.contains("active")`), "Forward did not restore the next view"); });
+
+    await evaluate(`createWorkspace("Browser history project")`);
+    const historyWorkspace = await evaluate(`document.querySelector("#workspace-select").value`);
+    assert(historyWorkspace !== originalWorkspace, "history test workspace was not created");
+    await evaluate(`history.back()`);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#workspace-select").value`) === originalWorkspace, "Back did not restore the previous workspace"); });
+    assert(await evaluate(`document.querySelector("#fmea-view").classList.contains("active")`), "workspace Back navigation did not preserve the active view");
+    await evaluate(`history.forward()`);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#workspace-select").value`) === historyWorkspace, "Forward did not restore the next workspace"); });
+    await evaluate(`history.back()`);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#workspace-select").value`) === originalWorkspace, "history test did not restore its original workspace"); });
+  });
+
   await test("notepad captures rich content and imports cleaned FMEA and HARA drafts", async () => {
     await click('[data-view="notepad"]');
     await evaluate(`document.querySelector("#notepad-editor").innerHTML = "<h3>Review notes</h3><p>Raw force calculation</p>"`);

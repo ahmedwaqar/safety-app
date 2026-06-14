@@ -27,7 +27,7 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | Custom FMEA templates | Add and remove organization-specific worksheet columns |
 | Safety requirements | Define mitigations, allocate them to architecture components, link source hazards, and track verification status |
 | Lifecycle assurance | Execute verification and validation, derive traceability coverage, control evidence and deviations, assess changes, approve baselines and reviews, manage interfaces and hazard closure, monitor RAM objectives, and build safety-case claims |
-| Workspace data | Switch and delete local projects, and save or open portable project files on disk |
+| Workspace data | Switch and delete local projects, save or open portable project files on disk, and use browser Back/Forward to revisit projects and feature views |
 | Input guidance | Open contextual help for rating scales, failure-rate units, bounded fractions, FMEDA symbols, and project-file handling |
 
 ## Feature Figures
