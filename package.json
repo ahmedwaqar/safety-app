@@ -4,6 +4,7 @@
   "scripts": {
     "build": "bun scripts/build-app.ts",
     "check": "tsc --noEmit",
+    "screenshots": "bun scripts/capture-feature-snapshots.js",
     "test": "bun tests/browser-smoke.js"
   },
   "devDependencies": {

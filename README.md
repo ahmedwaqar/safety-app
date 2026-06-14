@@ -30,6 +30,59 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 | Workspace data | Switch and delete local projects, and save or open portable project files on disk |
 | Input guidance | Open contextual help for rating scales, failure-rate units, bounded fractions, FMEDA symbols, and project-file handling |
 
+## Feature Figures
+
+Select any figure to open the full-resolution snapshot.
+
+<table>
+  <tr><th>Overview</th><th>Engineering notes</th></tr>
+  <tr>
+    <td><a href="docs/images/features/overview.png"><img src="docs/images/features/overview.png" alt="Praxis Studio overview workspace"></a></td>
+    <td><a href="docs/images/features/engineering-notes.png"><img src="docs/images/features/engineering-notes.png" alt="Engineering notes workspace"></a></td>
+  </tr>
+  <tr><th>Engineering workflow</th><th>Architecture</th></tr>
+  <tr>
+    <td><a href="docs/images/features/engineering-workflow.png"><img src="docs/images/features/engineering-workflow.png" alt="Engineering workflow workspace"></a></td>
+    <td><a href="docs/images/features/architecture.png"><img src="docs/images/features/architecture.png" alt="Architecture editor and rendered PlantUML diagram"></a></td>
+  </tr>
+  <tr><th>Operational situations</th><th>Hazard catalogue</th></tr>
+  <tr>
+    <td><a href="docs/images/features/operational-situations.png"><img src="docs/images/features/operational-situations.png" alt="Operational situations catalogue"></a></td>
+    <td><a href="docs/images/features/hazard-catalogue.png"><img src="docs/images/features/hazard-catalogue.png" alt="Hazard catalogue"></a></td>
+  </tr>
+  <tr><th>AMR SIL assessment</th><th>Quantitative safety</th></tr>
+  <tr>
+    <td><a href="docs/images/features/amr-sil-assessment.png"><img src="docs/images/features/amr-sil-assessment.png" alt="AMR SIL assessment workspace"></a></td>
+    <td><a href="docs/images/features/quantitative-safety.png"><img src="docs/images/features/quantitative-safety.png" alt="Quantitative safety calculation workspace"></a></td>
+  </tr>
+  <tr><th>FMEDA worksheet</th><th>ISO 26262 HARA and safety goals</th></tr>
+  <tr>
+    <td><a href="docs/images/features/fmeda-worksheet.png"><img src="docs/images/features/fmeda-worksheet.png" alt="FMEDA worksheet"></a></td>
+    <td><a href="docs/images/features/iso-26262-hara.png"><img src="docs/images/features/iso-26262-hara.png" alt="ISO 26262 HARA and safety goals workspace"></a></td>
+  </tr>
+  <tr><th>FMEA worksheet</th><th>Custom FMEA templates</th></tr>
+  <tr>
+    <td><a href="docs/images/features/fmea-worksheet.png"><img src="docs/images/features/fmea-worksheet.png" alt="FMEA worksheet"></a></td>
+    <td><a href="docs/images/features/custom-fmea-template.png"><img src="docs/images/features/custom-fmea-template.png" alt="Custom FMEA template dialog"></a></td>
+  </tr>
+  <tr><th>Safety requirements</th><th>Lifecycle assurance</th></tr>
+  <tr>
+    <td><a href="docs/images/features/safety-requirements.png"><img src="docs/images/features/safety-requirements.png" alt="Safety requirements workspace"></a></td>
+    <td><a href="docs/images/features/lifecycle-assurance.png"><img src="docs/images/features/lifecycle-assurance.png" alt="Lifecycle assurance workspace"></a></td>
+  </tr>
+  <tr><th>Workspace data</th><th>Input guidance</th></tr>
+  <tr>
+    <td><a href="docs/images/features/workspace-data.png"><img src="docs/images/features/workspace-data.png" alt="Workspace file menu"></a></td>
+    <td><a href="docs/images/features/input-guidance.png"><img src="docs/images/features/input-guidance.png" alt="Input guidance dialog"></a></td>
+  </tr>
+</table>
+
+Refresh the figures after a UI change with:
+
+```sh
+bun run screenshots
+```
+
 ## Requirements
 
 - [Bun](https://bun.sh/) for the local server and browser test suite
