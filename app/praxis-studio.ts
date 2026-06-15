@@ -170,6 +170,7 @@ let diagramUrl;
 let serverSyncReady = false;
 let activeNotepadCell: HTMLTableCellElement | null = null;
 let notepadSaveTimer: ReturnType<typeof setTimeout>;
+let notepadDirty = false;
 
 // Shared DOM and presentation helpers.
 const $ = <T extends Element = any>(selector: string, parent: ParentNode = document): T => parent.querySelector(selector) as T;
@@ -373,6 +374,7 @@ function persistState() {
 }
 function save() { persistState(); renderAll(); }
 function switchWorkspace(id, historyMode: string | false = "push") {
+  if (notepadDirty) saveNotepad();
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some(workspace => workspace.id === id)) return;
   openWorkspaceInTab(id);
@@ -667,13 +669,21 @@ function sanitizeRichHtml(html) {
   return documentFragment.innerHTML;
 }
 function saveNotepad() {
+  clearTimeout(notepadSaveTimer);
   state.notepad.html = sanitizeRichHtml($("#notepad-editor").innerHTML);
   persistState();
-  $("#notepad-save-status").textContent = "All changes saved";
+  setNotepadSaveState(false);
+}
+function setNotepadSaveState(dirty: boolean) {
+  notepadDirty = dirty;
+  const status = $("#notepad-save-status");
+  status.textContent = dirty ? "Unsaved changes · save before closing" : "All changes saved";
+  status.classList.toggle("dirty", dirty);
+  $("#notepad-save-btn").classList.toggle("attention", dirty);
 }
 function scheduleNotepadSave() {
   clearTimeout(notepadSaveTimer);
-  $("#notepad-save-status").textContent = "Saving...";
+  setNotepadSaveState(true);
   notepadSaveTimer = setTimeout(() => {
     saveNotepad();
   }, 400);
@@ -1328,6 +1338,11 @@ $("#notepad-editor").addEventListener("click", event => {
   if (artifact) { event.preventDefault(); showView(artifact.dataset.notepadArtifact); }
 });
 $("#notepad-editor").addEventListener("input", scheduleNotepadSave);
+window.addEventListener("beforeunload", event => {
+  if (!notepadDirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 $("#notepad-table-action").addEventListener("change", event => {
   const menu = event.target as HTMLSelectElement;
   if (menu.value) editNotepadTable(menu.value);

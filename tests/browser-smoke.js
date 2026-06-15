@@ -419,9 +419,20 @@ try {
       editor.insertAdjacentHTML("beforeend", "<p>Live autosave note</p>");
       editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: "Live autosave note" }));
     })()`);
-    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "Saving...", "autosave progress was not shown");
+    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "Unsaved changes · save before closing", "unsaved note status was not shown");
+    assert(await evaluate(`document.querySelector("#notepad-save-status").classList.contains("dirty")`), "unsaved note status was not highlighted");
+    assert(await evaluate(`(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    })()`), "closing the tab was not guarded while notes were unsaved");
     await retry(async () => { assert(await evaluate(`state.notepad.html.includes("Live autosave note")`), "notepad live edits were not auto-saved"); });
     assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "All changes saved", "autosave completion was not shown");
+    assert(!await evaluate(`(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    })()`), "closing the tab remained guarded after notes were saved");
 
     await evaluate(`(async () => {
       const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")).blob();

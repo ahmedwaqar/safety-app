@@ -192,6 +192,7 @@ var diagramUrl;
 var serverSyncReady = false;
 var activeNotepadCell = null;
 var notepadSaveTimer;
+var notepadDirty = false;
 var $ = (selector, parent = document) => parent.querySelector(selector);
 var $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
 var esc = (value = "") => String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char]);
@@ -471,6 +472,8 @@ function save() {
   renderAll();
 }
 function switchWorkspace(id, historyMode = "push") {
+  if (notepadDirty)
+    saveNotepad();
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some((workspace) => workspace.id === id))
     return;
@@ -859,13 +862,21 @@ function sanitizeRichHtml(html) {
   return documentFragment.innerHTML;
 }
 function saveNotepad() {
+  clearTimeout(notepadSaveTimer);
   state.notepad.html = sanitizeRichHtml($("#notepad-editor").innerHTML);
   persistState();
-  $("#notepad-save-status").textContent = "All changes saved";
+  setNotepadSaveState(false);
+}
+function setNotepadSaveState(dirty) {
+  notepadDirty = dirty;
+  const status = $("#notepad-save-status");
+  status.textContent = dirty ? "Unsaved changes · save before closing" : "All changes saved";
+  status.classList.toggle("dirty", dirty);
+  $("#notepad-save-btn").classList.toggle("attention", dirty);
 }
 function scheduleNotepadSave() {
   clearTimeout(notepadSaveTimer);
-  $("#notepad-save-status").textContent = "Saving...";
+  setNotepadSaveState(true);
   notepadSaveTimer = setTimeout(() => {
     saveNotepad();
   }, 400);
@@ -1682,6 +1693,12 @@ $("#notepad-editor").addEventListener("click", (event) => {
   }
 });
 $("#notepad-editor").addEventListener("input", scheduleNotepadSave);
+window.addEventListener("beforeunload", (event) => {
+  if (!notepadDirty)
+    return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 $("#notepad-table-action").addEventListener("change", (event) => {
   const menu = event.target;
   if (menu.value)
