@@ -1404,11 +1404,31 @@ function renderWorkflow() {
       <div class="workflow-activity-list">${phaseActivities.length ? phaseActivities.map((activity) => {
       const ready2 = workflowGateReady(activity);
       const statusClass = activity.status === "Complete" ? "verified" : activity.status === "In progress" ? "planned" : "draft";
+      const predecessor = state.workflow.activities.find((item) => item.id === activity.predecessor);
       return `<article class="workflow-activity">
           <input class="workflow-check" type="checkbox" title="Mark complete" data-toggle-workflow-activity="${activity.id}" ${activity.status === "Complete" ? "checked" : ""} />
-          <div><h3>${esc(activity.title)}</h3><p>${esc(activity.objective)}</p><div class="workflow-meta"><span class="status ${statusClass}">${esc(activity.status)}</span>${activity.owner ? `<span class="tag">${esc(activity.owner)}</span>` : ""}${activity.analysis ? `<span class="tag">${esc(activity.analysis.toUpperCase())}</span>` : ""}${activity.standardReference ? `<span class="tag">${esc(activity.standardReference)}</span>` : ""}${activity.predecessor ? `<span class="tag">After ${esc(state.workflow.activities.find((item) => item.id === activity.predecessor)?.title || "missing gate")}</span>` : ""}</div></div>
-          <div class="workflow-checkpoint"><strong>Safety checkpoint</strong><p>${esc(activity.safetyCheckpoint || "No checkpoint defined. Review whether this decision can affect risk.")}</p></div>
-          <div class="workflow-row-actions"><div class="workflow-evidence ${activity.status === "Complete" && !ready2 ? "missing" : ""}"><strong>${ready2 ? "Gate evidence ready" : "Gate requirements"}</strong>${esc(activity.evidence || activity.completionCriteria || "Add completion criteria and evidence.")}</div>${activity.analysis ? `<button class="button secondary small" data-open-workflow-analysis="${activity.analysis}">Open analysis</button>` : ""}<div class="row-actions"><button class="mini-btn" title="Edit" data-edit-workflow-activity="${activity.id}">✎</button><button class="mini-btn" title="Delete" data-delete-workflow-activity="${activity.id}">×</button></div></div>
+          <div class="workflow-activity-content">
+            <div class="workflow-activity-heading">
+              <div><h3>${esc(activity.title)}</h3><div class="workflow-objective"><strong>Objective</strong><p>${esc(activity.objective)}</p></div></div>
+              <div class="workflow-meta">
+                <span class="status ${statusClass}">${esc(activity.status)}</span>
+                ${activity.owner ? `<span class="workflow-chip owner"><b>Owner</b>${esc(activity.owner)}</span>` : ""}
+                ${activity.analysis ? `<span class="workflow-chip analysis"><b>Analysis</b>${esc(activity.analysis.toUpperCase())}</span>` : ""}
+                ${activity.standardReference ? `<span class="workflow-chip standard"><b>Standard</b>${esc(activity.standardReference)}</span>` : ""}
+                ${activity.predecessor ? `<span class="workflow-chip predecessor"><b>After</b>${esc(predecessor?.title || "Missing gate")}</span>` : ""}
+              </div>
+            </div>
+            <div class="workflow-flow">
+              <section class="workflow-data inputs"><strong>Inputs</strong><p>${esc(activity.inputs || "No inputs recorded")}</p></section>
+              <span class="workflow-flow-arrow" aria-hidden="true">→</span>
+              <section class="workflow-data outputs"><strong>Outputs</strong><p>${esc(activity.outputs || "No outputs recorded")}</p></section>
+            </div>
+            <div class="workflow-assurance-grid">
+              <div class="workflow-checkpoint"><strong>Safety checkpoint</strong><p>${esc(activity.safetyCheckpoint || "No checkpoint defined. Review whether this decision can affect risk.")}</p></div>
+              <div class="workflow-evidence ${activity.status === "Complete" && !ready2 ? "missing" : ""}"><strong>${ready2 ? "Gate evidence ready" : "Gate requirements"}</strong><p>${esc(activity.evidence || activity.completionCriteria || "Add completion criteria and evidence.")}</p></div>
+            </div>
+            <div class="workflow-row-actions">${activity.analysis ? `<button class="button secondary small" data-open-workflow-analysis="${activity.analysis}">Open ${esc(activity.analysis)} analysis</button>` : ""}<div class="row-actions"><button class="mini-btn" title="Edit" data-edit-workflow-activity="${activity.id}">✎</button><button class="mini-btn" title="Delete" data-delete-workflow-activity="${activity.id}">×</button></div></div>
+          </div>
         </article>`;
     }).join("") : '<p class="workflow-empty">No activities in this phase yet.</p>'}</div>
     </section>`;

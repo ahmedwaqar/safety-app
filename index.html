@@ -487,35 +487,52 @@
       </form>
     </dialog>
 
-    <dialog id="workflow-phase-dialog">
-      <form method="dialog" id="workflow-phase-form">
+    <dialog id="workflow-phase-dialog" class="workflow-dialog">
+      <form method="dialog" id="workflow-phase-form" class="workflow-form">
         <div class="dialog-header"><div><p class="eyebrow">Workflow structure</p><h2>Add engineering phase</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
+        <p class="workflow-form-intro">Create a phase that groups related engineering activities around a clear lifecycle purpose.</p>
         <div class="form-grid">
           <label><span>Phase name</span><input name="name" required placeholder="e.g. Concept design" /></label>
-          <label><span>Purpose</span><input name="purpose" required placeholder="What should this phase establish?" /></label>
+          <label><span>Purpose</span><textarea name="purpose" required placeholder="What should this phase establish?"></textarea></label>
         </div>
         <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Add phase</button></div>
       </form>
     </dialog>
 
-    <dialog id="workflow-activity-dialog">
-      <form method="dialog" id="workflow-activity-form">
+    <dialog id="workflow-activity-dialog" class="workflow-dialog workflow-activity-dialog">
+      <form method="dialog" id="workflow-activity-form" class="workflow-form">
         <div class="dialog-header"><div><p class="eyebrow">Engineering activity</p><h2 id="workflow-activity-title">Add activity</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
         <input type="hidden" name="id" />
-        <div class="form-grid">
-          <label><span>Phase</span><select name="phaseId" required></select></label>
-          <label><span>Owner</span><input name="owner" placeholder="e.g. System architect" /></label>
-          <label><span>Predecessor gate</span><select name="predecessor"><option value="">No predecessor</option></select></label>
-          <label class="wide"><span>Activity</span><input name="title" required placeholder="e.g. Define system boundary" /></label>
-          <label class="wide"><span>Objective</span><textarea name="objective" required placeholder="What engineering decision or output should this activity produce?"></textarea></label>
-          <label><span>Inputs</span><input name="inputs" placeholder="Models, stakeholder needs, assumptions" /></label>
-          <label><span>Outputs</span><input name="outputs" placeholder="Architecture, decision record, requirements" /></label>
-          <label class="wide"><span>Safety checkpoint</span><textarea name="safetyCheckpoint" placeholder="What safety question must be considered at this point?"></textarea></label>
-          <label><span>Linked analysis</span><select name="analysis"><option value="">No linked analysis</option><option value="architecture">Architecture</option><option value="situations">Operational situations</option><option value="hazards">Hazard catalogue</option><option value="hara">HARA</option><option value="sil">SIL assessment</option><option value="fmea">FMEA</option><option value="fmeda">FMEDA</option><option value="quantitative">Quantitative safety</option><option value="requirements">Safety requirements</option><option value="assurance">Lifecycle assurance</option></select></label>
-          <label><span>Status</span><select name="status"><option>Not started</option><option>In progress</option><option>Complete</option></select></label>
-          <label class="wide"><span>Standard or assurance objective</span><input name="standardReference" placeholder="e.g. IEC 61508-1 clause 7.1 or internal design-review objective" /></label>
-          <label class="wide"><span>Completion criteria</span><input name="completionCriteria" placeholder="Conditions required before this activity is complete" /></label>
-          <label class="wide"><span>Evidence</span><input name="evidence" placeholder="Review record, test report, model, calculation, or decision rationale" /></label>
+        <p class="workflow-form-intro">Describe the work, the information it consumes, the deliverables it creates, and the evidence needed to pass its gate.</p>
+        <div class="workflow-form-sections">
+          <section class="workflow-form-section">
+            <div class="workflow-form-section-heading"><span>1</span><div><h3>Activity definition</h3><p>Place the task in the lifecycle and make accountability clear.</p></div></div>
+            <div class="form-grid">
+              <label><span>Phase</span><select name="phaseId" required></select></label>
+              <label><span>Owner</span><input name="owner" placeholder="e.g. System architect" /></label>
+              <label><span>Status</span><select name="status"><option>Not started</option><option>In progress</option><option>Complete</option></select></label>
+              <label><span>Predecessor gate</span><select name="predecessor"><option value="">No predecessor</option></select></label>
+              <label class="wide"><span>Activity</span><input name="title" required placeholder="e.g. Define system boundary" /></label>
+              <label class="wide"><span>Objective</span><textarea name="objective" required placeholder="What engineering decision or result should this activity produce?"></textarea></label>
+            </div>
+          </section>
+          <section class="workflow-form-section workflow-form-flow">
+            <div class="workflow-form-section-heading"><span>2</span><div><h3>Inputs and deliverables</h3><p>Show what the task needs and what downstream work can expect from it.</p></div></div>
+            <div class="form-grid">
+              <label><span>Inputs</span><textarea name="inputs" placeholder="Models, stakeholder needs, assumptions, prior decisions"></textarea></label>
+              <label><span>Outputs</span><textarea name="outputs" placeholder="Architecture, decision record, requirements, calculations"></textarea></label>
+            </div>
+          </section>
+          <section class="workflow-form-section workflow-form-assurance">
+            <div class="workflow-form-section-heading"><span>3</span><div><h3>Safety and assurance</h3><p>Connect the activity to analysis, acceptance criteria, and objective evidence.</p></div></div>
+            <div class="form-grid">
+              <label><span>Linked analysis</span><select name="analysis"><option value="">No linked analysis</option><option value="architecture">Architecture</option><option value="situations">Operational situations</option><option value="hazards">Hazard catalogue</option><option value="hara">HARA</option><option value="sil">SIL assessment</option><option value="fmea">FMEA</option><option value="fmeda">FMEDA</option><option value="quantitative">Quantitative safety</option><option value="requirements">Safety requirements</option><option value="assurance">Lifecycle assurance</option></select></label>
+              <label><span>Standard or assurance objective</span><input name="standardReference" placeholder="e.g. IEC 61508-1 clause 7.1" /></label>
+              <label class="wide"><span>Safety checkpoint</span><textarea name="safetyCheckpoint" placeholder="What safety question must be considered at this point?"></textarea></label>
+              <label class="wide"><span>Completion criteria</span><textarea name="completionCriteria" placeholder="Conditions required before this activity is complete"></textarea></label>
+              <label class="wide"><span>Evidence</span><textarea name="evidence" placeholder="Review record, test report, model, calculation, or decision rationale"></textarea></label>
+            </div>
+          </section>
         </div>
         <div class="dialog-actions"><button class="button secondary" type="button" data-close-dialog>Cancel</button><button class="button primary" value="default">Save activity</button></div>
       </form>

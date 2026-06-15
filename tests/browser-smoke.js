@@ -463,6 +463,9 @@ try {
     await fill('#workflow-activity-form [name="phaseId"]', await evaluate(`state.workflow.phases.find(phase => phase.name === "Release").id`));
     await fill('#workflow-activity-form [name="title"]', "Review residual risk");
     await fill('#workflow-activity-form [name="objective"]', "Confirm release decisions are supported by engineering evidence.");
+    await fill('#workflow-activity-form [name="owner"]', "Safety lead");
+    await fill('#workflow-activity-form [name="inputs"]', "Hazard log and validation results");
+    await fill('#workflow-activity-form [name="outputs"]', "Residual risk acceptance record");
     await fill('#workflow-activity-form [name="safetyCheckpoint"]', "Are residual risks accepted by authorized reviewers?");
     await fill('#workflow-activity-form [name="analysis"]', "requirements");
     await fill('#workflow-activity-form [name="standardReference"]', "Internal release assurance objective");
@@ -470,6 +473,11 @@ try {
     await fill('#workflow-activity-form [name="status"]', "Complete");
     await click("#workflow-activity-dialog .dialog-actions .primary");
     assert(await count("#workflow-board .workflow-activity") === activityCount + 1, "workflow activity was not added");
+    assert(await evaluate(`document.querySelector("#workflow-board .workflow-phase:last-child .workflow-flow").textContent.includes("Hazard log and validation results")`), "workflow inputs were not visible");
+    assert(await evaluate(`document.querySelector("#workflow-board .workflow-phase:last-child .workflow-flow").textContent.includes("Residual risk acceptance record")`), "workflow outputs were not visible");
+    assert(await evaluate(`document.querySelector("#workflow-board .workflow-phase:last-child .workflow-objective strong").textContent`) === "Objective", "workflow objective heading was not visible");
+    assert(await count("#workflow-board .workflow-phase:last-child .workflow-chip.owner") === 1, "workflow owner was not visually distinguished");
+    assert(await count("#workflow-board .workflow-phase:last-child .workflow-chip.analysis") === 1, "workflow analysis was not visually distinguished");
     assert(await evaluate(`document.querySelector("#workflow-guidance").textContent.includes("1 gate gap")`), "missing evidence did not create a workflow gate gap");
     await click("#workflow-board .workflow-phase:last-child [data-edit-workflow-activity]");
     await fill('#workflow-activity-form [name="evidence"]', "Residual risk review RR-01");
