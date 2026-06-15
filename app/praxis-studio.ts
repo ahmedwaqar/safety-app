@@ -170,6 +170,7 @@ let diagramUrl;
 let serverSyncReady = false;
 let activeNotepadCell: HTMLTableCellElement | null = null;
 let notepadSaveTimer: ReturnType<typeof setTimeout>;
+let notepadStatusTimer: ReturnType<typeof setTimeout>;
 let notepadDirty = false;
 
 // Shared DOM and presentation helpers.
@@ -675,11 +676,17 @@ function saveNotepad() {
   setNotepadSaveState(false);
 }
 function setNotepadSaveState(dirty: boolean) {
+  clearTimeout(notepadStatusTimer);
   notepadDirty = dirty;
   const status = $("#notepad-save-status");
   status.textContent = dirty ? "Unsaved changes · save before closing" : "All changes saved";
   status.classList.toggle("dirty", dirty);
   $("#notepad-save-btn").classList.toggle("attention", dirty);
+  if (!dirty) {
+    notepadStatusTimer = setTimeout(() => {
+      if (!notepadDirty) status.textContent = "";
+    }, 1800);
+  }
 }
 function scheduleNotepadSave() {
   clearTimeout(notepadSaveTimer);

@@ -372,6 +372,7 @@ try {
 
   await test("notepad captures rich content and imports cleaned FMEA and HARA drafts", async () => {
     await click('[data-view="notepad"]');
+    assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "", "saved note status was permanently visible");
     await evaluate(`document.querySelector("#notepad-editor").innerHTML = "<h3>Review notes</h3><p>Raw force calculation</p>"`);
     await click("#notepad-save-btn");
     assert(await evaluate(`state.notepad.html.includes("Raw force calculation")`), "rich notes were not saved");
@@ -433,6 +434,9 @@ try {
       window.dispatchEvent(event);
       return event.defaultPrevented;
     })()`), "closing the tab remained guarded after notes were saved");
+    await retry(async () => {
+      assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "", "saved note status did not disappear");
+    });
 
     await evaluate(`(async () => {
       const blob = await (await fetch("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")).blob();
