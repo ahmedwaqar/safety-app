@@ -385,6 +385,10 @@ try {
     assert(await count("#notepad-editor pre code") === 1, "mathematical data was not inserted");
     assert(await count("#notepad-editor table") === 1, "rich table was not inserted");
     assert(await count('#notepad-editor [data-notepad-artifact="fmea"]') === 1, "artifact link was not inserted");
+    await evaluate(`window.prompt = () => "Engineering workflow"`);
+    await click("#notepad-link-btn");
+    assert(await count('#notepad-editor [data-notepad-artifact="workflow"]') === 1, "user-facing Engineering workflow name was not accepted");
+    assert(await evaluate(`document.querySelector('#notepad-editor [data-notepad-artifact="workflow"]').textContent`) === "Engineering workflow", "workflow artifact link did not use its user-facing label");
 
     await evaluate(`document.querySelector("#notepad-editor table tbody td").dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
     assert(!await evaluate(`document.querySelector("#notepad-table-action").disabled`), "table options were not enabled after selecting a cell");

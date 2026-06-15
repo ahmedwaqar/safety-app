@@ -813,6 +813,23 @@ var brainstormColumns = {
     ["safetyGoal", "Safety goal"]
   ]
 };
+var notepadArtifacts = [
+  ["Architecture", "architecture"],
+  ["Operational situations", "situations"],
+  ["Hazard catalogue", "hazards"],
+  ["ISO 26262 HARA", "hara"],
+  ["AMR SIL assessment", "sil"],
+  ["Quantitative safety", "quantitative"],
+  ["FMEDA worksheet", "fmeda"],
+  ["FMEA worksheet", "fmea"],
+  ["Safety requirements", "requirements"],
+  ["Engineering workflow", "workflow"],
+  ["Lifecycle assurance", "assurance"]
+];
+function resolveNotepadArtifact(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return notepadArtifacts.find(([label, view]) => normalized === label.toLowerCase() || normalized === view);
+}
 function sanitizeRichHtml(html) {
   const documentFragment = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html").body;
   const allowedTags = new Set(["A", "B", "BLOCKQUOTE", "BR", "CODE", "EM", "FIGCAPTION", "FIGURE", "H2", "H3", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "STRONG", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR", "U", "UL"]);
@@ -1673,12 +1690,12 @@ $("#notepad-math-btn").addEventListener("click", () => {
 });
 $("#notepad-table-btn").addEventListener("click", () => insertNotepadHtml("<table><thead><tr><th>Item</th><th>Value</th><th>Note</th></tr></thead><tbody><tr><td>Draft</td><td></td><td></td></tr><tr><td>Draft</td><td></td><td></td></tr></tbody></table><p><br></p>"));
 $("#notepad-link-btn").addEventListener("click", () => {
-  const artifact = prompt("Link to artifact: architecture, hazards, situations, hara, fmea, fmeda, quantitative, requirements, workflow, assurance");
-  const views = ["architecture", "hazards", "situations", "hara", "fmea", "fmeda", "quantitative", "requirements", "workflow", "assurance"];
-  if (!artifact || !views.includes(artifact.toLowerCase()))
+  const artifact = prompt(`Link to artifact: ${notepadArtifacts.map(([label2]) => label2).join(", ")}`);
+  const match = resolveNotepadArtifact(artifact);
+  if (!match)
     return alert("Enter a valid artifact name.");
-  const view = artifact.toLowerCase();
-  insertNotepadHtml(`<a href="#${view}" data-go="${view}" data-notepad-artifact="${view}">${esc(artifact)}</a>`);
+  const [label, view] = match;
+  insertNotepadHtml(`<a href="#${view}" data-go="${view}" data-notepad-artifact="${view}">${esc(label)}</a>`);
 });
 $("#notepad-figure-btn").addEventListener("click", () => $("#notepad-figure-input").click());
 $("#notepad-figure-input").addEventListener("change", (event) => {
