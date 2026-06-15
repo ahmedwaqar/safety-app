@@ -642,13 +642,23 @@ function resolveNotepadArtifact(value) {
   const normalized = String(value || "").trim().toLowerCase();
   return notepadArtifacts.find(([label, view]) => normalized === label.toLowerCase() || normalized === view);
 }
+function normalizeNotepadFontSizes(root) {
+  root.querySelectorAll("font[size]").forEach(element => {
+    const replacement = document.createElement("span");
+    replacement.className = element.getAttribute("size") === "7" ? "note-text-xlarge" : "note-text-large";
+    replacement.append(...element.childNodes);
+    element.replaceWith(replacement);
+  });
+}
 function sanitizeRichHtml(html) {
   const documentFragment = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html").body;
-  const allowedTags = new Set(["A", "B", "BLOCKQUOTE", "BR", "CODE", "EM", "FIGCAPTION", "FIGURE", "H2", "H3", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "STRONG", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR", "U", "UL"]);
+  normalizeNotepadFontSizes(documentFragment);
+  const allowedTags = new Set(["A", "B", "BLOCKQUOTE", "BR", "CODE", "EM", "FIGCAPTION", "FIGURE", "H2", "H3", "HR", "I", "IMG", "LI", "OL", "P", "PRE", "SPAN", "STRONG", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR", "U", "UL"]);
   for (const element of [...documentFragment.querySelectorAll("*")]) {
     if (!allowedTags.has(element.tagName)) { element.replaceWith(...element.childNodes); continue; }
     for (const attribute of [...element.attributes]) {
-      const allowed = attribute.name === "href" || attribute.name === "src" || attribute.name === "alt" || attribute.name === "data-notepad-artifact" || attribute.name === "data-go";
+      const allowedClass = attribute.name === "class" && ["note-text-large", "note-text-xlarge"].includes(attribute.value);
+      const allowed = allowedClass || attribute.name === "href" || attribute.name === "src" || attribute.name === "alt" || attribute.name === "data-notepad-artifact" || attribute.name === "data-go";
       const unsafeSource = attribute.name === "src" && !attribute.value.startsWith("data:image/");
       const unsafeLink = attribute.name === "href" && !/^(#|https?:|mailto:)/i.test(attribute.value);
       if (!allowed || unsafeSource || unsafeLink) element.removeAttribute(attribute.name);
@@ -1324,6 +1334,16 @@ $("#notepad-table-action").addEventListener("change", event => {
   menu.value = "";
 });
 $("#notepad-heading-btn").addEventListener("click", () => { $("#notepad-editor").focus(); document.execCommand("formatBlock", false, "h3"); saveNotepad(); });
+$("#notepad-font-size").addEventListener("change", event => {
+  const menu = event.target as HTMLSelectElement;
+  if (menu.value) {
+    $("#notepad-editor").focus();
+    document.execCommand("fontSize", false, menu.value);
+    normalizeNotepadFontSizes($("#notepad-editor"));
+    saveNotepad();
+  }
+  menu.value = "";
+});
 $("#notepad-math-btn").addEventListener("click", () => {
   const expression = prompt("Enter a mathematical expression or engineering equation:");
   if (expression) insertNotepadHtml(`<pre><code>${esc(expression)}</code></pre><p><br></p>`);

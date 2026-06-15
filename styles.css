@@ -31,3 +31,18 @@
 .workflow-form-section-heading>span{background:#fff;border:1px solid var(--line);color:var(--muted)}
 .workflow-form-section:nth-child(1) .workflow-form-section-heading h3{color:#315f7b}.workflow-form-section:nth-child(2) .workflow-form-section-heading h3{color:#28705a}.workflow-form-section:nth-child(3) .workflow-form-section-heading h3{color:#996322}
 .workflow-form label:has([name="owner"])>span{color:#315f7b}.workflow-form label:has([name="analysis"])>span{color:#23675e}.workflow-form label:has([name="inputs"])>span{color:#356c8a}.workflow-form label:has([name="outputs"])>span{color:#28705a}.workflow-form label:has([name="safetyCheckpoint"])>span{color:#996322}.workflow-form label:has([name="evidence"])>span{color:#8e443e}
+
+/* Tables use readable type and spacing while retaining horizontal scrolling. */
+.table-meta{font-size:12px;padding:14px 16px}
+th{font-size:11px;line-height:1.4;padding:12px 14px}
+td{font-size:13px;line-height:1.5;padding:15px 14px}
+td strong{font-size:13px;line-height:1.4}
+.subtext{font-size:11px;line-height:1.45;margin-top:5px;max-width:210px}
+.table-card .status,.table-card .category,.table-card .asil,.assurance-table .status{font-size:10px}
+.risk-score{font-size:11px;min-width:34px;padding:6px}
+.fmeda-table code{font-size:12px;line-height:1.5}
+.brainstorm-table input{font-size:13px;line-height:1.4;min-width:145px;padding:9px}
+.brainstorm-table td{padding:9px}
+.notepad-editor th,.notepad-editor td{font-size:13px;line-height:1.5;padding:10px}
+.assurance-table{min-width:900px}
+.notepad-font-size{align-items:center;display:flex}.notepad-font-size>span{clip:rect(0 0 0 0);clip-path:inset(50%);height:1px;overflow:hidden;position:absolute;white-space:nowrap;width:1px}.notepad-font-size select{background:#fff;border:1px solid var(--line);border-radius:5px;color:var(--ink);font-size:10px;font-weight:700;padding:7px 28px 7px 9px;width:auto}.notepad-editor .note-text-large{font-size:1.25em}.notepad-editor .note-text-xlarge{font-size:1.5em}

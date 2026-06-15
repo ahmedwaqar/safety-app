@@ -378,6 +378,15 @@ try {
     assert(await evaluate(`document.querySelector("#notepad-save-status").textContent`) === "All changes saved", "note save status was not updated");
     assert(await evaluate(`document.querySelector("#brainstorm-status").textContent.includes("Use this table")`), "saving notes overwrote brainstorming guidance");
 
+    await evaluate(`(() => {
+      const text = document.querySelector("#notepad-editor p").firstChild;
+      const range = document.createRange(); range.selectNodeContents(text);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    })()`);
+    await fill("#notepad-font-size", "5");
+    assert(await count("#notepad-editor .note-text-large") === 1, "large note text was not applied");
+    assert(await evaluate(`state.notepad.html.includes("note-text-large")`), "large note text was not saved");
+
     await evaluate(`window.prompt = message => message.includes("mathematical") ? "F = m * a" : message.includes("artifact") ? "fmea" : "Test figure";`);
     await click("#notepad-math-btn");
     await click("#notepad-table-btn");
