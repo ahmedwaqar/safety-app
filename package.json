@@ -1,6 +1,7 @@
 {
   "name": "praxis-studio",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "build": "bun scripts/build-app.ts",
     "check": "tsc --noEmit",

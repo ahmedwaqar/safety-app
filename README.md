@@ -8,6 +8,12 @@ Architecture, operational context, hazards, integrity assessments, FMEA records,
 
 The initial browser workspace ships with an example cobot-cell safety case so the workflow is visible immediately after startup. Deleting the final browser workspace creates a blank replacement.
 
+## License and Safety Notice
+
+Praxis Studio is released under the [MIT License](LICENSE) for public use, modification, and distribution.
+
+The software is provided **as is**, without warranty of any kind and without liability for claims, damages, production losses, safety incidents, compliance gaps, or other issues arising from use of the app or its outputs. Praxis Studio is an engineering support tool, not a certified safety system, conformity-assessment body, or substitute for competent engineering judgment. Before using any analysis, calculation, requirement, evidence record, or exported project in a production system, have it independently reviewed and approved by qualified professionals against the applicable laws, standards, operating context, and organizational safety processes.
+
 ## Feature Snapshot
 
 | Workspace | Capabilities |
