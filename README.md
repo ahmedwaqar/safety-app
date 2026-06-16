@@ -12,6 +12,8 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 
 Praxis Studio is released under the [MIT License](LICENSE) for public use, modification, and distribution.
 
+Praxis Studio was developed with AI-assisted workflows, including large language model support and vibe-coding practices. Review the implementation, calculations, assumptions, generated content, and project outputs carefully before relying on them.
+
 The software is provided **as is**, without warranty of any kind and without liability for claims, damages, production losses, safety incidents, compliance gaps, or other issues arising from use of the app or its outputs. Praxis Studio is an engineering support tool, not a certified safety system, conformity-assessment body, or substitute for competent engineering judgment. Before using any analysis, calculation, requirement, evidence record, or exported project in a production system, have it independently reviewed and approved by qualified professionals against the applicable laws, standards, operating context, and organizational safety processes.
 
 ## Feature Snapshot
