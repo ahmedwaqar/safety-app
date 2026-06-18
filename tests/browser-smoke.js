@@ -858,26 +858,101 @@ try {
     assert(await evaluate(`document.querySelector("#fault-tree-view").classList.contains("active")`), "fault tree view did not open");
     await click("#fault-tree-generate-btn");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_FAIL")`), "architecture-generated fault tree did not include imported components");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes('fault_tree "Architecture top event"')`), "architecture-generated fault tree did not use structured DSL");
     assert(await count("#fault-tree-canvas .fault-node.basic") === 2, "architecture-generated fault tree did not render basic events");
 
-    const dsl = `TOP TOP "Loss of safety function"
-GATE TOP OR "Top combinations" -> LOGIC VOTE INHIBIT NORCASE
-GATE LOGIC AND "Both channels fail" -> A B
-GATE VOTE KOFN:2/3 "Two of three sensors fail" -> S1 S2 S3
-GATE INHIBIT NAND "Inhibited by diagnostic logic" -> D1 D2
-GATE NORCASE NOR "No valid command path" -> C1 C2
-GATE ALT XOR "Alternative latent condition" -> X1 X2
-BASIC A "Channel A dangerous failure" component=TEST_CTRL layer=Logic
-BASIC B "Channel B dangerous failure" component=TEST_ARM layer=Logic
-BASIC S1 "Sensor one dangerous failure" layer=Sensors
-BASIC S2 "Sensor two dangerous failure" layer=Sensors
-BASIC S3 "Sensor three dangerous failure" layer=Sensors
-BASIC D1 "Diagnostic input stuck" layer=Diagnostics
-BASIC D2 "Diagnostic output stuck" layer=Diagnostics
-BASIC C1 "Command path one unavailable" layer=Command
-BASIC C2 "Command path two unavailable" layer=Command
-BASIC X1 "Alternative event one" layer=Latent
-BASIC X2 "Alternative event two" layer=Latent`;
+    const legacyDsl = `TOP TOP "Legacy top"
+GATE TOP OR "Legacy gate" -> LEGACY_A
+BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
+    await fill("#fault-tree-source", legacyDsl);
+    assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("1 minimal cut set")`), "legacy fault tree DSL was not accepted");
+
+    const dsl = `fault_tree "Loss of safety function" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "Top combinations"
+    children: [LOGIC, VOTE, INHIBIT, NORCASE]
+  }
+
+  gate LOGIC {
+    type: AND
+    label: "Both channels fail"
+    children: [A, B]
+  }
+
+  gate VOTE {
+    type: KOFN:2/3
+    label: "Two of three sensors fail"
+    children: [S1, S2, S3]
+  }
+
+  gate INHIBIT {
+    type: NAND
+    label: "Inhibited by diagnostic logic"
+    children: [D1, D2]
+  }
+
+  gate NORCASE {
+    type: NOR
+    label: "No valid command path"
+    children: [C1, C2]
+  }
+
+  gate ALT {
+    type: XOR
+    label: "Alternative latent condition"
+    children: [X1, X2]
+  }
+
+  basic A {
+    label: "Channel A dangerous failure"
+    component: TEST_CTRL
+    layer: Logic
+  }
+  basic B {
+    label: "Channel B dangerous failure"
+    component: TEST_ARM
+    layer: Logic
+  }
+  basic S1 {
+    label: "Sensor one dangerous failure"
+    layer: Sensors
+  }
+  basic S2 {
+    label: "Sensor two dangerous failure"
+    layer: Sensors
+  }
+  basic S3 {
+    label: "Sensor three dangerous failure"
+    layer: Sensors
+  }
+  basic D1 {
+    label: "Diagnostic input stuck"
+    layer: Diagnostics
+  }
+  basic D2 {
+    label: "Diagnostic output stuck"
+    layer: Diagnostics
+  }
+  basic C1 {
+    label: "Command path one unavailable"
+    layer: Command
+  }
+  basic C2 {
+    label: "Command path two unavailable"
+    layer: Command
+  }
+  basic X1 {
+    label: "Alternative event one"
+    layer: Latent
+  }
+  basic X2 {
+    label: "Alternative event two"
+    layer: Latent
+  }
+}`;
     await fill("#fault-tree-source", dsl);
     await retry(async () => { assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("minimal cut set")`), "fault tree qualitative analysis did not run"); });
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("KOFN:2/3")`), "K-of-N gate was not rendered");
@@ -889,15 +964,21 @@ BASIC X2 "Alternative event two" layer=Latent`;
     await fill("#fault-tree-layer", "All");
     await evaluate(`(() => {
       const ids = Array.from({ length: 120 }, (_, index) => "E" + String(index + 1).padStart(3, "0"));
-      const dsl = ["TOP TOP \\"Large top event\\"", "GATE TOP OR \\"Large generated tree\\" -> " + ids.join(" "), ...ids.map(id => "BASIC " + id + " \\"Generated basic event " + id + "\\" layer=Large")].join("\\n");
+      const dsl = ['fault_tree "Large top event" {', "  top: TOP", "", "  gate TOP {", "    type: OR", '    label: "Large generated tree"', "    children: [" + ids.join(", ") + "]", "  }", "", ...ids.flatMap(id => ['  basic ' + id + ' {', '    label: "Generated basic event ' + id + '"', '    layer: Large', '  }']), "}"].join("\\n");
       const editor = document.querySelector("#fault-tree-source");
       editor.value = dsl;
       editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: dsl }));
     })()`);
     assert(await count("#fault-tree-canvas .fault-node.basic") === 120, "large fault tree did not render hundreds of nodes");
     assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("120 minimal cut sets")`), "large fault tree qualitative analysis did not complete");
-    await fill("#fault-tree-source", `TOP TOP "Broken"
-GATE TOP AND "Missing child" -> MISSING`);
+    await fill("#fault-tree-source", `fault_tree "Broken" {
+  top: TOP
+  gate TOP {
+    type: AND
+    label: "Missing child"
+    children: [MISSING]
+  }
+}`);
     assert(await evaluate(`document.querySelector("#fault-tree-status").textContent`) === "FTA model error", "fault tree validation error was not shown");
     await fill("#fault-tree-source", dsl);
   });

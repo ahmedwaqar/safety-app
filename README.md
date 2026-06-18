@@ -285,18 +285,69 @@ Beginner lesson: [`training/fmeda-for-beginners.md`](training/fmeda-for-beginner
 
 ### Fault Tree Analysis
 
-Use **Fault tree analysis** to model top events deductively with a domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, and standard logical gates including `AND`, `OR`, `NAND`, `NOR`, `XOR`, `NOT`, and `KOFN:k/n`.
+Use **Fault tree analysis** to model top events deductively with a structured domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, and standard logical gates including `AND`, `OR`, `NAND`, `NOR`, `XOR`, `NOT`, and `KOFN:k/n`.
 
 ```text
-TOP TOP "Loss of safety function"
-GATE TOP OR "Top combinations" -> LOGIC VOTE
-GATE LOGIC AND "Both channels fail" -> A B
-GATE VOTE KOFN:2/3 "Two of three sensors fail" -> S1 S2 S3
-BASIC A "Channel A dangerous failure" component=PLC layer=Logic
-BASIC B "Channel B dangerous failure" component=CTRL layer=Logic
+fault_tree "Loss of safety function" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "Top combinations"
+    children: [LOGIC, VOTE]
+  }
+
+  gate LOGIC {
+    type: AND
+    label: "Both channels fail"
+    children: [A, B]
+  }
+
+  gate VOTE {
+    type: KOFN:2/3
+    label: "Two of three sensors fail"
+    children: [S1, S2, S3]
+  }
+
+  basic A {
+    label: "Channel A dangerous failure"
+    component: PLC
+    layer: Logic
+  }
+
+  basic B {
+    label: "Channel B dangerous failure"
+    component: CTRL
+    layer: Logic
+  }
+}
 ```
 
 The app validates duplicate identifiers, unsupported gates, missing children, unreachable nodes, and cycles. Qualitative analysis derives reduced minimal cut sets for coherent portions of the tree and flags non-coherent constructs such as `NOT`, `NAND`, and `NOR` for expert review.
+
+#### Fault Tree DSL BNF
+
+```bnf
+<fault-tree>    ::= "fault_tree" <quoted-text> "{" <top> <node>* "}"
+<top>           ::= "top" ":" <identifier>
+<node>          ::= <gate-block> | <basic-block>
+<gate-block>    ::= "gate" <identifier> "{" <gate-property>+ "}"
+<basic-block>   ::= "basic" <identifier> "{" <basic-property>+ "}"
+<gate-property> ::= "type" ":" <gate-type>
+                  | "label" ":" <quoted-text>
+                  | "layer" ":" <identifier>
+                  | "children" ":" "[" <identifier-list> "]"
+<basic-property>::= "label" ":" <quoted-text>
+                  | "component" ":" <identifier>
+                  | "layer" ":" <identifier>
+<gate-type>     ::= "AND" | "OR" | "NAND" | "NOR" | "XOR" | "NOT" | <kofn>
+<kofn>          ::= "KOFN" ":" <integer> "/" <integer>
+<identifier-list> ::= <identifier> ("," <identifier>)*
+<identifier>    ::= letter (letter | digit | "_" | "." | "-")*
+<quoted-text>   ::= '"' character* '"'
+```
+
+The previous line-oriented syntax is still accepted for older project files, but new trees and architecture-generated trees use the structured form.
 
 ### FMEA Worksheet
 

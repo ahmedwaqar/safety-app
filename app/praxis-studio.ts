@@ -137,17 +137,45 @@ HMI --> CTRL : task selection
     ]
   },
   faultTree: {
-    dsl: `# Praxis Fault Tree DSL
-# TOP <id> "<label>" selects the visible top event.
-# GATE <id> <AND|OR|NAND|NOR|XOR|NOT|KOFN:k/n> "<label>" -> <children...>
-# BASIC <id> "<label>" [component=<architecture-id>] [layer=<name>]
-TOP TOP "Loss of protective stop"
-GATE TOP OR "Protective stop unavailable" -> SCAN_FAIL PLC_FAIL CTRL_FAIL
-GATE SCAN_FAIL AND "Scanner channel fails dangerously" -> SCAN_BLIND SCAN_DIAG_MISSED
-BASIC SCAN_BLIND "Scanner protective field not detected" component=SCAN layer=Detection
-BASIC SCAN_DIAG_MISSED "Scanner diagnostic does not detect blind state" component=SCAN layer=Detection
-BASIC PLC_FAIL "Safety PLC does not command safe stop" component=PLC layer=Logic
-BASIC CTRL_FAIL "Robot controller ignores safe-stop command" component=CTRL layer=Actuation`,
+    dsl: `fault_tree "Loss of protective stop" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "Protective stop unavailable"
+    children: [SCAN_FAIL, PLC_FAIL, CTRL_FAIL]
+  }
+
+  gate SCAN_FAIL {
+    type: AND
+    label: "Scanner channel fails dangerously"
+    children: [SCAN_BLIND, SCAN_DIAG_MISSED]
+  }
+
+  basic SCAN_BLIND {
+    label: "Scanner protective field not detected"
+    component: SCAN
+    layer: Detection
+  }
+
+  basic SCAN_DIAG_MISSED {
+    label: "Scanner diagnostic does not detect blind state"
+    component: SCAN
+    layer: Detection
+  }
+
+  basic PLC_FAIL {
+    label: "Safety PLC does not command safe stop"
+    component: PLC
+    layer: Logic
+  }
+
+  basic CTRL_FAIL {
+    label: "Robot controller ignores safe-stop command"
+    component: CTRL
+    layer: Actuation
+  }
+}`,
     activeLayer: "All"
   },
   notepad: {
@@ -639,9 +667,20 @@ function goalBy(id) { return state.safetyGoals.find(goal => goal.id === id); }
 // Fault tree analysis feature: DSL parsing, diagram layout, and qualitative cut sets.
 const faultTreeGateTypes = new Set(["AND", "OR", "NAND", "NOR", "XOR", "NOT"]);
 function defaultFaultTreeDsl() {
-  return `TOP TOP "Top event"
-GATE TOP OR "System-level fault" -> COMPONENT_FAILURE
-BASIC COMPONENT_FAILURE "Architecture component failure" layer=System`;
+  return `fault_tree "Top event" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "System-level fault"
+    children: [COMPONENT_FAILURE]
+  }
+
+  basic COMPONENT_FAILURE {
+    label: "Architecture component failure"
+    layer: System
+  }
+}`;
 }
 function tokenizeFaultTreeLine(line) {
   return [...line.matchAll(/"[^"]*"|->|\S+/g)].map(match => match[0]);
@@ -649,7 +688,75 @@ function tokenizeFaultTreeLine(line) {
 function cleanFaultTreeText(value) {
   return String(value || "").replace(/^"|"$/g, "");
 }
-function parseFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
+function splitFaultTreeList(value) {
+  return String(value || "").replace(/^\[|\]$/g, "").split(",").map(item => item.trim()).filter(Boolean);
+}
+function parseFaultTreeProperties(body, lineOffset) {
+  const properties: Record<string, string> = {};
+  body.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) return;
+    const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.+)$/);
+    if (!match) throw new Error(`Fault tree property expected on line ${lineOffset + index + 1}.`);
+    properties[match[1]] = match[2].trim().replace(/,$/, "");
+  });
+  return properties;
+}
+function completeFaultTreeModel(top: string, nodes: Map<string, FaultTreeNode>, warnings: string[]): FaultTreeModel {
+  if (!top) throw new Error("Fault tree DSL must declare a top event.");
+  if (!nodes.has(top)) throw new Error(`Top event "${top}" is not defined.`);
+  const topNode = nodes.get(top)!;
+  topNode.kind = topNode.kind === "basic" ? "basic" : "top";
+  for (const node of nodes.values()) node.children.forEach(child => { if (!nodes.has(child)) throw new Error(`Gate "${node.id}" references missing child "${child}".`); });
+  const visiting = new Set<string>(); const visited = new Set<string>();
+  function visit(id) {
+    if (visiting.has(id)) throw new Error(`Fault tree contains a cycle at "${id}".`);
+    if (visited.has(id)) return;
+    visiting.add(id); nodes.get(id)!.children.forEach(visit); visiting.delete(id); visited.add(id);
+  }
+  visit(top);
+  for (const node of nodes.values()) if (!visited.has(node.id)) warnings.push(`Node ${node.id} is not connected to the top event.`);
+  return { top, nodes, layers: ["All", ...[...new Set([...nodes.values()].map(node => node.layer))]], warnings };
+}
+function parseStructuredFaultTreeDsl(dsl) {
+  const root = dsl.match(/^\s*fault_tree\s+"([^"]+)"\s*\{([\s\S]*)\}\s*$/);
+  if (!root) throw new Error('Structured fault tree DSL must start with: fault_tree "Title" {');
+  const title = root[1];
+  const body = root[2];
+  const nodes = new Map<string, FaultTreeNode>();
+  const warnings: string[] = [];
+  let top = "";
+  const blockPattern = /^\s*(gate|basic)\s+([A-Za-z][A-Za-z0-9_.-]*)\s*\{([\s\S]*?)^\s*\}/gim;
+  const blockRanges: Array<[number, number]> = [];
+  for (const match of body.matchAll(blockPattern)) {
+    const kind = match[1].toLowerCase();
+    const id = requireIdentifier(match[2], `Fault tree node identifier`);
+    if (nodes.has(id)) throw new Error(`Fault tree node "${id}" is defined more than once.`);
+    const line = body.slice(0, match.index).split(/\r?\n/).length + 1;
+    const props = parseFaultTreeProperties(match[3], line);
+    if (kind === "gate") {
+      const gate = requireValue(props.type, `Gate type for ${id}`).toUpperCase();
+      if (!faultTreeGateTypes.has(gate) && !/^KOFN:\d+\/\d+$/i.test(gate)) throw new Error(`Unsupported fault tree gate "${gate}".`);
+      const children = splitFaultTreeList(requireValue(props.children, `Children for gate ${id}`)).map(child => requireIdentifier(child, `Child identifier for gate ${id}`));
+      if (!children.length) throw new Error(`Gate "${id}" must have at least one child.`);
+      nodes.set(id, { id, kind: "gate", gate, label: cleanFaultTreeText(props.label || id), children, layer: cleanFaultTreeText(props.layer || "Logic"), line });
+    } else {
+      nodes.set(id, { id, kind: "basic", label: cleanFaultTreeText(props.label || id), children: [], component: props.component ? cleanFaultTreeText(props.component) : "", layer: cleanFaultTreeText(props.layer || "Events"), line });
+    }
+    blockRanges.push([match.index!, match.index! + match[0].length]);
+  }
+  const headerBody = blockRanges.reduce((text, [start, end]) => `${text.slice(0, start)}${" ".repeat(end - start)}${text.slice(end)}`, body);
+  headerBody.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) return;
+    const match = line.match(/^top\s*:\s*([A-Za-z][A-Za-z0-9_.-]*)$/i);
+    if (!match) throw new Error(`Unexpected fault tree statement on line ${index + 2}. Use top:, gate blocks, or basic blocks.`);
+    top = requireIdentifier(match[1], "Fault tree top event");
+  });
+  if (!top && title) warnings.push(`Fault tree title "${title}" is descriptive; add top: <id> to select the analyzed event.`);
+  return completeFaultTreeModel(top, nodes, warnings);
+}
+function parseLegacyFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
   const nodes = new Map<string, FaultTreeNode>();
   const warnings: string[] = [];
   let top = "";
@@ -689,18 +796,10 @@ function parseFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
     }
     throw new Error(`Unknown fault tree DSL keyword "${keyword}" on line ${index + 1}.`);
   });
-  if (!top) throw new Error("Fault tree DSL must declare a TOP event.");
-  if (!nodes.has(top)) throw new Error(`Top event "${top}" is not defined.`);
-  for (const node of nodes.values()) node.children.forEach(child => { if (!nodes.has(child)) throw new Error(`Gate "${node.id}" references missing child "${child}".`); });
-  const visiting = new Set<string>(); const visited = new Set<string>();
-  function visit(id) {
-    if (visiting.has(id)) throw new Error(`Fault tree contains a cycle at "${id}".`);
-    if (visited.has(id)) return;
-    visiting.add(id); nodes.get(id)!.children.forEach(visit); visiting.delete(id); visited.add(id);
-  }
-  visit(top);
-  for (const node of nodes.values()) if (!visited.has(node.id)) warnings.push(`Node ${node.id} is not connected to the top event.`);
-  return { top, nodes, layers: ["All", ...[...new Set([...nodes.values()].map(node => node.layer))]], warnings };
+  return completeFaultTreeModel(top, nodes, warnings);
+}
+function parseFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
+  return /^\s*fault_tree\b/i.test(dsl) ? parseStructuredFaultTreeDsl(dsl) : parseLegacyFaultTreeDsl(dsl);
 }
 function combineCutSets(left: string[][], right: string[][]) {
   const combined: string[][] = [];
@@ -739,9 +838,21 @@ function faultTreeCutSets(model: FaultTreeModel, id = model.top): { sets: string
 function faultTreeFromArchitectureDsl() {
   const children = state.components.map(component => `${component.id}_FAIL`);
   if (!children.length) return defaultFaultTreeDsl();
-  return [`TOP TOP "Architecture top event"`, `GATE TOP OR "System hazard from architecture component faults" -> ${children.join(" ")}`,
-    ...state.components.map(component => `BASIC ${component.id}_FAIL "${component.name} fault contributes to top event" component=${component.id} layer=Architecture`)
-  ].join("\n");
+  return `fault_tree "Architecture top event" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "System hazard from architecture component faults"
+    children: [${children.join(", ")}]
+  }
+
+${state.components.map(component => `  basic ${component.id}_FAIL {
+    label: "${component.name} fault contributes to top event"
+    component: ${component.id}
+    layer: Architecture
+  }`).join("\n\n")}
+}`;
 }
 
 // Notepad feature: rich notes plus structured stakeholder brainstorming.
