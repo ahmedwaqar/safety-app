@@ -26,6 +26,7 @@
         <button class="nav-item" data-view="sil"><span class="nav-icon">▱</span>AMR SIL assessment</button>
         <button class="nav-item" data-view="quantitative"><span class="nav-icon">∑</span>Quantitative safety</button>
         <button class="nav-item" data-view="fmeda"><span class="nav-icon">ƒ</span>FMEDA worksheet</button>
+        <button class="nav-item" data-view="fault-tree"><span class="nav-icon">⊢</span>Fault tree analysis</button>
         <button class="nav-item" data-view="hara"><span class="nav-icon">△</span>ISO 26262 HARA</button>
         <button class="nav-item" data-view="fmea"><span class="nav-icon">≡</span>FMEA worksheet</button>
         <button class="nav-item" data-view="requirements"><span class="nav-icon">✓</span>Safety requirements</button>
@@ -269,6 +270,28 @@
           <div class="table-scroll"><table class="fmeda-table"><thead><tr><th>Component</th><th>Failure mode</th><th>Local effect</th><th>End effect</th><th>Classification</th><th>Diagnostic measure</th><th>Rate expression</th><th>Evaluated λ</th><th></th></tr></thead><tbody id="fmeda-body"></tbody></table></div>
         </div>
         <p class="standards-note">This worksheet supports early FMEDA bookkeeping. Confirm source data, failure-mode distributions, diagnostic assumptions, dependent failures, mission profile, and architectural constraints with qualified practitioners and the applicable safety standards.</p>
+      </section>
+
+      <section class="view" id="fault-tree-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Deductive reliability analysis</p><h2>Fault tree analysis</h2><p>Model top events, nested logical gates, layered subtrees, and architecture-linked basic events with a deterministic DSL that scales to large fault trees.</p></div>
+          <div class="toolbar-actions"><button class="button secondary" id="fault-tree-generate-btn">Generate from architecture</button><button class="button primary" id="fault-tree-save-btn">Analyze fault tree</button></div>
+        </div>
+        <div class="fault-tree-grid">
+          <section class="editor-card">
+            <div class="editor-top"><span>fault-tree.fta</span><div class="editor-actions"><label class="fault-layer-control"><span>Layer</span><select id="fault-tree-layer"></select></label><span class="render-status" id="fault-tree-status">Ready</span></div></div>
+            <textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off"></textarea>
+            <p class="standards-note">DSL syntax: <code>TOP TOP "Top event"</code>, <code>GATE TOP AND "Label" -&gt; A B</code>, <code>BASIC A "Basic event" component=PLC layer=Logic</code>. Gates: AND, OR, NAND, NOR, XOR, NOT, and KOFN:k/n.</p>
+          </section>
+          <section class="card fault-analysis-card">
+            <div class="card-header"><div><p class="eyebrow">Qualitative analysis</p><h3>Minimal cut sets and model quality</h3></div></div>
+            <div id="fault-tree-analysis"></div>
+          </section>
+        </div>
+        <section class="diagram-card fault-tree-diagram">
+          <div class="card-header"><div><p class="eyebrow">Nested diagram editor</p><h3>Rendered logical structure</h3></div></div>
+          <div class="fault-tree-canvas" id="fault-tree-canvas"></div>
+        </section>
       </section>
 
       <section class="view" id="situations-view">
@@ -534,7 +557,7 @@
           <section class="workflow-form-section workflow-form-assurance">
             <div class="workflow-form-section-heading"><span>3</span><div><h3>Safety and assurance</h3><p>Connect the activity to analysis, acceptance criteria, and objective evidence.</p></div></div>
             <div class="form-grid">
-              <label><span>Linked analysis</span><select name="analysis"><option value="">No linked analysis</option><option value="architecture">Architecture</option><option value="situations">Operational situations</option><option value="hazards">Hazard catalogue</option><option value="hara">HARA</option><option value="sil">SIL assessment</option><option value="fmea">FMEA</option><option value="fmeda">FMEDA</option><option value="quantitative">Quantitative safety</option><option value="requirements">Safety requirements</option><option value="assurance">Lifecycle assurance</option></select></label>
+              <label><span>Linked analysis</span><select name="analysis"><option value="">No linked analysis</option><option value="architecture">Architecture</option><option value="situations">Operational situations</option><option value="hazards">Hazard catalogue</option><option value="hara">HARA</option><option value="sil">SIL assessment</option><option value="fmea">FMEA</option><option value="fmeda">FMEDA</option><option value="fault-tree">Fault tree analysis</option><option value="quantitative">Quantitative safety</option><option value="requirements">Safety requirements</option><option value="assurance">Lifecycle assurance</option></select></label>
               <label><span>Standard or assurance objective</span><input name="standardReference" placeholder="e.g. IEC 61508-1 clause 7.1" /></label>
               <label class="wide"><span>Safety checkpoint</span><textarea name="safetyCheckpoint" placeholder="What safety question must be considered at this point?"></textarea></label>
               <label class="wide"><span>Completion criteria</span><textarea name="completionCriteria" placeholder="Conditions required before this activity is complete"></textarea></label>
@@ -576,6 +599,7 @@
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
           <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>
           <section><h3>FMEDA symbols</h3><p>Use names such as <code>lambda_scanner</code>. Expressions accept constants, numbers, parentheses, and <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>.</p></section>
+          <section><h3>Fault tree DSL</h3><p>Use <code>TOP</code>, <code>GATE</code>, and <code>BASIC</code> lines to draw layered trees. Supported gates include <code>AND</code>, <code>OR</code>, <code>NAND</code>, <code>NOR</code>, <code>XOR</code>, <code>NOT</code>, and <code>KOFN:k/n</code>.</p></section>
           <section><h3>Lifecycle closure</h3><p>Use Lifecycle assurance for V&amp;V execution, approved evidence, deviations, change impact, baselines, reviews, hazard closure, RAM objectives, interfaces, and safety-case claims.</p></section>
           <section><h3>Project files</h3><p>Use the <strong>File</strong> menu to create, open, save, close, or delete a project. Closing removes it only from the current tab while preserving it for other tabs and future reopening.</p></section>
         </div>

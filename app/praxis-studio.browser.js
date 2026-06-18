@@ -149,6 +149,20 @@ HMI --> CTRL : task selection
       { id: crypto.randomUUID(), component: "SCAN", failureMode: "Scanner output frozen clear not detected", localEffect: "Protective-field intrusion is not reported", endEffect: "Protective stop may fail on demand", classification: "dangerous_undetected", diagnostic: "Residual failure after scanner diagnostics", expression: "lambda_scanner * frac_dangerous * (1 - dc_scanner)" }
     ]
   },
+  faultTree: {
+    dsl: `# Praxis Fault Tree DSL
+# TOP <id> "<label>" selects the visible top event.
+# GATE <id> <AND|OR|NAND|NOR|XOR|NOT|KOFN:k/n> "<label>" -> <children...>
+# BASIC <id> "<label>" [component=<architecture-id>] [layer=<name>]
+TOP TOP "Loss of protective stop"
+GATE TOP OR "Protective stop unavailable" -> SCAN_FAIL PLC_FAIL CTRL_FAIL
+GATE SCAN_FAIL AND "Scanner channel fails dangerously" -> SCAN_BLIND SCAN_DIAG_MISSED
+BASIC SCAN_BLIND "Scanner protective field not detected" component=SCAN layer=Detection
+BASIC SCAN_DIAG_MISSED "Scanner diagnostic does not detect blind state" component=SCAN layer=Detection
+BASIC PLC_FAIL "Safety PLC does not command safe stop" component=PLC layer=Logic
+BASIC CTRL_FAIL "Robot controller ignores safe-stop command" component=CTRL layer=Actuation`,
+    activeLayer: "All"
+  },
   notepad: {
     html: "<h3>Engineering notes</h3><p>Capture raw stakeholder observations, calculations, assumptions, and early analysis ideas here.</p>",
     brainstormType: "fmea",
@@ -179,6 +193,7 @@ function blankWorkspace() {
     silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
     fmeda: { constants: [], rows: [] },
+    faultTree: { dsl: defaultFaultTreeDsl(), activeLayer: "All" },
     notepad: { html: "", brainstormType: "fmea", brainstormRows: [] },
     workflow: engineeringWorkflowTemplate(),
     customColumns: [],
@@ -216,6 +231,8 @@ function migrateWorkspace(workspace, defaults = blankWorkspace()) {
     hazard.closureEvidence ??= "";
   });
   workspace.workflow.activities.forEach((activity) => activity.predecessor ??= "");
+  workspace.faultTree.activeLayer ??= "All";
+  workspace.faultTree.dsl ??= defaultFaultTreeDsl();
   workspace.notepad.brainstormRows.forEach((row) => row.id ??= crypto.randomUUID());
   return workspace;
 }
@@ -276,6 +293,8 @@ function validateWorkspaceData(data) {
     throw new Error('Workspace field "quantitative.components" must be an array.');
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows)))
     throw new Error("Workspace FMEDA fields must be arrays.");
+  if (data.faultTree !== undefined && (!data.faultTree || typeof data.faultTree !== "object" || typeof data.faultTree.dsl !== "string"))
+    throw new Error("Workspace fault tree DSL must be text.");
   if (data.notepad !== undefined && (!data.notepad || typeof data.notepad !== "object" || !Array.isArray(data.notepad.brainstormRows)))
     throw new Error("Workspace notepad brainstorming rows must be an array.");
   if (data.workflow !== undefined && (!data.workflow || typeof data.workflow !== "object" || !Array.isArray(data.workflow.phases) || !Array.isArray(data.workflow.activities)))
@@ -335,7 +354,7 @@ function validateWorkspaceData(data) {
 function handleFormError(error) {
   alert(error.message);
 }
-var VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "hara", "fmea", "requirements", "assurance"];
+var VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "fault-tree", "hara", "fmea", "requirements", "assurance"];
 function workspaceId() {
   return `workspace-${crypto.randomUUID()}`;
 }
@@ -793,6 +812,142 @@ function fmedaTotals() {
 function goalBy(id) {
   return state.safetyGoals.find((goal) => goal.id === id);
 }
+var faultTreeGateTypes = new Set(["AND", "OR", "NAND", "NOR", "XOR", "NOT"]);
+function defaultFaultTreeDsl() {
+  return `TOP TOP "Top event"
+GATE TOP OR "System-level fault" -> COMPONENT_FAILURE
+BASIC COMPONENT_FAILURE "Architecture component failure" layer=System`;
+}
+function tokenizeFaultTreeLine(line) {
+  return [...line.matchAll(/"[^"]*"|->|\S+/g)].map((match) => match[0]);
+}
+function cleanFaultTreeText(value) {
+  return String(value || "").replace(/^"|"$/g, "");
+}
+function parseFaultTreeDsl(dsl = state.faultTree.dsl) {
+  const nodes = new Map;
+  const warnings = [];
+  let top = "";
+  dsl.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#"))
+      return;
+    const tokens = tokenizeFaultTreeLine(line);
+    const keyword = tokens.shift()?.toUpperCase();
+    if (keyword === "TOP") {
+      top = requireIdentifier(tokens[0], `Fault tree top event on line ${index + 1}`);
+      const label = cleanFaultTreeText(tokens.slice(1).join(" ")) || top;
+      const existing = nodes.get(top);
+      nodes.set(top, { id: top, kind: existing?.kind || "top", gate: existing?.gate || "OR", label, children: existing?.children || [], component: existing?.component, layer: existing?.layer || "System", line: index + 1 });
+      return;
+    }
+    if (keyword === "BASIC") {
+      const id = requireIdentifier(tokens.shift(), `Basic event identifier on line ${index + 1}`);
+      if (nodes.has(id))
+        throw new Error(`Fault tree node "${id}" is defined more than once.`);
+      const labelParts = [];
+      const attrs = {};
+      tokens.forEach((token) => token.includes("=") ? attrs[token.split("=")[0]] = token.split("=").slice(1).join("=") : labelParts.push(token));
+      nodes.set(id, { id, kind: "basic", label: cleanFaultTreeText(labelParts.join(" ")) || id, children: [], component: attrs.component, layer: attrs.layer || "Events", line: index + 1 });
+      return;
+    }
+    if (keyword === "GATE") {
+      const id = requireIdentifier(tokens.shift(), `Gate identifier on line ${index + 1}`);
+      const gate = requireValue(tokens.shift(), `Gate type on line ${index + 1}`).toUpperCase();
+      if (!faultTreeGateTypes.has(gate) && !/^KOFN:\d+\/\d+$/i.test(gate))
+        throw new Error(`Unsupported fault tree gate "${gate}".`);
+      if (nodes.has(id) && nodes.get(id).children.length)
+        throw new Error(`Fault tree node "${id}" is defined more than once.`);
+      const arrow = tokens.indexOf("->");
+      if (arrow < 0)
+        throw new Error(`Gate "${id}" must declare children with ->.`);
+      const label = cleanFaultTreeText(tokens.slice(0, arrow).join(" ")) || id;
+      const children = tokens.slice(arrow + 1).map((child) => requireIdentifier(child, `Child identifier for gate ${id}`));
+      if (!children.length)
+        throw new Error(`Gate "${id}" must have at least one child.`);
+      nodes.set(id, { id, kind: id === top ? "top" : "gate", gate, label, children, layer: "Logic", line: index + 1 });
+      return;
+    }
+    throw new Error(`Unknown fault tree DSL keyword "${keyword}" on line ${index + 1}.`);
+  });
+  if (!top)
+    throw new Error("Fault tree DSL must declare a TOP event.");
+  if (!nodes.has(top))
+    throw new Error(`Top event "${top}" is not defined.`);
+  for (const node of nodes.values())
+    node.children.forEach((child) => {
+      if (!nodes.has(child))
+        throw new Error(`Gate "${node.id}" references missing child "${child}".`);
+    });
+  const visiting = new Set;
+  const visited = new Set;
+  function visit(id) {
+    if (visiting.has(id))
+      throw new Error(`Fault tree contains a cycle at "${id}".`);
+    if (visited.has(id))
+      return;
+    visiting.add(id);
+    nodes.get(id).children.forEach(visit);
+    visiting.delete(id);
+    visited.add(id);
+  }
+  visit(top);
+  for (const node of nodes.values())
+    if (!visited.has(node.id))
+      warnings.push(`Node ${node.id} is not connected to the top event.`);
+  return { top, nodes, layers: ["All", ...[...new Set([...nodes.values()].map((node) => node.layer))]], warnings };
+}
+function combineCutSets(left, right) {
+  const combined = [];
+  left.forEach((a) => right.forEach((b) => combined.push([...new Set([...a, ...b])].sort())));
+  return minimizeCutSets(combined);
+}
+function minimizeCutSets(sets) {
+  const unique = [...new Map(sets.map((set) => [set.join("|"), set])).values()];
+  return unique.filter((set) => !unique.some((other) => other !== set && other.every((item) => set.includes(item))));
+}
+function combinations(items, count) {
+  if (count <= 0)
+    return [[]];
+  if (items.length < count)
+    return [];
+  if (items.length === count)
+    return [items];
+  const [first, ...rest] = items;
+  return combinations(rest, count - 1).map((combo) => [first, ...combo]).concat(combinations(rest, count));
+}
+function faultTreeCutSets(model, id = model.top) {
+  const node = model.nodes.get(id);
+  if (node.kind === "basic")
+    return { sets: [[node.id]], nonCoherent: false };
+  const analyses = node.children.map((child) => faultTreeCutSets(model, child));
+  const childSets = analyses.flatMap((analysis) => analysis.sets);
+  let sets = childSets;
+  let nonCoherent = analyses.some((analysis) => analysis.nonCoherent);
+  if (node.gate === "AND")
+    sets = analyses.reduce((memo, analysis) => combineCutSets(memo, analysis.sets), [[]]);
+  else if (node.gate === "OR" || node.gate === "XOR")
+    sets = childSets;
+  else if (node.gate?.startsWith("KOFN:")) {
+    const [, kText] = node.gate.match(/^KOFN:(\d+)\/\d+$/i) || [];
+    sets = combinations(analyses, Number(kText)).flatMap((group) => group.reduce((memo, analysis) => combineCutSets(memo, analysis.sets), [[]]));
+  } else {
+    sets = [];
+    nonCoherent = true;
+  }
+  return { sets: minimizeCutSets(sets), nonCoherent };
+}
+function faultTreeFromArchitectureDsl() {
+  const children = state.components.map((component) => `${component.id}_FAIL`);
+  if (!children.length)
+    return defaultFaultTreeDsl();
+  return [
+    `TOP TOP "Architecture top event"`,
+    `GATE TOP OR "System hazard from architecture component faults" -> ${children.join(" ")}`,
+    ...state.components.map((component) => `BASIC ${component.id}_FAIL "${component.name} fault contributes to top event" component=${component.id} layer=Architecture`)
+  ].join(`
+`);
+}
 var brainstormColumns = {
   fmea: [
     ["component", "Component"],
@@ -825,6 +980,7 @@ var notepadArtifacts = [
   ["AMR SIL assessment", "sil"],
   ["Quantitative safety", "quantitative"],
   ["FMEDA worksheet", "fmeda"],
+  ["Fault tree analysis", "fault-tree"],
   ["FMEA worksheet", "fmea"],
   ["Safety requirements", "requirements"],
   ["Engineering workflow", "workflow"],
@@ -1258,7 +1414,7 @@ function showView(name, historyMode = "push") {
   $$(".view").forEach((view) => view.classList.remove("active"));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = { notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
+  $("#page-title").textContent = { notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", "fault-tree": "Fault tree analysis", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
   if (historyMode && (historyMode === "replace" || previous !== name))
     updateBrowserLocation(activeWorkspace().id, name, historyMode);
@@ -1392,6 +1548,48 @@ function renderFmeda() {
     return `<tr><td><strong>${esc(row.component)} · ${esc(named("components", row.component))}</strong></td><td>${esc(row.failureMode)}</td><td>${esc(row.localEffect)}</td><td>${esc(row.endEffect)}</td><td><span class="category">${esc(labels[row.classification])}</span></td><td>${esc(row.diagnostic || "—")}</td><td><code>${esc(row.expression)}</code>${error ? `<span class="subtext">${esc(error)}</span>` : ""}</td><td><strong>${esc(value)}</strong></td><td><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-fmeda="${row.id}">✎</button><button class="mini-btn" title="Delete" data-delete-fmeda="${row.id}">×</button></div></td></tr>`;
   }).join("");
 }
+function renderFaultTree() {
+  const editor = $("#fault-tree-source");
+  if (document.activeElement !== editor)
+    editor.value = state.faultTree.dsl;
+  const status = $("#fault-tree-status");
+  const canvas = $("#fault-tree-canvas");
+  const analysis = $("#fault-tree-analysis");
+  const layers = $("#fault-tree-layer");
+  try {
+    let draw2 = function(id, depth = 0) {
+      const node = model.nodes.get(id);
+      const hidden = state.faultTree.activeLayer !== "All" && node.layer !== state.faultTree.activeLayer && node.children.length === 0;
+      if (hidden)
+        return "";
+      const gate = node.kind === "basic" ? "BASIC" : node.gate;
+      const children = node.children.map((child) => draw2(child, depth + 1)).filter(Boolean).join("");
+      return `<article class="fault-node ${node.kind}" style="--depth:${depth}">
+        <div class="fault-node-card"><span class="fault-gate">${esc(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
+        ${children ? `<div class="fault-children">${children}</div>` : ""}
+      </article>`;
+    };
+    var draw = draw2;
+    const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
+    const cut = faultTreeCutSets(model);
+    if (!model.layers.includes(state.faultTree.activeLayer))
+      state.faultTree.activeLayer = "All";
+    layers.innerHTML = model.layers.map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${esc(layer)}</option>`).join("");
+    status.className = "render-status success";
+    status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
+    canvas.innerHTML = draw2(model.top);
+    const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map((id) => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map((id) => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
+    analysis.innerHTML = `<div class="fault-analysis-grid">
+      <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, or NOR are present. The diagram is rendered and validated, but minimal cut sets are reported only for coherent portions." : "Minimal cut sets are reduced so supersets are removed."}</p></section>
+      <section><h3>Model quality</h3><p>${model.warnings.length ? model.warnings.map(esc).join(" ") : "All declared nodes are reachable from the top event."}</p></section>
+    </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
+  } catch (error) {
+    status.className = "render-status error";
+    status.textContent = "FTA model error";
+    canvas.innerHTML = `<p>${esc(error.message)}</p>`;
+    analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
+  }
+}
 function renderHara() {
   $("#hara-count").textContent = state.hara.length;
   $("#hara-summary").innerHTML = ["QM", "ASIL A", "ASIL B", "ASIL C", "ASIL D"].map((asil) => `<div class="hara-stat"><strong>${state.hara.filter((row) => deriveAsil(row.severity, row.exposure, row.controllability) === asil).length}</strong><span>${asil} events</span></div>`).join("");
@@ -1504,6 +1702,7 @@ var FEATURE_RENDERERS = [
   renderSil,
   renderQuantitative,
   renderFmeda,
+  renderFaultTree,
   renderArchitecture
 ];
 function renderAll() {
@@ -2395,6 +2594,32 @@ $("#sync-fmeda-btn").addEventListener("click", () => {
   }
   save();
   alert(`${byComponent.size} FMEDA component rate${byComponent.size === 1 ? "" : "s"} synced to quantitative safety.`);
+});
+$("#fault-tree-source").addEventListener("input", (event) => {
+  state.faultTree.dsl = event.target.value;
+  persistState();
+  renderFaultTree();
+});
+$("#fault-tree-save-btn").addEventListener("click", () => {
+  try {
+    state.faultTree.dsl = $("#fault-tree-source").value;
+    parseFaultTreeDsl(state.faultTree.dsl);
+    save();
+  } catch (error) {
+    handleFormError(error);
+  }
+});
+$("#fault-tree-generate-btn").addEventListener("click", () => {
+  if (!state.components.length && !confirm("No architecture components are imported yet. Generate a starter fault tree instead?"))
+    return;
+  state.faultTree.dsl = faultTreeFromArchitectureDsl();
+  state.faultTree.activeLayer = "All";
+  save();
+});
+$("#fault-tree-layer").addEventListener("change", (event) => {
+  state.faultTree.activeLayer = event.target.value;
+  persistState();
+  renderFaultTree();
 });
 $("#parse-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value;

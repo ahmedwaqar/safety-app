@@ -341,7 +341,7 @@ try {
   });
 
   await test("navigation buttons switch all application views", async () => {
-    for (const view of ["notepad", "workflow", "fmea", "fmeda", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
+    for (const view of ["notepad", "workflow", "fmea", "fmeda", "fault-tree", "hara", "sil", "quantitative", "hazards", "situations", "requirements", "architecture", "overview"]) {
       await click(`[data-view="${view}"]`);
       assert(await evaluate(`document.querySelector("#${view}-view").classList.contains("active")`), `${view} view did not activate`);
       assert(await evaluate(`document.querySelector("#add-fmea-row-btn").hidden`) === (view !== "fmea"), `Add FMEA row visibility was incorrect in ${view} view`);
@@ -851,6 +851,55 @@ try {
     await click("#parse-btn");
     assert(await count("#component-list .component-item") === 2, "PlantUML import did not update components");
     assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "PlantUML alias is missing");
+  });
+
+  await test("fault tree analysis supports DSL gates, layers, architecture generation, and qualitative cuts", async () => {
+    await click('[data-view="fault-tree"]');
+    assert(await evaluate(`document.querySelector("#fault-tree-view").classList.contains("active")`), "fault tree view did not open");
+    await click("#fault-tree-generate-btn");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_FAIL")`), "architecture-generated fault tree did not include imported components");
+    assert(await count("#fault-tree-canvas .fault-node.basic") === 2, "architecture-generated fault tree did not render basic events");
+
+    const dsl = `TOP TOP "Loss of safety function"
+GATE TOP OR "Top combinations" -> LOGIC VOTE INHIBIT NORCASE
+GATE LOGIC AND "Both channels fail" -> A B
+GATE VOTE KOFN:2/3 "Two of three sensors fail" -> S1 S2 S3
+GATE INHIBIT NAND "Inhibited by diagnostic logic" -> D1 D2
+GATE NORCASE NOR "No valid command path" -> C1 C2
+GATE ALT XOR "Alternative latent condition" -> X1 X2
+BASIC A "Channel A dangerous failure" component=TEST_CTRL layer=Logic
+BASIC B "Channel B dangerous failure" component=TEST_ARM layer=Logic
+BASIC S1 "Sensor one dangerous failure" layer=Sensors
+BASIC S2 "Sensor two dangerous failure" layer=Sensors
+BASIC S3 "Sensor three dangerous failure" layer=Sensors
+BASIC D1 "Diagnostic input stuck" layer=Diagnostics
+BASIC D2 "Diagnostic output stuck" layer=Diagnostics
+BASIC C1 "Command path one unavailable" layer=Command
+BASIC C2 "Command path two unavailable" layer=Command
+BASIC X1 "Alternative event one" layer=Latent
+BASIC X2 "Alternative event two" layer=Latent`;
+    await fill("#fault-tree-source", dsl);
+    await retry(async () => { assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("minimal cut set")`), "fault tree qualitative analysis did not run"); });
+    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("KOFN:2/3")`), "K-of-N gate was not rendered");
+    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("NAND") && document.querySelector("#fault-tree-canvas").textContent.includes("NOR") && document.querySelector("#fault-tree-source").value.includes("XOR")`), "standard logical gates were not accepted");
+    assert(await evaluate(`document.querySelector("#fault-tree-analysis").textContent.includes("Non-coherent gates")`), "non-coherent gate guidance was missing");
+    await fill("#fault-tree-layer", "Sensors");
+    assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Sensors", "fault tree layer selection was not retained");
+    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Sensor one dangerous failure")`), "fault tree layer did not render matching basic events");
+    await fill("#fault-tree-layer", "All");
+    await evaluate(`(() => {
+      const ids = Array.from({ length: 120 }, (_, index) => "E" + String(index + 1).padStart(3, "0"));
+      const dsl = ["TOP TOP \\"Large top event\\"", "GATE TOP OR \\"Large generated tree\\" -> " + ids.join(" "), ...ids.map(id => "BASIC " + id + " \\"Generated basic event " + id + "\\" layer=Large")].join("\\n");
+      const editor = document.querySelector("#fault-tree-source");
+      editor.value = dsl;
+      editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: dsl }));
+    })()`);
+    assert(await count("#fault-tree-canvas .fault-node.basic") === 120, "large fault tree did not render hundreds of nodes");
+    assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("120 minimal cut sets")`), "large fault tree qualitative analysis did not complete");
+    await fill("#fault-tree-source", `TOP TOP "Broken"
+GATE TOP AND "Missing child" -> MISSING`);
+    assert(await evaluate(`document.querySelector("#fault-tree-status").textContent`) === "FTA model error", "fault tree validation error was not shown");
+    await fill("#fault-tree-source", dsl);
   });
 
   await test("PlantUML editor autocompletes keywords and snippets", async () => {

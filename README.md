@@ -29,6 +29,7 @@ The software is provided **as is**, without warranty of any kind and without lia
 | AMR SIL assessment | Estimate a target Safety Integrity Level for AMR safety functions with a transparent C/F/P/W risk graph |
 | Quantitative safety | Connect reliability inputs to architecture components, calculate residual dangerous failure rates, estimate PFH or PFDavg, and review redundancy needs |
 | FMEDA worksheet | Classify architecture-linked hardware failure modes, evaluate symbolic failure-rate expressions, and roll up λS, λDD, λDU, DC, and SFF |
+| Fault tree analysis | Model top events with a DSL, render nested/layered fault trees, generate starting trees from architecture, and derive qualitative minimal cut sets |
 | ISO 26262 HARA | Create hazardous events, classify severity (`S0`-`S3`), exposure (`E0`-`E4`), and controllability (`C0`-`C3`), then derive ASIL automatically |
 | Safety goals | Define top-level safety objectives with ASIL, safe state, FTTI, and hazardous-event traceability |
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
@@ -282,6 +283,21 @@ FMEDA quality depends on credible source data, failure-mode distributions, diagn
 
 Beginner lesson: [`training/fmeda-for-beginners.md`](training/fmeda-for-beginners.md).
 
+### Fault Tree Analysis
+
+Use **Fault tree analysis** to model top events deductively with a domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, and standard logical gates including `AND`, `OR`, `NAND`, `NOR`, `XOR`, `NOT`, and `KOFN:k/n`.
+
+```text
+TOP TOP "Loss of safety function"
+GATE TOP OR "Top combinations" -> LOGIC VOTE
+GATE LOGIC AND "Both channels fail" -> A B
+GATE VOTE KOFN:2/3 "Two of three sensors fail" -> S1 S2 S3
+BASIC A "Channel A dangerous failure" component=PLC layer=Logic
+BASIC B "Channel B dangerous failure" component=CTRL layer=Logic
+```
+
+The app validates duplicate identifiers, unsupported gates, missing children, unreachable nodes, and cycles. Qualitative analysis derives reduced minimal cut sets for coherent portions of the tree and flags non-coherent constructs such as `NOT`, `NAND`, and `NOR` for expert review.
+
 ### FMEA Worksheet
 
 Use **Add failure mode** to record:
@@ -348,7 +364,7 @@ Portable project files use a versioned JSON envelope:
 }
 ```
 
-The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, HARA records, FMEA rows, safety goals, requirements, and lifecycle-assurance records. The JSON format is platform-independent and can be moved between browsers and operating systems.
+The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, fault tree DSL, HARA records, FMEA rows, safety goals, requirements, and lifecycle-assurance records. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
 Project data is cached in browser `localStorage`, while each tab keeps its own open-project list and active-project selection in `sessionStorage`. In server mode, the browser registry is also mirrored through the `/api/projects` project service to `.praxis-data/projects.json`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
 
@@ -366,6 +382,7 @@ Key rules:
 - Dangerous fractions, diagnostic coverage, and beta factors are between `0` and `1`.
 - Proof-test intervals are positive hours.
 - FMEDA symbols use identifier syntax and symbolic expressions reject unknown names, unsupported characters, division by zero, and negative results.
+- Fault tree DSL rejects duplicate identifiers, unsupported gates, missing children, and cycles.
 - Passed V&V records require an actual result and approved evidence; failed records require a linked deviation.
 - Closed deviations and hazards require dispositions or controls plus approved closure evidence.
 - Approved changes and completed reviews require impact or decision records plus approved evidence.
@@ -382,7 +399,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, qualitative cut sets, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
 
 Compile-check the browser and server entry points:
 
