@@ -1485,7 +1485,16 @@ function renderFaultTreeBuilder() {
   let model;
   try { model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl); } catch (e) { model = { top: "", nodes: new Map(), layers: ["All"], warnings: [] }; }
   layerSel.innerHTML = (model.layers || ["All"]).map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
-  inputsSel.innerHTML = [...(model.nodes ? model.nodes.keys() : [])].map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  // persist custom, freeform event names so they survive re-renders
+  state.faultTree.customInputs = state.faultTree.customInputs || [];
+  const customInputs: string[] = state.faultTree.customInputs || [];
+  // helper to refresh the inputs multi-select combining model nodes and custom inputs
+  function updateInputsOptions(){
+    const nodeIds = model && model.nodes ? [...model.nodes.keys()] : [];
+    const union = Array.from(new Set([...nodeIds, ...customInputs]));
+    inputsSel.innerHTML = union.map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  }
+  updateInputsOptions();
   // helper: create a unique id not colliding with existing nodes
   const existingIds = new Set(model.nodes ? [...model.nodes.keys()] : []);
   function makeUniqueId(base = 'G'){
@@ -1501,6 +1510,35 @@ function renderFaultTreeBuilder() {
 
   const insertBtn = $("#fault-tree-insert-btn") as HTMLButtonElement;
   if (!insertBtn) return;
+  // wire the freeform input add button and enter key
+  const newInputField = $("#fault-tree-builder-new-input") as HTMLInputElement | null;
+  const addInputBtn = $("#fault-tree-builder-add-input") as HTMLButtonElement | null;
+  function addCustomInput(valueRaw: string){
+    const v = String(valueRaw || "").trim();
+    if(!v) return;
+    // normalise to identifier-like token
+    const token = v.replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]/g, '');
+    if(!token) return;
+    if(!customInputs.includes(token)){
+      customInputs.push(token);
+      state.faultTree.customInputs = customInputs;
+      persistState();
+    }
+    updateInputsOptions();
+    // select the newly added option
+    const opt = Array.from(inputsSel.options).find(o => o.value === token) as HTMLOptionElement | undefined;
+    if(opt){ opt.selected = true; inputsSel.focus(); }
+    if(newInputField) newInputField.value = "";
+  }
+  if(newInputField){
+    newInputField.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){
+        e.preventDefault(); addCustomInput(newInputField.value);
+      }
+    });
+  }
+  if(addInputBtn){ addInputBtn.addEventListener('click', () => addCustomInput(newInputField ? newInputField.value : '')); }
+
   if (!insertBtn.dataset.builderAttached) {
     insertBtn.addEventListener("click", () => {
       const snippetType = ($("#fault-tree-snippet-type") as HTMLSelectElement).value;
@@ -1557,12 +1595,17 @@ function renderFaultTreeBuilder() {
       editor.focus();
       persistState();
       // update model caches and builder lists so new id becomes available immediately
-      try{ model = parseFaultTreeDsl(editor.value || state.faultTree.dsl); existingIds.add(output); inputsSel.innerHTML = [...model.nodes.keys()].map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join(""); }catch(e){}
+      try{
+        model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
+        existingIds.add(output);
+        updateInputsOptions();
+      }catch(e){}
       renderFaultTree();
     });
     insertBtn.dataset.builderAttached = "1";
   }
 }
+
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = tabWorkspaces().map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
