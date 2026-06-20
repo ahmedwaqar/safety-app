@@ -974,8 +974,11 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("KOFN:2/3")`), "K-of-N gate was not rendered");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("NAND") && document.querySelector("#fault-tree-source").value.includes("NOR") && document.querySelector("#fault-tree-source").value.includes("XOR")`), "standard logical gates were not accepted");
     assert(await evaluate(`document.querySelector("#fault-tree-analysis").textContent.includes("Non-coherent gates")`), "non-coherent gate guidance was missing");
-    await fill("#fault-tree-layer", "Sensors");
-    assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Sensors", "fault tree layer selection was not retained");
+    await fill("#fault-tree-source", dsl.replaceAll("layer: Sensors", "layer: Layer 2"));
+    await fill("#fault-tree-layer-count", "4");
+    assert(await evaluate(`document.querySelector("#fault-tree-layer").textContent.includes("Layer 4")`), "configured layer count did not update the layer view");
+    await fill("#fault-tree-layer", "Layer 2");
+    assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Layer 2", "fault tree layer selection was not retained");
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Sensor one dangerous failure")`), "fault tree layer did not render matching basic events");
     await fill("#fault-tree-layer", "All");
     await evaluate(`(() => {

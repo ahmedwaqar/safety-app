@@ -157,39 +157,42 @@ HMI --> CTRL : task selection
     type: OR
     label: "Protective stop unavailable"
     children: [SCAN_FAIL, PLC_FAIL, CTRL_FAIL]
+    layer: Layer 1
   }
 
   gate SCAN_FAIL {
     type: AND
     label: "Scanner channel fails dangerously"
     children: [SCAN_BLIND, SCAN_DIAG_MISSED]
+    layer: Layer 1
   }
 
   basic SCAN_BLIND {
     label: "Scanner protective field not detected"
     component: SCAN
-    layer: Detection
+    layer: Layer 2
   }
 
   basic SCAN_DIAG_MISSED {
     label: "Scanner diagnostic does not detect blind state"
     component: SCAN
-    layer: Detection
+    layer: Layer 2
   }
 
   basic PLC_FAIL {
     label: "Safety PLC does not command safe stop"
     component: PLC
-    layer: Logic
+    layer: Layer 2
   }
 
   basic CTRL_FAIL {
     label: "Robot controller ignores safe-stop command"
     component: CTRL
-    layer: Actuation
+    layer: Layer 3
   }
 }`,
-    activeLayer: "All"
+    activeLayer: "All",
+    layerCount: 3
   },
   notepad: {
     html: "<h3>Engineering notes</h3><p>Capture raw stakeholder observations, calculations, assumptions, and early analysis ideas here.</p>",
@@ -221,7 +224,7 @@ function blankWorkspace() {
     silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
     fmeda: { constants: [], rows: [] },
-    faultTree: { dsl: defaultFaultTreeDsl(), activeLayer: "All" },
+    faultTree: { dsl: defaultFaultTreeDsl(), activeLayer: "All", layerCount: 3 },
     notepad: { html: "", brainstormType: "fmea", brainstormRows: [] },
     workflow: engineeringWorkflowTemplate(),
     customColumns: [],
@@ -260,6 +263,7 @@ function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   });
   workspace.workflow.activities.forEach((activity) => activity.predecessor ??= "");
   workspace.faultTree.activeLayer ??= "All";
+  workspace.faultTree.layerCount = Number.isInteger(workspace.faultTree.layerCount) && workspace.faultTree.layerCount >= 1 && workspace.faultTree.layerCount <= 12 ? workspace.faultTree.layerCount : 3;
   workspace.faultTree.dsl ??= defaultFaultTreeDsl();
   workspace.notepad.brainstormRows.forEach((row) => row.id ??= crypto.randomUUID());
   return workspace;
@@ -841,6 +845,10 @@ function goalBy(id) {
   return state.safetyGoals.find((goal) => goal.id === id);
 }
 var faultTreeGateTypes = new Set(["AND", "OR", "NAND", "NOR", "XOR", "NOT"]);
+function configuredFaultTreeLayers() {
+  const count = Math.max(1, Math.min(12, Number(state.faultTree.layerCount) || 3));
+  return Array.from({ length: count }, (_, index) => `Layer ${index + 1}`);
+}
 function validateFaultTreeGate(id, gate, children, warnings) {
   const count = children.length;
   if (gate === "NOT" && count !== 1)
@@ -870,11 +878,12 @@ function defaultFaultTreeDsl() {
     type: OR
     label: "System-level fault"
     children: [COMPONENT_FAILURE]
+    layer: Layer 1
   }
 
   basic COMPONENT_FAILURE {
     label: "Architecture component failure"
-    layer: System
+    layer: Layer 1
   }
 }`;
 }
@@ -1079,12 +1088,13 @@ function faultTreeFromArchitectureDsl() {
     type: OR
     label: "System hazard from architecture component faults"
     children: [${children.join(", ")}]
+    layer: Layer 1
   }
 
 ${state.components.map((component) => `  basic ${component.id}_FAIL {
     label: "${component.name} fault contributes to top event"
     component: ${component.id}
-    layer: Architecture
+    layer: Layer 1
   }`).join(`
 
 `)}
@@ -1698,6 +1708,7 @@ function renderFaultTree() {
   const canvas = $("#fault-tree-canvas");
   const analysis = $("#fault-tree-analysis");
   const layers = $("#fault-tree-layer");
+  const layerCount = $("#fault-tree-layer-count");
   try {
     let getGateSvg2 = function(gate) {
       const t = String(gate || "").toUpperCase();
@@ -1718,7 +1729,7 @@ function renderFaultTree() {
       return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/></svg>`;
     }, draw2 = function(id, depth = 0) {
       const node = model.nodes.get(id);
-      const hidden = state.faultTree.activeLayer !== "All" && node.layer !== state.faultTree.activeLayer && node.children.length === 0;
+      const hidden = state.faultTree.activeLayer !== "All" && node.layer !== state.faultTree.activeLayer;
       if (hidden)
         return "";
       const gate = node.kind === "basic" ? "BASIC" : node.gate;
@@ -1731,12 +1742,15 @@ function renderFaultTree() {
     var getGateSvg = getGateSvg2, draw = draw2;
     const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
-    if (!model.layers.includes(state.faultTree.activeLayer))
+    const configuredLayers = configuredFaultTreeLayers();
+    layerCount.value = String(state.faultTree.layerCount);
+    if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer))
       state.faultTree.activeLayer = "All";
-    layers.innerHTML = model.layers.map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${esc(layer)}</option>`).join("");
+    layers.innerHTML = ["All", ...configuredLayers].map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success";
     status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
-    canvas.innerHTML = draw2(model.top);
+    const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()].filter((node) => node.layer === state.faultTree.activeLayer).filter((node) => node.id === model.top || ![...model.nodes.values()].some((parent) => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id))).map((node) => node.id);
+    canvas.innerHTML = rootIds.map((id) => draw2(id)).join("") || `<p class="standards-note">No nodes are assigned to ${esc(state.faultTree.activeLayer)}. Add or move nodes with the builder.</p>`;
     const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map((id) => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map((id) => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
     analysis.innerHTML = `<div class="fault-analysis-grid">
       <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. The diagram is rendered and validated, but minimal cut sets are not valid for the complete top event. Use a dedicated Boolean/probabilistic analysis and document the modelling assumptions." : "Minimal cut sets are reduced so supersets are removed. This is qualitative only: independence, common-cause, exposure, and mission-time assumptions still require review."}</p></section>
@@ -1860,11 +1874,6 @@ function renderFaultTreeBuilder() {
   compSel.innerHTML = state.components.length ? `<option value="">No component selected</option>${state.components.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.name)}</option>`).join("")}` : `<option value="">No imported components</option>`;
   compSel.disabled = !state.components.length;
   componentHint.textContent = state.components.length ? "Imported from System architecture." : "Import components in System architecture to link this event.";
-  function updateKofnVisibility() {
-    const kofnSetting = document.querySelector(".fault-tree-kofn-settings");
-    if (kofnSetting)
-      kofnSetting.hidden = gateTypeSel.value !== "KOFN";
-  }
   function updateInputSelectionMode() {
     const singleInput = gateTypeSel.value === "NOT";
     inputsSel.multiple = !singleInput;
@@ -1889,18 +1898,13 @@ function renderFaultTreeBuilder() {
       outputInput.value = makeUniqueId(isBasic ? "BE" : snippetTypeSel.value === "top" ? "TOP" : "G");
       outputInput.dataset.mode = snippetTypeSel.value;
     }
-    updateKofnVisibility();
     updateInputSelectionMode();
   }
   if (!snippetTypeSel.dataset.builderAttached) {
     snippetTypeSel.addEventListener("change", updateBuilderMode);
-    gateTypeSel.addEventListener("change", () => {
-      updateKofnVisibility();
-      updateInputSelectionMode();
-    });
+    gateTypeSel.addEventListener("change", updateInputSelectionMode);
     snippetTypeSel.dataset.builderAttached = "1";
   }
-  updateKofnVisibility();
   function showValidation(message, type = "error") {
     validationDiv.className = `fault-tree-validation ${type}`;
     const icon = type === "error" ? "⚠" : "ⓘ";
@@ -1916,7 +1920,7 @@ function renderFaultTreeBuilder() {
   } catch (e) {
     model = { top: "", nodes: new Map, layers: ["All"], warnings: [] };
   }
-  layerSel.innerHTML = (model.layers || ["All"]).map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
+  layerSel.innerHTML = configuredFaultTreeLayers().map((layer) => `<option value="${esc(layer)}">${esc(layer)}</option>`).join("");
   state.faultTree.customInputs = state.faultTree.customInputs || [];
   const customInputs = state.faultTree.customInputs || [];
   function updateInputsOptions() {
@@ -1924,7 +1928,7 @@ function renderFaultTreeBuilder() {
     const basics = nodes.filter((node) => node.kind === "basic");
     const gates = nodes.filter((node) => node.kind !== "basic");
     const custom = customInputs.filter((id) => !model.nodes?.has(id));
-    const options2 = (items) => items.map((item) => `<option value="${esc(item.id || item)}">${esc(item.id || item)}${item.label ? ` — ${esc(item.label)}` : ""}</option>`).join("");
+    const options2 = (items) => items.map((item) => `<option value="${esc(item.id || item)}">${esc(item.id || item)}${item.label ? ` — ${esc(item.label)}` : ""}${item.layer ? ` [${esc(item.layer)}]` : ""}</option>`).join("");
     inputsSel.innerHTML = [
       basics.length ? `<optgroup label="Basic events">${options2(basics)}</optgroup>` : "",
       gates.length ? `<optgroup label="Nested gates">${options2(gates)}</optgroup>` : "",
@@ -1985,8 +1989,6 @@ function renderFaultTreeBuilder() {
     insertBtn.addEventListener("click", () => {
       const snippetType = $("#fault-tree-snippet-type").value;
       const gateType = $("#fault-tree-builder-gate-type").value;
-      const k = $("#fault-tree-builder-k").value;
-      const n = $("#fault-tree-builder-n").value;
       const layer = layerSel.value || "Logic";
       const component = compSel.value || "";
       let output = (outputInput.value || makeUniqueId("G")).trim();
@@ -2017,18 +2019,6 @@ function renderFaultTreeBuilder() {
           showValidation(`${gateType} gate requires at least 2 inputs. You selected ${selectedInputs.length}. Use Ctrl/Cmd+Click to select multiple events.`, "error");
           return;
         }
-        if (gateType === "KOFN") {
-          const ki = Number($("#fault-tree-builder-k").value || 1);
-          const ni = Number($("#fault-tree-builder-n").value || 2);
-          if (!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni) {
-            showValidation("K-of-N: must have 1 ≤ K ≤ N with both as integers. Adjust K and N fields.");
-            return;
-          }
-          if (ni !== selectedInputs.length) {
-            showValidation(`K-of-N gate expects N=${ni} inputs but you selected ${selectedInputs.length}. Adjust N or select ${ni} inputs.`);
-            return;
-          }
-        }
       }
       clearValidation();
       const editor = $("#fault-tree-source");
@@ -2055,12 +2045,9 @@ fault_tree "${label}" {
 }
 `;
       } else {
-        let typeTxt = gateType;
-        if (gateType === "KOFN")
-          typeTxt = `KOFN:${k}/${n}`;
         snippet = `
   gate ${output} {
-    type: ${typeTxt}
+    type: ${gateType}
     label: "${label}"
     children: [${selectedInputs.join(", ")}]
     layer: ${layer}
@@ -3111,6 +3098,15 @@ $("#fault-tree-layer").addEventListener("change", (event) => {
   state.faultTree.activeLayer = event.target.value;
   persistState();
   renderFaultTree();
+});
+$("#fault-tree-layer-count").addEventListener("change", (event) => {
+  const value = Number(event.target.value);
+  if (!Number.isInteger(value) || value < 1 || value > 12)
+    return alert("Layer count must be an integer between 1 and 12.");
+  state.faultTree.layerCount = value;
+  if (!configuredFaultTreeLayers().includes(state.faultTree.activeLayer))
+    state.faultTree.activeLayer = "All";
+  save();
 });
 $("#parse-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value;

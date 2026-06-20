@@ -319,7 +319,7 @@
         </div>
         <div class="fault-tree-grid">
           <section class="editor-card">
-            <div class="editor-top"><span>fault-tree.fta</span><div class="editor-actions"><label class="fault-layer-control"><span>Layer</span><select id="fault-tree-layer"></select></label><span class="render-status" id="fault-tree-status">Ready</span></div></div>
+            <div class="editor-top"><span>fault-tree.fta</span><div class="editor-actions"><label class="fault-layer-control"><span>Layers</span><input id="fault-tree-layer-count" type="number" min="1" max="12" value="3" title="Number of logical layers" /></label><label class="fault-layer-control"><span>View</span><select id="fault-tree-layer"></select></label><span class="render-status" id="fault-tree-status">Ready</span></div></div>
             <textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off"></textarea>
             <div class="fault-tree-builder">
               <style>
@@ -335,6 +335,7 @@
                 .fault-tree-validation{margin-top:12px;padding:10px;border-radius:4px;display:none;font-size:13px}
                 .fault-tree-validation.error{display:block;background:#fee;border:1px solid #fcc;color:#c33}
                 .fault-tree-validation.warning{display:block;background:#fef3cd;border:1px solid #ffc107;color:#856404}
+                .fault-node-card small{color:var(--muted)}
               </style>
               <div class="fault-tree-builder-row fault-tree-builder-mode">
                 <label><span>Add to tree</span><select id="fault-tree-snippet-type"><option value="basic">Basic event</option><option value="gate">Nested gate</option><option value="top">Top event</option></select><small id="fault-tree-builder-mode-help">A terminal failure event linked to a component.</small></label>
@@ -344,8 +345,7 @@
                 <label><span>Layer</span><select id="fault-tree-builder-layer"></select></label>
               </div>
               <div class="fault-tree-builder-row fault-tree-gate-fields" hidden>
-                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND — all inputs</option><option value="OR">OR — any input</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR</option><option value="NOT">NOT — one input</option><option value="KOFN">K-of-N voting</option></select></label>
-                <label class="fault-tree-kofn-settings" hidden><span>K / N</span><div><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="2" value="2" /></div></label>
+                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND — all inputs</option><option value="OR">OR — any input</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR</option><option value="NOT">NOT — one input</option></select></label>
               </div>
               <div class="fault-tree-builder-inputs-panel fault-tree-gate-fields" hidden>
                 <label class="inputs-select"><span id="fault-tree-inputs-label">Select events or nested gates</span><select id="fault-tree-builder-inputs" multiple></select><small id="fault-tree-inputs-hint">AND and OR gates accept multiple selected inputs.</small></label>
@@ -672,7 +672,7 @@
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
           <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>
           <section><h3>FMEDA symbols</h3><p>Use names such as <code>lambda_scanner</code>. Expressions accept constants, numbers, parentheses, and <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>.</p></section>
-          <section><h3>Fault tree DSL</h3><p>Use a <code>fault_tree</code> block with <code>top:</code>, <code>gate</code> blocks, and <code>basic</code> blocks to draw layered trees. Supported gates include <code>AND</code>, <code>OR</code>, <code>NAND</code>, <code>NOR</code>, <code>XOR</code>, <code>NOT</code>, and <code>KOFN:k/n</code>.</p></section>
+          <section><h3>Fault tree DSL</h3><p>Use a <code>fault_tree</code> block with <code>top:</code>, <code>gate</code> blocks, and <code>basic</code> blocks to draw layered trees. The builder provides <code>AND</code>, <code>OR</code>, <code>NAND</code>, <code>NOR</code>, <code>XOR</code>, and <code>NOT</code> gates. Existing DSL files containing <code>KOFN:k/n</code> remain readable for compatibility.</p></section>
           <section><h3>Lifecycle closure</h3><p>Use Lifecycle assurance for V&amp;V execution, approved evidence, deviations, change impact, baselines, reviews, hazard closure, RAM objectives, interfaces, and safety-case claims.</p></section>
           <section><h3>Project files</h3><p>Use the <strong>File</strong> menu to create, open, save, close, or delete a project. Closing removes it only from the current tab while preserving it for other tabs and future reopening.</p></section>
         </div>
