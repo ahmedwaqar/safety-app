@@ -143,8 +143,7 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 ## Suggested Workflow
 
 1. Open **Engineering workflow** to plan phases, activities, safety checkpoints, gates, and evidence.
-2. Open **Architecture**, paste or update the PlantUML model, and select **Render diagram**.
-3. Select **Import components** so PlantUML aliases become available as references in the analysis.
+2. Open **Architecture**, paste or update the PlantUML model, and select **Render diagram**. Component declarations automatically become available as references throughout the analysis.
 4. Add the relevant **Operational situations**.
 5. Maintain the reusable **Hazard catalogue**.
 6. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
@@ -184,7 +183,7 @@ Paste PlantUML into the editor and select:
 
 - Use the autocomplete menu while typing common PlantUML keywords. Select a snippet with `ArrowUp` / `ArrowDown` and insert it with `Enter` or `Tab`.
 - **Render diagram** to generate an SVG preview with the attached JAR.
-- **Import components** to extract references for FMEA rows and safety requirements.
+- Component declarations automatically define references for FMEA rows, requirements, and fault-tree basic events as you edit the architecture.
 
 The importer recognizes `component`, `node`, `database`, `queue`, `cloud`, `rectangle`, `artifact`, `package`, and `frame` declarations.
 
@@ -285,7 +284,7 @@ Beginner lesson: [`training/fmeda-for-beginners.md`](training/fmeda-for-beginner
 
 ### Fault Tree Analysis
 
-Use **Fault tree analysis** to model top events deductively with a structured domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, and standard logical gates including `AND`, `OR`, `NAND`, `NOR`, `XOR`, `NOT`, and `KOFN:k/n`.
+Use **Fault tree analysis** to model top events deductively with a structured domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, top-down connector layout, and zoom controls. The builder provides `AND`, `OR`, `NAND`, `NOR`, `XOR`, and `NOT`; existing DSL files with `KOFN:k/n` remain readable.
 
 ```text
 fault_tree "Loss of safety function" {

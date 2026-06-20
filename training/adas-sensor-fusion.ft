@@ -5,46 +5,46 @@ fault_tree "Fusion: unsafe object track accepted" {
     type: AND
     label: "Unsafe fused track is accepted and the safety response does not intervene"
     children: [FUSION_PRODUCES_UNSAFE_TRACK, TRACK_MONITOR_MISSES]
-    layer: Vehicle
+    layer: Layer 1
   }
 
   gate FUSION_PRODUCES_UNSAFE_TRACK {
     type: OR
     label: "Fusion produces unsafe object state"
     children: [FUSION_ALGORITHM_DEFECT, SHARED_TIME_SYNC_FAILURE, SHARED_CALIBRATION_ERROR]
-    layer: Fusion
+    layer: Layer 1
   }
 
   gate TRACK_MONITOR_MISSES {
     type: AND
     label: "Independent plausibility monitor and fallback both fail"
     children: [PLAUSIBILITY_MONITOR_DF, FALLBACK_INHIBITED]
-    layer: SafetyMechanism
+    layer: Layer 1
   }
 
   basic FUSION_ALGORITHM_DEFECT {
     label: "Fusion algorithm produces an unsafe track"
     component: FUSION_ECU
-    layer: Fusion
+    layer: Layer 2
   }
   basic SHARED_TIME_SYNC_FAILURE {
     label: "Shared time source causes correlated sensor misalignment"
     component: TIME_SYNC
-    layer: CommonCause
+    layer: Layer 2
   }
   basic SHARED_CALIBRATION_ERROR {
     label: "Shared calibration release invalidates sensor geometry"
     component: CONFIGURATION
-    layer: CommonCause
+    layer: Layer 2
   }
   basic PLAUSIBILITY_MONITOR_DF {
     label: "Independent track-plausibility monitor fails dangerously"
     component: SAFETY_MONITOR
-    layer: SafetyMechanism
+    layer: Layer 2
   }
   basic FALLBACK_INHIBITED {
     label: "Fallback degradation or minimal-risk strategy is unavailable"
     component: FALLBACK_CONTROLLER
-    layer: SafetyMechanism
+    layer: Layer 2
   }
 }

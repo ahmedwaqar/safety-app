@@ -845,11 +845,10 @@ try {
     assert(await evaluate(`document.querySelector("#quant-body").textContent.includes("8.00e-8")`), "FMEDA handoff did not update scanner λDU rate");
   });
 
-  await test("PlantUML import updates referenced components", async () => {
+  await test("PlantUML architecture automatically defines component context", async () => {
     await click('[data-view="architecture"]');
     await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
-    await click("#parse-btn");
-    assert(await count("#component-list .component-item") === 2, "PlantUML import did not update components");
+    assert(await count("#component-list .component-item") === 2, "PlantUML architecture did not update components automatically");
     assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "PlantUML alias is missing");
   });
 
@@ -857,9 +856,14 @@ try {
     await click('[data-view="fault-tree"]');
     assert(await evaluate(`document.querySelector("#fault-tree-view").classList.contains("active")`), "fault tree view did not open");
     await click("#fault-tree-generate-btn");
-    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_FAIL")`), "architecture-generated fault tree did not include imported components");
-    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes('fault_tree "Architecture top event"')`), "architecture-generated fault tree did not use structured DSL");
-    assert(await count("#fault-tree-canvas .fault-node.basic") === 2, "architecture-generated fault tree did not render basic events");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_INCORRECT_OUTPUT") && document.querySelector("#fault-tree-source").value.includes("TEST_ARM_FAIL_TO_ACTUATE")`), "architecture-generated fault tree did not derive component-specific malfunctioning behaviours");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes('fault_tree "Architecture-derived malfunctioning behaviour starter"')`), "architecture-generated fault tree did not use the starter model");
+    assert(await count("#fault-tree-canvas .fault-node.basic") === 6, "architecture-generated fault tree did not render starter failure modes");
+    assert(await count("#fault-tree-connectors path") > 0, "fault tree did not render connector paths");
+    await click("#fault-tree-zoom-in");
+    assert(await evaluate(`document.querySelector("#fault-tree-zoom-value").textContent`) === "110%", "fault tree zoom-in did not update the rendered view");
+    await click("#fault-tree-zoom-reset");
+    assert(await evaluate(`document.querySelector("#fault-tree-zoom-value").textContent`) === "100%", "fault tree zoom reset did not restore the rendered view");
     assert(await evaluate(`document.querySelector("#fault-tree-snippet-type").value`) === "basic", "basic event is not the builder default");
     assert(await evaluate(`document.querySelector(".fault-tree-gate-fields").hidden`), "gate controls are visible while adding a basic event");
     assert(await evaluate(`[...document.querySelector("#fault-tree-builder-component").options].some(option => option.value === "TEST_CTRL")`), "architecture components are not available in the basic-event builder");
@@ -871,7 +875,7 @@ try {
     await fill("#fault-tree-snippet-type", "gate");
     assert(!await evaluate(`document.querySelector(".fault-tree-gate-fields").hidden`), "gate controls did not appear for gate mode");
     assert(await evaluate(`document.querySelector(".fault-tree-basic-field").hidden`), "basic-only controls remained visible in gate mode");
-    assert(await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple && document.querySelector("#fault-tree-builder-inputs").textContent.includes("TEST_CTRL_FAIL")`), "AND/OR gate input list does not support multiple architecture-linked events");
+    assert(await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple && document.querySelector("#fault-tree-builder-inputs").textContent.includes("TEST_CTRL_INCORRECT_OUTPUT")`), "AND/OR gate input list does not support multiple architecture-linked events");
     assert(await evaluate(`[...document.querySelectorAll("#fault-tree-builder-inputs optgroup")].some(group => group.label === "Nested gates")`), "nested gates are not offered as gate inputs");
     await fill("#fault-tree-builder-gate-type", "NOT");
     assert(!await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple`), "NOT gate should restrict the input picker to one event");

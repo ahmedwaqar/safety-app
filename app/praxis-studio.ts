@@ -218,6 +218,7 @@ let activeNotepadCell: HTMLTableCellElement | null = null;
 let notepadSaveTimer: ReturnType<typeof setTimeout>;
 let notepadStatusTimer: ReturnType<typeof setTimeout>;
 let notepadDirty = false;
+let faultTreeZoom = 1;
 
 // Shared DOM and presentation helpers.
 const $ = <T extends Element = any>(selector: string, parent: ParentNode = document): T => parent.querySelector(selector) as T;
@@ -861,24 +862,68 @@ function faultTreeCutSets(model: FaultTreeModel, id = model.top): { sets: string
   }
   return { sets: minimizeCutSets(sets), nonCoherent };
 }
+function componentsFromPlantUml(source: string) {
+  const components: Array<{ id: string; name: string }> = []; const seen = new Set<string>();
+  const pattern = /^\s*(?:component|node|database|queue|cloud|rectangle|artifact|package|frame)\s+(?:"([^"]+)"|([^\s{]+))(?:\s+as\s+([A-Za-z0-9_.-]+))?/gim;
+  for (const match of String(source || "").matchAll(pattern)) {
+    const name = match[1] || match[2]; const id = match[3] || name.replace(/\W+/g, "_").toUpperCase();
+    if (!seen.has(id.toLowerCase())) { components.push({ id, name }); seen.add(id.toLowerCase()); }
+  }
+  return components;
+}
+function starterFailureModes(component: { id: string; name: string }) {
+  const text = `${component.id} ${component.name}`.toLowerCase();
+  if (/(camera|radar|lidar|sensor|scanner|gnss|locali[sz]|perception)/.test(text)) return [
+    ["NO_OUTPUT", "no output or loss of data"], ["INVALID_OUTPUT", "dangerous invalid or implausible output"], ["STALE_OUTPUT", "stale output accepted as current"]
+  ];
+  if (/(plc|ecu|controller|compute|processor|cpu|software|fusion|logic)/.test(text)) return [
+    ["UNAVAILABLE", "unavailable or halted execution"], ["INCORRECT_OUTPUT", "dangerous incorrect command or decision"], ["TIMING_FAILURE", "timing or watchdog failure"]
+  ];
+  if (/(brake|steer|motor|arm|actuator|drive|relay|valve|tool)/.test(text)) return [
+    ["FAIL_TO_ACTUATE", "fails to execute the demanded action"], ["UNINTENDED_ACTUATION", "unintended actuation or motion"], ["SAFE_STATE_NOT_REACHED", "fails to reach or maintain the safe state"]
+  ];
+  if (/(can|ethernet|network|bus|gateway|communication|comm)/.test(text)) return [
+    ["LOSS_OF_COMMUNICATION", "loss of communication"], ["CORRUPTED_DATA", "corrupted or inconsistent data accepted"], ["STALE_DATA", "stale message accepted as current"]
+  ];
+  if (/(power|battery|supply|voltage|ground)/.test(text)) return [
+    ["LOSS_OF_POWER", "loss of required power"], ["OUT_OF_TOLERANCE", "out-of-tolerance supply output"], ["PROTECTION_FAILURE", "protection or monitoring failure"]
+  ];
+  if (/(hmi|display|operator|button|switch|pedal)/.test(text)) return [
+    ["UNINTENDED_COMMAND", "unintended command"], ["COMMAND_UNAVAILABLE", "required command unavailable"], ["INCORRECT_INDICATION", "incorrect or missing mode indication"]
+  ];
+  return [["UNAVAILABLE", "unavailable or no output"], ["INCORRECT_OUTPUT", "dangerous incorrect output"], ["TIMING_OR_INTERFACE", "timing or interface failure"]];
+}
 function faultTreeFromArchitectureDsl() {
-  const children = state.components.map(component => `${component.id}_FAIL`);
-  if (!children.length) return defaultFaultTreeDsl();
-  return `fault_tree "Architecture top event" {
+  const components = state.components;
+  if (!components.length) return defaultFaultTreeDsl();
+  const componentId = (component: { id: string }) => String(component.id).replace(/[^A-Za-z0-9_]/g, "_").toUpperCase();
+  const groups = components.map(component => `${componentId(component)}_MALFUNCTION`);
+  return `fault_tree "Architecture-derived malfunctioning behaviour starter" {
+  # Starter only: refine the top event, operational context, dependencies, and safety mechanisms.
   top: TOP
 
   gate TOP {
     type: OR
-    label: "System hazard from architecture component faults"
+    label: "Any selected component malfunction contributes to the top event"
+    children: [${groups.join(", ")}]
+    layer: Layer 1
+  }
+
+${components.map(component => {
+  const id = componentId(component); const modes = starterFailureModes(component); const children = modes.map(([suffix]) => `${id}_${suffix}`);
+  return `  gate ${id}_MALFUNCTION {
+    type: OR
+    label: "${component.name} malfunctioning behaviour"
     children: [${children.join(", ")}]
     layer: Layer 1
   }
 
-${state.components.map(component => `  basic ${component.id}_FAIL {
-    label: "${component.name} fault contributes to top event"
+${modes.map(([suffix, label]) => `  basic ${id}_${suffix} {
+    label: "${component.name}: ${label}"
     component: ${component.id}
-    layer: Layer 1
-  }`).join("\n\n")}
+    layer: Layer 2
+  }`).join("\n\n")}`;
+}).join("\n\n")}
 }`;
 }
 
@@ -1383,22 +1428,47 @@ function renderFaultTree() {
     if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map(layer => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success"; status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
-    function draw(id, depth = 0) {
-      const node = model.nodes.get(id)!;
-      const hidden = state.faultTree.activeLayer !== "All" && node.layer !== state.faultTree.activeLayer;
-      if (hidden) return "";
-      const gate = node.kind === "basic" ? "BASIC" : node.gate;
-      const children = node.children.map(child => draw(child, depth + 1)).filter(Boolean).join("");
-      return `<article class="fault-node ${node.kind}" style="--depth:${depth}">
-        <div class="fault-node-card"><span class="fault-gate">${getGateSvg(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
-        ${children ? `<div class="fault-children">${children}</div>` : ""}
-      </article>`;
-    }
     const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()]
       .filter(node => node.layer === state.faultTree.activeLayer)
       .filter(node => node.id === model.top || ![...model.nodes.values()].some(parent => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id)))
       .map(node => node.id);
-    canvas.innerHTML = rootIds.map(id => draw(id)).join("") || `<p class="standards-note">No nodes are assigned to ${esc(state.faultTree.activeLayer)}. Add or move nodes with the builder.</p>`;
+    type LayoutBranch = { id: string; depth: number; children: LayoutBranch[]; x: number; y: number };
+    const visible = (id: string) => state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
+    function branchFor(id: string, depth = 0): LayoutBranch | null {
+      if (!visible(id)) return null;
+      const node = model.nodes.get(id)!;
+      return { id, depth, children: node.children.map(child => branchFor(child, depth + 1)).filter(Boolean) as LayoutBranch[], x: 0, y: 0 };
+    }
+    const branches = rootIds.map(id => branchFor(id)).filter(Boolean) as LayoutBranch[];
+    let cursor = 140; let maxDepth = 0;
+    function place(branch: LayoutBranch) {
+      maxDepth = Math.max(maxDepth, branch.depth);
+      if (!branch.children.length) { branch.x = cursor; cursor += 250; }
+      else { branch.children.forEach(place); branch.x = (branch.children[0].x + branch.children[branch.children.length - 1].x) / 2; }
+      branch.y = 34 + branch.depth * 176;
+    }
+    branches.forEach(branch => { place(branch); cursor += 80; });
+    function drawConnectors(branch: LayoutBranch): string {
+      const paths = branch.children.map(child => {
+        const joinY = branch.y + 132 + Math.max(20, (child.y - branch.y - 132) / 2);
+        return `<path d="M ${branch.x} ${branch.y + 132} V ${joinY} H ${child.x} V ${child.y}"/>${drawConnectors(child)}`;
+      });
+      return paths.join("");
+    }
+    function drawNode(branch: LayoutBranch): string {
+      const node = model.nodes.get(branch.id)!;
+      const gate = node.kind === "basic" ? "BASIC EVENT" : node.gate || "GATE";
+      return `<article class="fault-node ${node.kind}" style="left:${branch.x}px;top:${branch.y}px">
+        <div class="fault-node-card"><span class="fault-gate">${getGateSvg(gate)}</span><span class="fault-gate-label">${esc(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>${esc(node.layer)}</small></div>
+      </article>${branch.children.map(drawNode).join("")}`;
+    }
+    if (!branches.length) canvas.innerHTML = `<p class="standards-note">No nodes are assigned to ${esc(state.faultTree.activeLayer)}. Add or move nodes with the builder.</p>`;
+    else {
+      const width = Math.max(760, cursor + 120); const height = Math.max(250, 190 + maxDepth * 176);
+      const zoomedWidth = Math.ceil(width * faultTreeZoom); const zoomedHeight = Math.ceil(height * faultTreeZoom);
+      canvas.innerHTML = `<div class="fault-tree-viewport" style="width:${zoomedWidth}px;height:${zoomedHeight}px"><div class="fault-tree-layout" style="width:${width}px;height:${height}px;transform:scale(${faultTreeZoom})"><svg class="fault-tree-connectors" width="${width}" height="${height}" aria-hidden="true">${branches.map(drawConnectors).join("")}</svg>${branches.map(drawNode).join("")}</div></div>`;
+    }
+    $("#fault-tree-zoom-value").textContent = `${Math.round(faultTreeZoom * 100)}%`;
     const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map(id => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map(id => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
     analysis.innerHTML = `<div class="fault-analysis-grid">
       <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. The diagram is rendered and validated, but minimal cut sets are not valid for the complete top event. Use a dedicated Boolean/probabilistic analysis and document the modelling assumptions." : "Minimal cut sets are reduced so supersets are removed. This is qualitative only: independence, common-cause, exposure, and mission-time assumptions still require review."}</p></section>
@@ -1504,8 +1574,9 @@ function renderWorkflow() {
 // Architecture feature.
 function renderArchitecture() {
   $("#plantuml-source").value = state.plantuml;
+  state.components = componentsFromPlantUml(state.plantuml);
   $("#component-count").textContent = state.components.length;
-  $("#component-list").innerHTML = state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
+  $("#component-list").innerHTML = state.components.length ? state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
 }
 // Builder UI: populate builder selects and handle insertion of DSL snippets
 function renderFaultTreeBuilder() {
@@ -1526,7 +1597,7 @@ function renderFaultTreeBuilder() {
   // populate components
   compSel.innerHTML = state.components.length ? `<option value="">No component selected</option>${state.components.map(c => `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.name)}</option>`).join("")}` : `<option value="">No imported components</option>`;
   compSel.disabled = !state.components.length;
-  componentHint.textContent = state.components.length ? "Imported from System architecture." : "Import components in System architecture to link this event.";
+  componentHint.textContent = state.components.length ? "Defined in System architecture." : "Define components in System architecture to link this event.";
   // toggle K/N settings visibility based on gate type
   function updateInputSelectionMode() {
     const singleInput = gateTypeSel.value === "NOT";
@@ -2273,7 +2344,15 @@ $("#fmeda-form").addEventListener("submit", event => {
 });
 
 // Architecture editor completion, import, and local rendering.
-$("#plantuml-source").addEventListener("input", () => { plantumlCompletionIndex = 0; renderPlantumlCompletions(); });
+$("#plantuml-source").addEventListener("input", () => {
+  plantumlCompletionIndex = 0;
+  state.plantuml = ($("#plantuml-source") as HTMLTextAreaElement).value;
+  state.components = componentsFromPlantUml(state.plantuml);
+  $("#component-count").textContent = String(state.components.length);
+  $("#component-list").innerHTML = state.components.length ? state.components.map(component => `<div class="component-item"><strong>${esc(component.name)}</strong><span>${esc(component.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
+  persistState();
+  renderPlantumlCompletions();
+});
 $("#plantuml-source").addEventListener("keydown", event => {
   if ($("#plantuml-completions").hidden) return;
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -2398,10 +2477,19 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
   } catch (error) { handleFormError(error); }
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
-  if (!state.components.length && !confirm("No architecture components are imported yet. Generate a starter fault tree instead?")) return;
+  const source = ($("#plantuml-source") as HTMLTextAreaElement).value || state.plantuml;
+  const imported = componentsFromPlantUml(source);
+  if (imported.length) {
+    state.plantuml = source;
+    state.components = imported;
+  }
+  if (!state.components.length) return alert("No architecture components found. Add PlantUML component declarations in System architecture, then generate the starter tree.");
   state.faultTree.dsl = faultTreeFromArchitectureDsl();
   state.faultTree.activeLayer = "All";
+  state.faultTree.layerCount = Math.max(state.faultTree.layerCount || 3, 2);
   save();
+  $("#render-btn").click();
+  alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", event => {
   state.faultTree.activeLayer = (event.target as HTMLSelectElement).value;
@@ -2415,22 +2503,19 @@ $("#fault-tree-layer-count").addEventListener("change", event => {
   if (!configuredFaultTreeLayers().includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
   save();
 });
+function adjustFaultTreeZoom(change: number) {
+  faultTreeZoom = Math.max(0.5, Math.min(2.5, Math.round((faultTreeZoom + change) * 10) / 10));
+  renderFaultTree();
+}
+$("#fault-tree-zoom-in").addEventListener("click", () => adjustFaultTreeZoom(0.1));
+$("#fault-tree-zoom-out").addEventListener("click", () => adjustFaultTreeZoom(-0.1));
+$("#fault-tree-zoom-reset").addEventListener("click", () => { faultTreeZoom = 1; renderFaultTree(); });
 
-$("#parse-btn").addEventListener("click", () => {
-  state.plantuml = $("#plantuml-source").value;
-  const components = []; const seen = new Set();
-  const pattern = /^\s*(?:component|node|database|queue|cloud|rectangle|artifact|package|frame)\s+(?:"([^"]+)"|([^\s{]+))(?:\s+as\s+([A-Za-z0-9_.-]+))?/gim;
-  for (const match of state.plantuml.matchAll(pattern)) {
-    const name = match[1] || match[2]; const id = match[3] || name.replace(/\W+/g, "_").toUpperCase();
-    const normalizedId = id.toLowerCase();
-    if (!seen.has(normalizedId)) { components.push({ id, name }); seen.add(normalizedId); }
-  }
-  if (!components.length) return alert("No PlantUML components found. Use declarations such as: component \"Robot arm\" as ARM");
-  state.components = components; save(); alert(`${components.length} architecture components imported.`);
-});
 $("#render-btn").addEventListener("click", async () => {
   const button = $("#render-btn"); const status = $("#render-status"); const preview = $("#diagram-preview");
-  state.plantuml = $("#plantuml-source").value; persistState();
+  state.plantuml = $("#plantuml-source").value;
+  state.components = componentsFromPlantUml(state.plantuml);
+  persistState();
   button.disabled = true; status.className = "render-status"; status.textContent = "Rendering...";
   try {
     const response = await fetch("/api/plantuml/render", { method: "POST", headers: { "content-type": "text/plain" }, body: state.plantuml });

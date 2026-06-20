@@ -33,25 +33,41 @@ fault_tree "AEB: collision with detected pedestrian" {
     type: AND
     label: "Hazard not recognized and braking not delivered"
     children: [NOT_RECOGNIZED, BRAKE_NOT_DELIVERED]
-    layer: Vehicle
+    layer: Layer 1
   }
 
   gate NOT_RECOGNIZED {
     type: KOFN:2/3
     label: "Two sensing channels fail dangerously"
     children: [CAMERA_DF, RADAR_DF, LIDAR_DF]
-    layer: Perception
+    layer: Layer 1
   }
 
   basic CAMERA_DF {
     label: "Camera channel dangerous failure"
     component: CAMERA
-    layer: Sensors
+    layer: Layer 2
   }
 }
 ```
 
 Every property occupies its own line. IDs may contain letters, digits, `_`, `.`, and `-`, but must start with a letter. `component` is an architecture reference; it does not prove allocation or independence.
+
+Set the layer count in the editor, then assign each node to `Layer 1`, `Layer 2`, and so on. The layer selector provides focused review of that layer, while the full view retains the complete top-down tree.
+
+## Architecture starter generator
+
+Define the architecture in PlantUML; its component declarations automatically populate **Components defined in architecture**. Then use **Generate starter from architecture** to start architecture rendering and produce an editable two-layer starter tree. It recognizes common component names and proposes three malfunctioning behaviours for each:
+
+- sensing/perception: no output, dangerous invalid output, stale output;
+- control/compute: unavailable execution, dangerous incorrect output, timing/watchdog failure;
+- actuation: failure to actuate, unintended actuation, failure to reach the safe state;
+- communication: loss, corrupted/inconsistent data, stale data;
+- power: loss, out-of-tolerance output, protection/monitoring failure.
+
+These are prompts for analysis, not a completed FMEA, FMEDA, or safety case. Remove inapplicable events; add function-specific modes, diagnostics, demand conditions, common causes, and a specific top event before review.
+
+Use the **+**, **−**, and **Reset zoom** controls above the rendered tree to inspect dense branches without losing the top-down review structure.
 
 ## Review checklist
 

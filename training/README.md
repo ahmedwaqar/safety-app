@@ -101,9 +101,9 @@ For this course, analyze a warehouse AMR that transports a 150 kg tote between s
 In **Architecture**, paste the content of [`examples/warehouse-amr.puml`](examples/warehouse-amr.puml), then select:
 
 1. **Render diagram**
-2. **Import components**
+2. **Render diagram** — the PlantUML declarations automatically define the component context.
 
-Expected result: seven architecture components appear in the imported model.
+Expected result: seven architecture components appear under **Components defined in architecture**.
 
 ### 1.4 Record The Engineering Intent
 

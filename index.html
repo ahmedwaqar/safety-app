@@ -315,7 +315,7 @@
       <section class="view" id="fault-tree-view">
         <div class="catalog-intro">
           <div><p class="eyebrow">Deductive reliability analysis</p><h2>Fault tree analysis</h2><p>Model top events, nested logical gates, layered subtrees, and architecture-linked basic events with a deterministic DSL that scales to large fault trees.</p></div>
-          <div class="toolbar-actions"><button class="button secondary" id="fault-tree-help-btn">Help &amp; guide</button><button class="button secondary" id="fault-tree-export-btn">Export</button><button class="button secondary" id="fault-tree-generate-btn">Generate from architecture</button><button class="button primary" id="fault-tree-save-btn">Analyze fault tree</button></div>
+          <div class="toolbar-actions"><button class="button secondary" id="fault-tree-help-btn">Help &amp; guide</button><button class="button secondary" id="fault-tree-export-btn">Export</button><button class="button secondary" id="fault-tree-generate-btn">Generate starter from architecture</button><button class="button primary" id="fault-tree-save-btn">Analyze fault tree</button></div>
         </div>
         <div class="fault-tree-grid">
           <section class="editor-card">
@@ -336,6 +336,23 @@
                 .fault-tree-validation.error{display:block;background:#fee;border:1px solid #fcc;color:#c33}
                 .fault-tree-validation.warning{display:block;background:#fef3cd;border:1px solid #ffc107;color:#856404}
                 .fault-node-card small{color:var(--muted)}
+                .fault-tree-canvas{background:#f8faf9;background-image:radial-gradient(#dce6e1 1px,transparent 1px);background-size:18px 18px;display:block;min-height:440px;overflow:auto;padding:24px}
+                .fault-tree-layout{min-width:760px;position:relative}
+                .fault-tree-viewport{position:relative}
+                .fault-tree-layout{transform-origin:top left}
+                .fault-tree-zoom-value{color:var(--muted);font-family:"DM Mono",monospace;font-size:11px;min-width:42px;text-align:center}
+                .fault-tree-connectors{inset:0;overflow:visible;pointer-events:none;position:absolute}
+                .fault-tree-connectors path{fill:none;stroke:#90aaa1;stroke-linecap:round;stroke-linejoin:round;stroke-width:1.5}
+                .fault-tree-layout .fault-node{align-items:initial;display:block;position:absolute;transform:translateX(-50%);width:218px}
+                .fault-tree-layout .fault-node-card{background:#fff;border:1px solid #b8ccc4;border-radius:6px;box-shadow:0 2px 7px rgba(22,52,45,.12);min-height:116px;padding:10px 12px;text-align:left}
+                .fault-tree-layout .fault-node.top>.fault-node-card{border:2px solid #277166;box-shadow:0 0 0 4px rgba(39,113,102,.12)}
+                .fault-tree-layout .fault-node.basic>.fault-node-card{border-radius:50%;min-height:142px;padding:25px 18px;text-align:center}
+                .fault-tree-layout .fault-gate{align-items:center;background:#e8f2ee;color:#1c6258;display:inline-flex;height:27px;margin:0 0 5px;padding:2px 5px;vertical-align:middle}
+                .fault-tree-layout .fault-gate svg{height:20px;width:30px}
+                .fault-tree-layout .fault-gate-label{color:#317267;font-family:"DM Mono",monospace;font-size:9px;font-weight:800;letter-spacing:.6px;margin-left:5px}
+                .fault-tree-layout .fault-node-card strong{font-family:"DM Mono",monospace;font-size:11px;line-height:1.25}
+                .fault-tree-layout .fault-node-card p{font-size:11px;line-height:1.35;margin:4px 0 5px}
+                .fault-tree-layout .fault-node-card small{font-size:9px;line-height:1.25}
               </style>
               <div class="fault-tree-builder-row fault-tree-builder-mode">
                 <label><span>Add to tree</span><select id="fault-tree-snippet-type"><option value="basic">Basic event</option><option value="gate">Nested gate</option><option value="top">Top event</option></select><small id="fault-tree-builder-mode-help">A terminal failure event linked to a component.</small></label>
@@ -362,7 +379,7 @@
           </section>
         </div>
         <section class="diagram-card fault-tree-diagram">
-          <div class="card-header"><div><p class="eyebrow">Nested diagram editor</p><h3>Rendered logical structure</h3></div></div>
+          <div class="card-header"><div><p class="eyebrow">Nested diagram editor</p><h3>Rendered logical structure</h3></div><div class="toolbar-actions"><button class="icon-btn" id="fault-tree-zoom-out" title="Zoom out" aria-label="Zoom out">−</button><span class="fault-tree-zoom-value" id="fault-tree-zoom-value">100%</span><button class="icon-btn" id="fault-tree-zoom-in" title="Zoom in" aria-label="Zoom in">+</button><button class="button secondary small" id="fault-tree-zoom-reset">Reset zoom</button></div></div>
           <div class="fault-tree-canvas" id="fault-tree-canvas"></div>
         </section>
       </section>
@@ -405,7 +422,7 @@
               <div><p class="eyebrow">PlantUML integration</p><h2>System architecture</h2><p>Paste PlantUML source. Components are extracted and become available as references across the analysis.</p></div>
             </div>
             <div class="editor-card">
-              <div class="editor-top"><span>architecture.puml</span><div class="editor-actions"><button class="button secondary small" id="parse-btn">Import components</button><button class="button primary small" id="render-btn">Render diagram</button></div></div>
+              <div class="editor-top"><span>architecture.puml</span><div class="editor-actions"><button class="button primary small" id="render-btn">Render diagram</button></div></div>
               <div class="plantuml-editor">
                 <textarea id="plantuml-source" spellcheck="false" autocomplete="off" aria-autocomplete="list" aria-controls="plantuml-completions" aria-expanded="false"></textarea>
                 <div class="completion-menu" id="plantuml-completions" role="listbox" aria-label="PlantUML completions" hidden></div>
@@ -413,7 +430,7 @@
             </div>
           </section>
           <section class="component-panel">
-            <div class="card-header"><div><p class="eyebrow">Imported model</p><h3>Referenced components</h3></div><span class="count-badge" id="component-count">0</span></div>
+            <div class="card-header"><div><p class="eyebrow">Architecture context</p><h3>Components defined in architecture</h3></div><span class="count-badge" id="component-count">0</span></div>
             <div id="component-list"></div>
           </section>
         </div>
