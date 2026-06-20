@@ -1337,6 +1337,17 @@ function renderFaultTree() {
   const analysis = $("#fault-tree-analysis");
   const layers = $("#fault-tree-layer") as HTMLSelectElement;
   try {
+    function getGateSvg(gate) {
+      const t = String(gate || "").toUpperCase();
+      if (t.startsWith("KOFN")) return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/><text x="6" y="16" font-size="10" fill="currentColor">${esc(t)}</text></svg>`;
+      if (t === "AND") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 H18 A12 12 0 0 1 18 20 H0 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      if (t === "OR") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      if (t === "NOT") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 L28 12 L2 20 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="32" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "NAND") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 H18 A12 12 0 0 1 18 20 H0 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="28" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "NOR") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="34" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "XOR") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 Q12 12 2 20" fill="none" stroke="currentColor" stroke-width="1"/><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/></svg>`;
+    }
     const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
     if (!model.layers.includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
@@ -1349,7 +1360,7 @@ function renderFaultTree() {
       const gate = node.kind === "basic" ? "BASIC" : node.gate;
       const children = node.children.map(child => draw(child, depth + 1)).filter(Boolean).join("");
       return `<article class="fault-node ${node.kind}" style="--depth:${depth}">
-        <div class="fault-node-card"><span class="fault-gate">${esc(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
+        <div class="fault-node-card"><span class="fault-gate">${getGateSvg(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
         ${children ? `<div class="fault-children">${children}</div>` : ""}
       </article>`;
     }
@@ -1462,6 +1473,60 @@ function renderArchitecture() {
   $("#component-count").textContent = state.components.length;
   $("#component-list").innerHTML = state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
 }
+// Builder UI: populate builder selects and handle insertion of DSL snippets
+function renderFaultTreeBuilder() {
+  const layerSel = $("#fault-tree-builder-layer") as HTMLSelectElement;
+  const compSel = $("#fault-tree-builder-component") as HTMLSelectElement;
+  const inputsSel = $("#fault-tree-builder-inputs") as HTMLSelectElement;
+  const outputInput = $("#fault-tree-builder-output") as HTMLInputElement;
+  // populate components
+  compSel.innerHTML = state.components.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  // derive model nodes for input suggestions
+  let model;
+  try { model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl); } catch (e) { model = { top: "", nodes: new Map(), layers: ["All"], warnings: [] }; }
+  layerSel.innerHTML = (model.layers || ["All"]).map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
+  inputsSel.innerHTML = [...(model.nodes ? model.nodes.keys() : [])].map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  if (!outputInput.value) outputInput.value = `G${Math.floor(Math.random()*9000)+1000}`;
+
+  const insertBtn = $("#fault-tree-insert-btn") as HTMLButtonElement;
+  if (!insertBtn) return;
+  if (!insertBtn.dataset.builderAttached) {
+    insertBtn.addEventListener("click", () => {
+      const snippetType = ($("#fault-tree-snippet-type") as HTMLSelectElement).value;
+      const gateType = ($("#fault-tree-builder-gate-type") as HTMLSelectElement).value;
+      const k = ($("#fault-tree-builder-k") as HTMLInputElement).value;
+      const n = ($("#fault-tree-builder-n") as HTMLInputElement).value;
+      const layer = layerSel.value || "Logic";
+      const component = compSel.value || "";
+      const output = (outputInput.value || `G${Math.random().toString(36).slice(2,7).toUpperCase()}`).trim();
+      const selectedInputs = Array.from(inputsSel.selectedOptions).map(o => o.value).filter(Boolean);
+      const editor = $("#fault-tree-source") as HTMLTextAreaElement;
+      let snippet = "";
+      if (snippetType === "basic") {
+        snippet = `\nbasic ${output} {\n  label: "${output}"\n  component: ${component ? `"${component}"` : '""'}\n  layer: ${layer}\n}\n`;
+      } else if (snippetType === "top") {
+        snippet = `\nfault_tree "${output}" {\n  top: ${output}\n\n  gate ${output} {\n    type: ${gateType}\n    label: "${output}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n}\n`;
+      } else {
+        let typeTxt = gateType;
+        if (gateType === "KOFN") typeTxt = `KOFN:${k}/${n}`;
+        snippet = `\n  gate ${output} {\n    type: ${typeTxt}\n    label: "${output}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n`;
+      }
+      // insert at cursor if possible, else append
+      try {
+        const start = editor.selectionStart || editor.value.length;
+        const before = editor.value.slice(0, start);
+        const after = editor.value.slice(start);
+        editor.value = before + snippet + after;
+      } catch (e) {
+        editor.value = (editor.value || "") + "\n" + snippet;
+      }
+      editor.focus();
+      persistState();
+      renderFaultTree();
+    });
+    insertBtn.dataset.builderAttached = "1";
+  }
+}
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = tabWorkspaces().map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
@@ -1484,6 +1549,7 @@ const FEATURE_RENDERERS = [
   renderSil,
   renderQuantitative,
   renderFmeda,
+  renderFaultTreeBuilder,
   renderFaultTree,
   renderArchitecture
 ];
