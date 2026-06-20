@@ -382,7 +382,7 @@ function validateWorkspaceData(data) {
 function handleFormError(error) {
   alert(error.message);
 }
-var VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "fault-tree", "hara", "fmea", "requirements", "assurance"];
+var VIEW_NAMES = ["overview", "training", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "fault-tree", "hara", "fmea", "requirements", "assurance"];
 function workspaceId() {
   return `workspace-${crypto.randomUUID()}`;
 }
@@ -1564,7 +1564,7 @@ function showView(name, historyMode = "push") {
   $$(".view").forEach((view) => view.classList.remove("active"));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = { notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", "fault-tree": "Fault tree analysis", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
+  $("#page-title").textContent = { training: "Safety training", notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", "fault-tree": "Fault tree analysis", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
   if (historyMode && (historyMode === "replace" || previous !== name))
     updateBrowserLocation(activeWorkspace().id, name, historyMode);
@@ -1606,6 +1606,12 @@ function renderMetrics() {
   ];
   $("#coverage-list").innerHTML = coverage.map(([label, value]) => `<div class="coverage-row"><div class="coverage-label"><span>${label}</span><strong>${value}%</strong></div><div class="coverage-track"><i style="width:${value}%"></i></div></div>`).join("");
   $("#overview-components").innerHTML = state.components.map((x) => `<span class="component-chip">${esc(x.name)}</span>`).join("");
+}
+function renderTraining() {
+  $("#training-component-count").textContent = state.components.length;
+  $("#training-hazard-count").textContent = state.hazards.length;
+  $("#training-requirement-count").textContent = state.requirements.length;
+  $("#training-fmea-count").textContent = state.fmea.length;
 }
 function renderFmea() {
   const query = $("#fmea-search").value.toLowerCase();
@@ -1843,6 +1849,7 @@ function renderWorkspaceControls() {
 var FEATURE_RENDERERS = [
   renderWorkspaceControls,
   renderMetrics,
+  renderTraining,
   renderNotepad,
   renderWorkflow,
   renderFmea,

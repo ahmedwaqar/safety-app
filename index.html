@@ -18,6 +18,7 @@
       </div>
       <nav id="main-nav">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
+        <button class="nav-item" data-view="training"><span class="nav-icon">★</span>Training</button>
         <button class="nav-item" data-view="notepad"><span class="nav-icon">✎</span>Engineering notes</button>
         <button class="nav-item" data-view="workflow"><span class="nav-icon">↳</span>Engineering workflow</button>
         <button class="nav-item" data-view="architecture"><span class="nav-icon">⌘</span>Architecture</button>
@@ -99,6 +100,45 @@
           </div>
           <div class="component-row" id="overview-components"></div>
         </section>
+      </section>
+
+      <section class="view" id="training-view">
+        <div class="catalog-intro">
+          <div><p class="eyebrow">Safety training</p><h2>Interactive workflow</h2><p>Practice a generic safety-expert workflow for architecture, hazard analysis, requirements, and assurance. Use the action buttons to jump directly to review exercises.</p></div>
+          <div class="training-summary-grid">
+            <div class="training-summary-card"><strong id="training-component-count">0</strong><span>architecture components</span></div>
+            <div class="training-summary-card"><strong id="training-hazard-count">0</strong><span>hazards catalogued</span></div>
+            <div class="training-summary-card"><strong id="training-requirement-count">0</strong><span>safety requirements</span></div>
+            <div class="training-summary-card"><strong id="training-fmea-count">0</strong><span>FMEA rows</span></div>
+          </div>
+        </div>
+        <div class="training-step-grid">
+          <article class="card training-step">
+            <div class="card-header"><div><p class="eyebrow">Step 1</p><h3>Confirm system scope</h3></div></div>
+            <p>Review the component architecture and ensure the system boundary, interfaces, and safety-critical functions are captured correctly.</p>
+            <button class="button secondary" data-go="architecture">Open architecture →</button>
+          </article>
+          <article class="card training-step">
+            <div class="card-header"><div><p class="eyebrow">Step 2</p><h3>Identify hazards</h3></div></div>
+            <p>Catalog operational situations and system-level hazards that could cause harm, then link them to affected components.</p>
+            <button class="button secondary" data-go="hazards">Open hazard catalogue →</button>
+          </article>
+          <article class="card training-step">
+            <div class="card-header"><div><p class="eyebrow">Step 3</p><h3>Capture requirements</h3></div></div>
+            <p>Translate hazards and failure modes into safety requirements with clear acceptance criteria and traceability.</p>
+            <button class="button secondary" data-go="requirements">Open requirements →</button>
+          </article>
+          <article class="card training-step">
+            <div class="card-header"><div><p class="eyebrow">Step 4</p><h3>Analyze failure modes</h3></div></div>
+            <p>Use FMEA, FMEDA, and fault-tree analysis to evaluate root causes, cutsets, and mitigation effectiveness.</p>
+            <button class="button secondary" data-go="fault-tree">Open fault tree →</button>
+          </article>
+          <article class="card training-step">
+            <div class="card-header"><div><p class="eyebrow">Step 5</p><h3>Validate lifecycle evidence</h3></div></div>
+            <p>Review evidence, test records, and safety-case claims to complete the assurance story for a release-ready assessment.</p>
+            <button class="button secondary" data-go="assurance">Open lifecycle assurance →</button>
+          </article>
+        </div>
       </section>
 
       <section class="view" id="notepad-view">
