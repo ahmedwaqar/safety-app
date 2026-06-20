@@ -1,20 +1,65 @@
-FAULTTREE FT_ADAS_PED { 
-  // Basic sensor and component failures
-  BE CAM_FAIL: "Camera hardware failure" [prob=0.0005];
-  BE CAM_BLIND: "Camera blinded by glare" [prob=0.001];
-  BE LIDAR_FAIL: "Lidar hardware failure" [prob=0.0003];
-  BE RADAR_FAIL: "Radar hardware failure" [prob=0.0004];
-  BE PERCEP_SW: "Perception software false-negative" [prob=0.002];
-  BE FUSION_SW: "Sensor-fusion algorithm error" [prob=0.0008];
-  BE CAN_COMM: "CAN bus communication loss" [prob=0.0002];
-  BE BRAKE_ACT: "Brake actuator stuck" [prob=0.0001];
+fault_tree "AEB: collision with detected pedestrian" {
+  top: AEB_HARMFUL_NON_RESPONSE
 
-  // Sensor majority: at least two sensors must fail
-  GATE SENS_MAJ: MAJ(2)(CAM_FAIL,LIDAR_FAIL,RADAR_FAIL) -> outSENS [label="Sensor majority failure"];
+  gate AEB_HARMFUL_NON_RESPONSE {
+    type: AND
+    label: "Pedestrian is not mitigated while AEB is available in the defined ODD"
+    children: [HAZARD_NOT_RECOGNIZED, BRAKING_NOT_DELIVERED]
+    layer: Vehicle
+  }
 
-  // Perception failure: either perception software misses or fusion fails or sensors majority failed
-  GATE PERCEP_OR: OR(PERCEP_SW,FUSION_SW,outSENS) -> outPERCEP [label="Perception pipeline failure"];
+  gate HAZARD_NOT_RECOGNIZED {
+    type: OR
+    label: "Pedestrian hazard is not recognized in time"
+    children: [PERCEPTION_FN, SENSOR_VOTING_FAILURE, SHARED_TIME_BASE_FAILURE]
+    layer: Perception
+  }
+  gate SENSOR_VOTING_FAILURE {
+    type: KOFN:2/3
+    label: "Two of three independent sensing channels fail dangerously"
+    children: [CAMERA_DF, RADAR_DF, LIDAR_DF]
+    layer: Perception
+  }
+  gate BRAKING_NOT_DELIVERED {
+    type: OR
+    label: "Valid emergency braking request is not delivered"
+    children: [BRAKE_REQUEST_LOST, BRAKE_ACTUATION_DF]
+    layer: Actuation
+  }
 
-  // Top-level hazardous event: failure to detect and brake for pedestrian
-  GATE TOP_AND: AND(outPERCEP,BRAKE_ACT) -> outTOP [label="Missed pedestrian & braking failure"];
+  basic PERCEPTION_FN {
+    label: "Perception software false negative in validated scenario"
+    component: PERCEPTION
+    layer: Perception
+  }
+  basic SHARED_TIME_BASE_FAILURE {
+    label: "Shared time base invalidates all sensor alignment"
+    component: TIME_SYNC
+    layer: CommonCause
+  }
+  basic CAMERA_DF {
+    label: "Camera channel dangerous failure"
+    component: CAMERA
+    layer: Sensors
+  }
+  basic RADAR_DF {
+    label: "Radar channel dangerous failure"
+    component: RADAR
+    layer: Sensors
+  }
+  basic LIDAR_DF {
+    label: "Lidar channel dangerous failure"
+    component: LIDAR
+    layer: Sensors
+  }
+  basic BRAKE_REQUEST_LOST {
+    label: "E2E safety communication loses braking request"
+    component: VEHICLE_NETWORK
+    layer: Communication
+  }
+  basic BRAKE_ACTUATION_DF {
+    label: "Brake actuator fails dangerously on demand"
+    component: BRAKES
+    layer: Actuation
+  }
 }

@@ -323,7 +323,7 @@ fault_tree "Loss of safety function" {
 }
 ```
 
-The app validates duplicate identifiers, unsupported gates, missing children, unreachable nodes, and cycles. Qualitative analysis derives reduced minimal cut sets for coherent portions of the tree and flags non-coherent constructs such as `NOT`, `NAND`, and `NOR` for expert review.
+The app validates duplicate identifiers, unsupported gates, missing children, unreachable nodes, cycles, NOT-gate arity, and K-of-N cardinality. Qualitative analysis derives reduced minimal cut sets only for coherent `AND`/`OR`/K-of-N trees. It flags `NOT`, `NAND`, `NOR`, and `XOR` as non-coherent: use a dedicated Boolean/probabilistic analysis and do not treat the displayed cut sets as a complete top-event result. FTA output is qualitative; independence, common-cause, mission-time, exposure, and quantitative-rate assumptions remain review items.
 
 #### Fault Tree DSL BNF
 

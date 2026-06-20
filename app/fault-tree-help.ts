@@ -119,7 +119,7 @@ export function renderFaultTreeHelpModal(){
       <div style="margin-bottom:20px">
         <h3 style="color:#2563eb">Gate Types (ISO 61025)</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
-          ${Object.entries(faultTreeHelp.gateTypes).map(([key, gate]) => `
+          ${Object.entries(faultTreeHelp.gateTypes).map(([, gate]) => `
             <div style="border:1px solid #ddd;padding:12px;border-radius:4px;background:#f9f9f9">
               <strong style="color:#1e40af;font-size:14px">${gate.name}</strong><br>
               <small style="color:#666;line-height:1.4">${gate.description}</small>

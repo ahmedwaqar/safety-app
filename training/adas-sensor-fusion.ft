@@ -1,21 +1,50 @@
-FAULTTREE FT_ADAS_FUSION {
-  BE CAM_CAL: "Camera calibration drift" [prob=0.0015];
-  BE LIDAR_CAL: "Lidar mis-calibration" [prob=0.0007];
-  BE RADAR_CAL: "Radar mis-calibration" [prob=0.0006];
-  BE TIME_SYNC: "Sensor time-sync failure" [prob=0.0004];
-  BE FUSION_SW: "Fusion software regression" [prob=0.0009];
-  BE WATCHDOG: "Watchdog failure (no recovery)" [prob=0.0001];
-  BE BACKUP_SYS: "Backup algorithm disabled" [prob=0.0002];
+fault_tree "Fusion: unsafe object track accepted" {
+  top: UNSAFE_TRACK_ACCEPTED
 
-  // Calibration-related correlated failure (conservative OR)
-  GATE CAL_OR: OR(CAM_CAL,LIDAR_CAL,RADAR_CAL) -> outCAL [label="Any sensor calibration drift"];
+  gate UNSAFE_TRACK_ACCEPTED {
+    type: AND
+    label: "Unsafe fused track is accepted and the safety response does not intervene"
+    children: [FUSION_PRODUCES_UNSAFE_TRACK, TRACK_MONITOR_MISSES]
+    layer: Vehicle
+  }
 
-  // Fusion degraded when sync or major calibration issue or fusion SW fails
-  GATE FUSION_OR: OR(TIME_SYNC,outCAL,FUSION_SW) -> outFUSION [label="Fusion degraded"];
+  gate FUSION_PRODUCES_UNSAFE_TRACK {
+    type: OR
+    label: "Fusion produces unsafe object state"
+    children: [FUSION_ALGORITHM_DEFECT, SHARED_TIME_SYNC_FAILURE, SHARED_CALIBRATION_ERROR]
+    layer: Fusion
+  }
 
-  // Recovery inhibited if watchdog or backup disabled
-  GATE RECOVER_AND: AND(WATCHDOG,BACKUP_SYS) -> outREC_FAIL [label="Recovery chain failed"];
+  gate TRACK_MONITOR_MISSES {
+    type: AND
+    label: "Independent plausibility monitor and fallback both fail"
+    children: [PLAUSIBILITY_MONITOR_DF, FALLBACK_INHIBITED]
+    layer: SafetyMechanism
+  }
 
-  // Hazard: fusion degraded and recovery failed
-  GATE TOP_AND: AND(outFUSION,outREC_FAIL) -> outTOP [label="Sensor-fusion failure causing hazardous perception"];
+  basic FUSION_ALGORITHM_DEFECT {
+    label: "Fusion algorithm produces an unsafe track"
+    component: FUSION_ECU
+    layer: Fusion
+  }
+  basic SHARED_TIME_SYNC_FAILURE {
+    label: "Shared time source causes correlated sensor misalignment"
+    component: TIME_SYNC
+    layer: CommonCause
+  }
+  basic SHARED_CALIBRATION_ERROR {
+    label: "Shared calibration release invalidates sensor geometry"
+    component: CONFIGURATION
+    layer: CommonCause
+  }
+  basic PLAUSIBILITY_MONITOR_DF {
+    label: "Independent track-plausibility monitor fails dangerously"
+    component: SAFETY_MONITOR
+    layer: SafetyMechanism
+  }
+  basic FALLBACK_INHIBITED {
+    label: "Fallback degradation or minimal-risk strategy is unavailable"
+    component: FALLBACK_CONTROLLER
+    layer: SafetyMechanism
+  }
 }

@@ -364,16 +364,13 @@ Instructor guidance and model answers are kept separately in [`answer-key.md`](a
 
 ## ADAS Fault-Tree Examples
 
-The `training` folder now includes three automotive ADAS fault-tree examples you can parse with the built-in parser:
+The `training` folder includes three automotive ADAS fault-tree examples in the Praxis Studio structured DSL. Paste one into **Fault tree analysis** in the app, then select **Analyze fault tree**:
 
-- `training/adas-pedestrian-detection.ft` — complex sensor/perception+actuator chain leading to failure to detect and brake for a pedestrian.
-- `training/adas-lane-keeping.ft` — lane-keeping loss due to perception/localization combined with control failures.
-- `training/adas-sensor-fusion.ft` — sensor calibration, timing, and recovery-path failures affecting fusion.
+- [`adas-pedestrian-detection.ft`](adas-pedestrian-detection.ft) — perception, voting, common cause, communication, and brake delivery.
+- [`adas-lane-keeping.ft`](adas-lane-keeping.ft) — unintended lateral-control path and independent-monitor challenge.
+- [`adas-sensor-fusion.ft`](adas-sensor-fusion.ft) — shared time/calibration dependencies and fallback monitoring.
 
-Parse them with:
+# Automotive functional-safety preparation
 
-```bash
-cd /Users/waqarahmed/Documents/Docs/Jobs/Cobot/SafetyApp
-bun tools/parse-ft.js training/adas-pedestrian-detection.ft
-```
-
+- [Fault Tree Analysis guide](FAULT-TREE-GUIDE.md) — current DSL, review checklist, and scope.
+- [Automotive FTA interview practicum](automotive-fta-interview-practicum.md) — exercises and model answers for automated-driving safety interviews.

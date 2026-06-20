@@ -841,6 +841,27 @@ function goalBy(id) {
   return state.safetyGoals.find((goal) => goal.id === id);
 }
 var faultTreeGateTypes = new Set(["AND", "OR", "NAND", "NOR", "XOR", "NOT"]);
+function validateFaultTreeGate(id, gate, children, warnings) {
+  const count = children.length;
+  if (gate === "NOT" && count !== 1)
+    throw new Error(`NOT gate "${id}" must have exactly one child.`);
+  if (gate !== "NOT" && !gate.startsWith("KOFN:") && count === 1)
+    warnings.push(`Gate "${id}" has one child; remove the gate or add the intended independent inputs.`);
+  const match = gate.match(/^KOFN:(\d+)\/(\d+)$/i);
+  if (!match)
+    return;
+  const k = Number(match[1]);
+  const n = Number(match[2]);
+  if (!Number.isSafeInteger(k) || !Number.isSafeInteger(n) || k < 1 || n < 2 || k > n) {
+    throw new Error(`K-of-N gate "${id}" must satisfy 1 ≤ K ≤ N and N ≥ 2.`);
+  }
+  if (count !== n)
+    throw new Error(`K-of-N gate "${id}" declares N=${n} but has ${count} children.`);
+  if (k === 1)
+    warnings.push(`K-of-N gate "${id}" is 1-of-${n}; use OR unless voting terminology is required.`);
+  if (k === n)
+    warnings.push(`K-of-N gate "${id}" is ${n}-of-${n}; use AND unless voting terminology is required.`);
+}
 function defaultFaultTreeDsl() {
   return `fault_tree "Top event" {
   top: TOP
@@ -934,6 +955,7 @@ function parseStructuredFaultTreeDsl(dsl) {
       const children = splitFaultTreeList(requireValue(props.children, `Children for gate ${id}`)).map((child) => requireIdentifier(child, `Child identifier for gate ${id}`));
       if (!children.length)
         throw new Error(`Gate "${id}" must have at least one child.`);
+      validateFaultTreeGate(id, gate, children, warnings);
       nodes.set(id, { id, kind: "gate", gate, label: cleanFaultTreeText(props.label || id), children, layer: cleanFaultTreeText(props.layer || "Logic"), line });
     } else {
       nodes.set(id, { id, kind: "basic", label: cleanFaultTreeText(props.label || id), children: [], component: props.component ? cleanFaultTreeText(props.component) : "", layer: cleanFaultTreeText(props.layer || "Events"), line });
@@ -995,6 +1017,7 @@ function parseLegacyFaultTreeDsl(dsl = state.faultTree.dsl) {
       const children = tokens.slice(arrow + 1).map((child) => requireIdentifier(child, `Child identifier for gate ${id}`));
       if (!children.length)
         throw new Error(`Gate "${id}" must have at least one child.`);
+      validateFaultTreeGate(id, gate, children, warnings);
       nodes.set(id, { id, kind: id === top ? "top" : "gate", gate, label, children, layer: "Logic", line: index + 1 });
       return;
     }
@@ -1034,7 +1057,7 @@ function faultTreeCutSets(model, id = model.top) {
   let nonCoherent = analyses.some((analysis) => analysis.nonCoherent);
   if (node.gate === "AND")
     sets = analyses.reduce((memo, analysis) => combineCutSets(memo, analysis.sets), [[]]);
-  else if (node.gate === "OR" || node.gate === "XOR")
+  else if (node.gate === "OR")
     sets = childSets;
   else if (node.gate?.startsWith("KOFN:")) {
     const [, kText] = node.gate.match(/^KOFN:(\d+)\/\d+$/i) || [];
@@ -1716,7 +1739,7 @@ function renderFaultTree() {
     canvas.innerHTML = draw2(model.top);
     const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map((id) => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map((id) => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
     analysis.innerHTML = `<div class="fault-analysis-grid">
-      <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, or NOR are present. The diagram is rendered and validated, but minimal cut sets are reported only for coherent portions." : "Minimal cut sets are reduced so supersets are removed."}</p></section>
+      <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. The diagram is rendered and validated, but minimal cut sets are not valid for the complete top event. Use a dedicated Boolean/probabilistic analysis and document the modelling assumptions." : "Minimal cut sets are reduced so supersets are removed. This is qualitative only: independence, common-cause, exposure, and mission-time assumptions still require review."}</p></section>
       <section><h3>Model quality</h3><p>${model.warnings.length ? model.warnings.map(esc).join(" ") : "All declared nodes are reachable from the top event."}</p></section>
     </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
   } catch (error) {
@@ -1820,11 +1843,73 @@ function renderArchitecture() {
   $("#component-list").innerHTML = state.components.map((x) => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
 }
 function renderFaultTreeBuilder() {
+  const snippetTypeSel = $("#fault-tree-snippet-type");
+  const gateTypeSel = $("#fault-tree-builder-gate-type");
   const layerSel = $("#fault-tree-builder-layer");
   const compSel = $("#fault-tree-builder-component");
   const inputsSel = $("#fault-tree-builder-inputs");
   const outputInput = $("#fault-tree-builder-output");
-  compSel.innerHTML = state.components.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  const labelInput = $("#fault-tree-builder-label");
+  const validationDiv = $("#fault-tree-builder-validation");
+  const componentHint = $("#fault-tree-component-hint");
+  const inputsLabel = $("#fault-tree-inputs-label");
+  const inputsHint = $("#fault-tree-inputs-hint");
+  const basicFields = [...document.querySelectorAll(".fault-tree-basic-field")];
+  const gateFields = [...document.querySelectorAll(".fault-tree-gate-fields")];
+  const insertBtn = $("#fault-tree-insert-btn");
+  compSel.innerHTML = state.components.length ? `<option value="">No component selected</option>${state.components.map((c) => `<option value="${esc(c.id)}">${esc(c.id)} — ${esc(c.name)}</option>`).join("")}` : `<option value="">No imported components</option>`;
+  compSel.disabled = !state.components.length;
+  componentHint.textContent = state.components.length ? "Imported from System architecture." : "Import components in System architecture to link this event.";
+  function updateKofnVisibility() {
+    const kofnSetting = document.querySelector(".fault-tree-kofn-settings");
+    if (kofnSetting)
+      kofnSetting.hidden = gateTypeSel.value !== "KOFN";
+  }
+  function updateInputSelectionMode() {
+    const singleInput = gateTypeSel.value === "NOT";
+    inputsSel.multiple = !singleInput;
+    inputsLabel.textContent = singleInput ? "Select one event or nested gate" : "Select events or nested gates";
+    inputsHint.textContent = singleInput ? "NOT gates accept exactly one input." : gateTypeSel.value === "AND" || gateTypeSel.value === "OR" ? "Hold Ctrl/Cmd to select multiple inputs." : "Select the inputs used by this gate.";
+    if (singleInput && inputsSel.selectedOptions.length > 1)
+      [...inputsSel.options].forEach((option, index) => option.selected = index === 0 && option.selected);
+  }
+  function updateBuilderMode() {
+    const isBasic = snippetTypeSel.value === "basic";
+    const isGate = !isBasic;
+    basicFields.forEach((field) => field.hidden = !isBasic);
+    gateFields.forEach((field) => field.hidden = !isGate);
+    gateTypeSel.disabled = !isGate;
+    inputsSel.disabled = !isGate;
+    document.querySelector("#fault-tree-builder-new-input").disabled = !isGate;
+    document.querySelector("#fault-tree-builder-add-input").disabled = !isGate;
+    insertBtn.textContent = isBasic ? "Add basic event" : snippetTypeSel.value === "top" ? "Create top event" : "Add nested gate";
+    const help = $("#fault-tree-builder-mode-help");
+    help.textContent = isBasic ? "A terminal failure event linked to a component." : snippetTypeSel.value === "top" ? "The root gate for this fault tree." : "Combine existing event IDs into intermediate logic.";
+    if (!outputInput.value || outputInput.dataset.mode !== snippetTypeSel.value) {
+      outputInput.value = makeUniqueId(isBasic ? "BE" : snippetTypeSel.value === "top" ? "TOP" : "G");
+      outputInput.dataset.mode = snippetTypeSel.value;
+    }
+    updateKofnVisibility();
+    updateInputSelectionMode();
+  }
+  if (!snippetTypeSel.dataset.builderAttached) {
+    snippetTypeSel.addEventListener("change", updateBuilderMode);
+    gateTypeSel.addEventListener("change", () => {
+      updateKofnVisibility();
+      updateInputSelectionMode();
+    });
+    snippetTypeSel.dataset.builderAttached = "1";
+  }
+  updateKofnVisibility();
+  function showValidation(message, type = "error") {
+    validationDiv.className = `fault-tree-validation ${type}`;
+    const icon = type === "error" ? "⚠" : "ⓘ";
+    validationDiv.innerHTML = `<strong>${icon}</strong> ${message}`;
+  }
+  function clearValidation() {
+    validationDiv.className = "fault-tree-validation";
+    validationDiv.innerHTML = "";
+  }
   let model;
   try {
     model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl);
@@ -1835,9 +1920,16 @@ function renderFaultTreeBuilder() {
   state.faultTree.customInputs = state.faultTree.customInputs || [];
   const customInputs = state.faultTree.customInputs || [];
   function updateInputsOptions() {
-    const nodeIds = model && model.nodes ? [...model.nodes.keys()] : [];
-    const union = Array.from(new Set([...nodeIds, ...customInputs]));
-    inputsSel.innerHTML = union.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+    const nodes = model && model.nodes ? [...model.nodes.values()] : [];
+    const basics = nodes.filter((node) => node.kind === "basic");
+    const gates = nodes.filter((node) => node.kind !== "basic");
+    const custom = customInputs.filter((id) => !model.nodes?.has(id));
+    const options2 = (items) => items.map((item) => `<option value="${esc(item.id || item)}">${esc(item.id || item)}${item.label ? ` — ${esc(item.label)}` : ""}</option>`).join("");
+    inputsSel.innerHTML = [
+      basics.length ? `<optgroup label="Basic events">${options2(basics)}</optgroup>` : "",
+      gates.length ? `<optgroup label="Nested gates">${options2(gates)}</optgroup>` : "",
+      custom.length ? `<optgroup label="Placeholders to define">${options2(custom)}</optgroup>` : ""
+    ].join("") || `<option disabled>No events available — add a basic event first.</option>`;
   }
   updateInputsOptions();
   const existingIds = new Set(model.nodes ? [...model.nodes.keys()] : []);
@@ -1852,9 +1944,7 @@ function renderFaultTreeBuilder() {
     }
     return `${base}${Math.floor(Math.random() * 90000)}`;
   }
-  if (!outputInput.value)
-    outputInput.value = makeUniqueId("G");
-  const insertBtn = $("#fault-tree-insert-btn");
+  updateBuilderMode();
   if (!insertBtn)
     return;
   const newInputField = $("#fault-tree-builder-new-input");
@@ -1900,38 +1990,54 @@ function renderFaultTreeBuilder() {
       const layer = layerSel.value || "Logic";
       const component = compSel.value || "";
       let output = (outputInput.value || makeUniqueId("G")).trim();
-      const label = output;
+      const label = (labelInput.value || output).trim();
       if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(output)) {
-        alert("Invalid output id. Use letters, numbers and underscore, start with a letter or underscore.");
+        showValidation("Invalid output ID. Use letters, numbers, underscore; start with letter or underscore.");
         outputInput.focus();
         return;
       }
       if (existingIds.has(output)) {
-        alert(`Identifier '${output}' already exists in the model. Choose a unique output id.`);
+        showValidation(`Output ID '${output}' already exists. Gates and events must have unique IDs.`);
         outputInput.focus();
         return;
       }
       const selectedInputs = Array.from(inputsSel.selectedOptions).map((o) => o.value).filter(Boolean);
-      if (snippetType === "gate") {
-        if (gateType !== "NOT" && selectedInputs.length < 1) {
-          if (!confirm("No children selected for this gate. Insert anyway?"))
+      if (selectedInputs.includes(output)) {
+        showValidation(`Output ID '${output}' cannot also be an input. Choose a different output ID to avoid a self-reference.`);
+        outputInput.focus();
+        return;
+      }
+      if (snippetType !== "basic") {
+        if (gateType === "NOT") {
+          if (selectedInputs.length !== 1) {
+            showValidation("NOT gate requires exactly 1 input. Please select one input (uncheck others if selected).");
             return;
+          }
+        } else if (selectedInputs.length < 2) {
+          showValidation(`${gateType} gate requires at least 2 inputs. You selected ${selectedInputs.length}. Use Ctrl/Cmd+Click to select multiple events.`, "error");
+          return;
         }
         if (gateType === "KOFN") {
-          const ki = Number(k), ni = Number(n);
+          const ki = Number($("#fault-tree-builder-k").value || 1);
+          const ni = Number($("#fault-tree-builder-n").value || 2);
           if (!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni) {
-            alert("Invalid K-of-N settings: ensure 1 ≤ K ≤ N and both integers.");
+            showValidation("K-of-N: must have 1 ≤ K ≤ N with both as integers. Adjust K and N fields.");
+            return;
+          }
+          if (ni !== selectedInputs.length) {
+            showValidation(`K-of-N gate expects N=${ni} inputs but you selected ${selectedInputs.length}. Adjust N or select ${ni} inputs.`);
             return;
           }
         }
       }
+      clearValidation();
       const editor = $("#fault-tree-source");
       let snippet = "";
       if (snippetType === "basic") {
         snippet = `
 basic ${output} {
-  label: "${label}"
-  component: ${component ? `"${component}"` : '""'}
+  label: "${label}"${component ? `
+  component: ${component}` : ""}
   layer: ${layer}
 }
 `;
@@ -1961,14 +2067,15 @@ fault_tree "${label}" {
   }
 `;
       }
-      try {
-        const start = editor.selectionStart || editor.value.length;
-        const before = editor.value.slice(0, start);
-        const after = editor.value.slice(start);
-        editor.value = before + snippet + after;
-      } catch (e) {
-        editor.value = (editor.value || "") + `
-` + snippet;
+      if (snippetType !== "top" && /^\s*fault_tree\b/i.test(editor.value)) {
+        const closingBrace = editor.value.lastIndexOf("}");
+        editor.value = closingBrace >= 0 ? `${editor.value.slice(0, closingBrace)}${snippet}${editor.value.slice(closingBrace)}` : `${editor.value}
+${snippet}`;
+      } else if (snippetType === "top") {
+        editor.value = snippet;
+      } else {
+        editor.value = `${editor.value}
+${snippet}`;
       }
       editor.focus();
       persistState();
@@ -1977,6 +2084,10 @@ fault_tree "${label}" {
         existingIds.add(output);
         updateInputsOptions();
       } catch (e) {}
+      if (snippetType === "basic") {
+        labelInput.value = "";
+        outputInput.value = makeUniqueId("BE");
+      }
       renderFaultTree();
     });
     insertBtn.dataset.builderAttached = "1";
@@ -2899,6 +3010,86 @@ $("#fault-tree-source").addEventListener("input", (event) => {
   state.faultTree.dsl = event.target.value;
   persistState();
   renderFaultTree();
+});
+$("#fault-tree-help-btn").addEventListener("click", () => {
+  let modal = document.getElementById("fault-tree-help-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "fault-tree-help-modal";
+    modal.style.cssText = `display:none;position:fixed;z-index:9999;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6)`;
+    modal.innerHTML = `<div style="background:white;margin:5% auto;padding:20px;border-radius:8px;width:90%;max-width:900px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:3px solid #2563eb;padding-bottom:10px"><h2 style="margin:0;font-size:22px;color:#1e40af">Fault Tree Analysis Guide</h2><button style="background:none;border:none;font-size:24px;cursor:pointer;color:#666" onclick="document.getElementById('fault-tree-help-modal').style.display='none'">✕</button></div><div style="color:#333;line-height:1.6"><h3 style="color:#2563eb;margin-top:0">What this workspace does</h3><p>FTA is a deductive method for showing how basic events combine into a defined top event. This workspace validates structure and derives qualitative minimal cut sets for coherent AND/OR/K-of-N trees; it does not establish compliance, independence, or a quantified safety target.</p><h3 style="color:#2563eb">Gate selection</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px"><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">AND / OR</strong><br><small>Use for coherent causal logic and qualitative cut sets.</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">K-of-N</strong><br><small>Use voting logic; N must match the number of inputs.</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">NOT / NAND / NOR / XOR</strong><br><small>Rendered but non-coherent: use dedicated Boolean/probabilistic analysis.</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">Common cause</strong><br><small>Model shared power, time, calibration, configuration, and systematic causes explicitly.</small></div></div><h3 style="color:#2563eb">Review before relying on a result</h3><ul><li>State the top event, vehicle state, ODD/operational situation, and analysis boundary.</li><li>Challenge independence and diagnostic timing; a redundant block diagram is not evidence.</li><li>Trace each finding to requirements, design actions, and verification evidence.</li></ul></div></div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = "block";
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal)
+      modal.style.display = "none";
+  });
+});
+$("#fault-tree-export-btn").addEventListener("click", () => {
+  const dsl = $("#fault-tree-source").value;
+  if (!dsl.trim())
+    return alert("No fault tree to export. Create or load a fault tree first.");
+  const model = parseFaultTreeDsl(dsl);
+  const menu = document.createElement("div");
+  menu.style.cssText = `position:fixed;top:200px;left:50%;transform:translateX(-50%);background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9999;min-width:200px`;
+  menu.innerHTML = `
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer;border-bottom:1px solid #eee" id="export-dsl">\uD83D\uDCC4 Export DSL (.ft)</button>
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer;border-bottom:1px solid #eee" id="export-cutsets">\uD83D\uDCCA Export Cut Sets (.csv)</button>
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer" id="export-json">\uD83D\uDCCB Export as JSON</button>
+  `;
+  document.body.appendChild(menu);
+  document.getElementById("export-dsl").addEventListener("click", () => {
+    const fileName = (model.top || "fault-tree").toLowerCase() + ".ft";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([dsl], { type: "text/plain" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  document.getElementById("export-cutsets").addEventListener("click", () => {
+    const result = faultTreeCutSets(model, model.top);
+    if (result.nonCoherent)
+      return alert("Cut-set CSV is unavailable for a tree with NOT, NAND, NOR, or XOR gates. Use a dedicated Boolean/probabilistic analysis.");
+    const cutSets = result.sets;
+    let csv = `Order,Cut Set,Event IDs
+`;
+    const byOrder = {};
+    cutSets.forEach((cs) => {
+      const order = cs.length;
+      if (!byOrder[order])
+        byOrder[order] = [];
+      byOrder[order].push(cs);
+    });
+    Object.keys(byOrder).sort((a, b) => parseInt(a) - parseInt(b)).forEach((order) => {
+      byOrder[order].forEach((cs) => {
+        csv += `${order},"${cs.join(", ")}","${cs.join("; ")}"
+`;
+      });
+    });
+    const fileName = (model.top || "cut-sets").toLowerCase() + ".csv";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  document.getElementById("export-json").addEventListener("click", () => {
+    const json = JSON.stringify({ model: { ...model, nodes: [...model.nodes.values()] }, qualitativeAnalysis: faultTreeCutSets(model, model.top) }, null, 2);
+    const fileName = (model.top || "fault-tree").toLowerCase() + ".json";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  const closeMenu = (e) => {
+    if (e.key === "Escape") {
+      document.body.removeChild(menu);
+      document.removeEventListener("keydown", closeMenu);
+    }
+  };
+  document.addEventListener("keydown", closeMenu);
 });
 $("#fault-tree-save-btn").addEventListener("click", () => {
   try {

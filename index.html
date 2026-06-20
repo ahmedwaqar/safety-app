@@ -336,23 +336,24 @@
                 .fault-tree-validation.error{display:block;background:#fee;border:1px solid #fcc;color:#c33}
                 .fault-tree-validation.warning{display:block;background:#fef3cd;border:1px solid #ffc107;color:#856404}
               </style>
-              <div class="fault-tree-builder-row">
-                <label><span>Insert</span><select id="fault-tree-snippet-type"><option value="gate">Gate (multiple inputs)</option><option value="basic">Basic event (terminal)</option><option value="top">Top event (root)</option></select></label>
-                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND (all inputs)</option><option value="OR">OR (any input)</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR (one input)</option><option value="NOT">NOT (single input)</option><option value="KOFN">K-of-N</option></select></label>
-                <label class="fault-tree-kofn-settings" style="display:none"><span>K / N</span><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="1" value="2" /></label>
+              <div class="fault-tree-builder-row fault-tree-builder-mode">
+                <label><span>Add to tree</span><select id="fault-tree-snippet-type"><option value="basic">Basic event</option><option value="gate">Nested gate</option><option value="top">Top event</option></select><small id="fault-tree-builder-mode-help">A terminal failure event linked to a component.</small></label>
+                <label><span>Event ID</span><input id="fault-tree-builder-output" type="text" placeholder="CAMERA_DF" /><small>Unique within this tree.</small></label>
+                <label class="fault-tree-basic-field"><span>Event description</span><input id="fault-tree-builder-label" type="text" placeholder="Camera dangerous failure" /></label>
+                <label class="fault-tree-basic-field"><span>Architecture component</span><select id="fault-tree-builder-component"></select><small id="fault-tree-component-hint"></small></label>
                 <label><span>Layer</span><select id="fault-tree-builder-layer"></select></label>
               </div>
-              <div class="fault-tree-builder-inputs-panel">
-                <label class="inputs-select"><span>Select inputs (hold Ctrl/Cmd to select multiple)</span><select id="fault-tree-builder-inputs" multiple></select></label>
-                <label class="add-input"><span>Or add new event</span><div style="display:flex;gap:6px;margin-top:4px"><input id="fault-tree-builder-new-input" type="text" placeholder="event_name" /><button id="fault-tree-builder-add-input" type="button">Add</button></div></label>
+              <div class="fault-tree-builder-row fault-tree-gate-fields" hidden>
+                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND — all inputs</option><option value="OR">OR — any input</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR</option><option value="NOT">NOT — one input</option><option value="KOFN">K-of-N voting</option></select></label>
+                <label class="fault-tree-kofn-settings" hidden><span>K / N</span><div><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="2" value="2" /></div></label>
               </div>
-              <div class="fault-tree-builder-row">
-                <label><span>Output id</span><input id="fault-tree-builder-output" type="text" placeholder="G1" /></label>
-                <label><span>Component</span><select id="fault-tree-builder-component"></select></label>
-                <button class="button secondary" id="fault-tree-insert-btn" type="button">Insert DSL snippet</button>
+              <div class="fault-tree-builder-inputs-panel fault-tree-gate-fields" hidden>
+                <label class="inputs-select"><span id="fault-tree-inputs-label">Select events or nested gates</span><select id="fault-tree-builder-inputs" multiple></select><small id="fault-tree-inputs-hint">AND and OR gates accept multiple selected inputs.</small></label>
+                <label class="add-input"><span>Add placeholder input</span><div style="display:flex;gap:6px;margin-top:4px"><input id="fault-tree-builder-new-input" type="text" placeholder="EVENT_ID" /><button id="fault-tree-builder-add-input" type="button">Add</button></div><small>Create the corresponding basic event next.</small></label>
               </div>
+              <div class="fault-tree-builder-actions"><button class="button primary" id="fault-tree-insert-btn" type="button">Add basic event</button></div>
               <div class="fault-tree-validation" id="fault-tree-builder-validation"></div>
-              <p class="standards-note"><strong>How to use:</strong> Fault-tree gates combine multiple input events (faults) to produce one output (intermediate event). Select 2+ inputs for most gates, or create a basic event as a terminal node. Each node must have a unique output ID.</p>
+              <p class="standards-note"><strong>Tip:</strong> Build basic events first, then create gates from those event IDs. Architecture components are imported in the <strong>System architecture</strong> view.</p>
             </div>
           </section>
           <section class="card fault-analysis-card">

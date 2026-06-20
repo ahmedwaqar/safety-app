@@ -860,6 +860,22 @@ try {
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_FAIL")`), "architecture-generated fault tree did not include imported components");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes('fault_tree "Architecture top event"')`), "architecture-generated fault tree did not use structured DSL");
     assert(await count("#fault-tree-canvas .fault-node.basic") === 2, "architecture-generated fault tree did not render basic events");
+    assert(await evaluate(`document.querySelector("#fault-tree-snippet-type").value`) === "basic", "basic event is not the builder default");
+    assert(await evaluate(`document.querySelector(".fault-tree-gate-fields").hidden`), "gate controls are visible while adding a basic event");
+    assert(await evaluate(`[...document.querySelector("#fault-tree-builder-component").options].some(option => option.value === "TEST_CTRL")`), "architecture components are not available in the basic-event builder");
+    await fill("#fault-tree-builder-output", "EXTRA_BASIC");
+    await fill("#fault-tree-builder-label", "Additional architecture-linked failure");
+    await fill("#fault-tree-builder-component", "TEST_CTRL");
+    await click("#fault-tree-insert-btn");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("basic EXTRA_BASIC") && document.querySelector("#fault-tree-source").value.includes("component: TEST_CTRL")`), "basic event was not added inside the structured tree with its architecture link");
+    await fill("#fault-tree-snippet-type", "gate");
+    assert(!await evaluate(`document.querySelector(".fault-tree-gate-fields").hidden`), "gate controls did not appear for gate mode");
+    assert(await evaluate(`document.querySelector(".fault-tree-basic-field").hidden`), "basic-only controls remained visible in gate mode");
+    assert(await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple && document.querySelector("#fault-tree-builder-inputs").textContent.includes("TEST_CTRL_FAIL")`), "AND/OR gate input list does not support multiple architecture-linked events");
+    assert(await evaluate(`[...document.querySelectorAll("#fault-tree-builder-inputs optgroup")].some(group => group.label === "Nested gates")`), "nested gates are not offered as gate inputs");
+    await fill("#fault-tree-builder-gate-type", "NOT");
+    assert(!await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple`), "NOT gate should restrict the input picker to one event");
+    await fill("#fault-tree-builder-gate-type", "AND");
 
     const legacyDsl = `TOP TOP "Legacy top"
 GATE TOP OR "Legacy gate" -> LEGACY_A
@@ -956,7 +972,7 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     await fill("#fault-tree-source", dsl);
     await retry(async () => { assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("minimal cut set")`), "fault tree qualitative analysis did not run"); });
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("KOFN:2/3")`), "K-of-N gate was not rendered");
-    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("NAND") && document.querySelector("#fault-tree-canvas").textContent.includes("NOR") && document.querySelector("#fault-tree-source").value.includes("XOR")`), "standard logical gates were not accepted");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("NAND") && document.querySelector("#fault-tree-source").value.includes("NOR") && document.querySelector("#fault-tree-source").value.includes("XOR")`), "standard logical gates were not accepted");
     assert(await evaluate(`document.querySelector("#fault-tree-analysis").textContent.includes("Non-coherent gates")`), "non-coherent gate guidance was missing");
     await fill("#fault-tree-layer", "Sensors");
     assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Sensors", "fault tree layer selection was not retained");
@@ -980,6 +996,21 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
   }
 }`);
     assert(await evaluate(`document.querySelector("#fault-tree-status").textContent`) === "FTA model error", "fault tree validation error was not shown");
+    await fill("#fault-tree-source", `fault_tree "Invalid voting" {
+  top: TOP
+  gate TOP {
+    type: KOFN:2/3
+    label: "Mismatched vote"
+    children: [A, B]
+  }
+  basic A {
+    label: "A"
+  }
+  basic B {
+    label: "B"
+  }
+}`);
+    assert(await evaluate(`document.querySelector("#fault-tree-status").textContent`) === "FTA model error", "K-of-N cardinality mismatch was accepted");
     await fill("#fault-tree-source", dsl);
   });
 

@@ -1,16 +1,50 @@
-FAULTTREE FT_ADAS_LANEKEEP {
-  BE CAM_LANE: "Lane-marking camera failure" [prob=0.0006];
-  BE LANE_DET_SW: "Lane detection algorithm drift" [prob=0.0012];
-  BE LOCALIZATION: "Localization/GNSS loss or drift" [prob=0.0009];
-  BE STEER_ACT: "Steering actuator fault" [prob=0.0002];
-  BE ECU_SW: "Control ECU software crash" [prob=0.0005];
+fault_tree "LKA: unintended steering intervention" {
+  top: UNINTENDED_STEERING
 
-  // Perception or localization problems
-  GATE PERCEP_OR: OR(CAM_LANE,LANE_DET_SW,LOCALIZATION) -> outPERCEP [label="Perception/localization failure"];
+  gate UNINTENDED_STEERING {
+    type: AND
+    label: "Unintended steering torque reaches the road wheels"
+    children: [ERRONEOUS_LATERAL_REQUEST, SAFETY_MONITOR_MISSES]
+    layer: Vehicle
+  }
 
-  // Control chain degraded: ECU crash or steering actuator fault
-  GATE CONTROL_OR: OR(ECU_SW,STEER_ACT) -> outCONTROL [label="Control path failure"];
+  gate ERRONEOUS_LATERAL_REQUEST {
+    type: OR
+    label: "Erroneous lateral-control request"
+    children: [PERCEPTION_FALSE_LANE, CONTROL_SW_FAULT, COMMON_CALIBRATION_ERROR]
+    layer: Function
+  }
 
-  // Lane-keeping hazardous event: perception/localization AND control failure
-  GATE TOP_AND: AND(outPERCEP,outCONTROL) -> outTOP [label="Lane-keeping loss leading to hazard"];
+  gate SAFETY_MONITOR_MISSES {
+    type: AND
+    label: "Independent monitor and steering disable path both fail"
+    children: [MONITOR_DANGEROUS_FAILURE, STEERING_DISABLE_FAILURE]
+    layer: SafetyMechanism
+  }
+
+  basic PERCEPTION_FALSE_LANE {
+    label: "Perception outputs a credible but false lane boundary"
+    component: PERCEPTION
+    layer: Perception
+  }
+  basic CONTROL_SW_FAULT {
+    label: "Lateral-control software produces an erroneous request"
+    component: CONTROL_ECU
+    layer: Control
+  }
+  basic COMMON_CALIBRATION_ERROR {
+    label: "Shared calibration/configuration corrupts perception and monitor assumptions"
+    component: CONFIG
+    layer: CommonCause
+  }
+  basic MONITOR_DANGEROUS_FAILURE {
+    label: "Independent torque or path monitor fails dangerously"
+    component: SAFETY_MONITOR
+    layer: SafetyMechanism
+  }
+  basic STEERING_DISABLE_FAILURE {
+    label: "EPS does not disable the commanded assist torque"
+    component: EPS
+    layer: Actuation
+  }
 }
