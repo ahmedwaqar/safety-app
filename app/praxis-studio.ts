@@ -1486,7 +1486,18 @@ function renderFaultTreeBuilder() {
   try { model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl); } catch (e) { model = { top: "", nodes: new Map(), layers: ["All"], warnings: [] }; }
   layerSel.innerHTML = (model.layers || ["All"]).map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
   inputsSel.innerHTML = [...(model.nodes ? model.nodes.keys() : [])].map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
-  if (!outputInput.value) outputInput.value = `G${Math.floor(Math.random()*9000)+1000}`;
+  // helper: create a unique id not colliding with existing nodes
+  const existingIds = new Set(model.nodes ? [...model.nodes.keys()] : []);
+  function makeUniqueId(base = 'G'){
+    base = String(base).replace(/[^A-Za-z0-9_]/g, '') || 'G';
+    if (!existingIds.has(base)) return base;
+    for(let i=1;i<10000;i++){
+      const cand = `${base}${i}`;
+      if(!existingIds.has(cand)) return cand;
+    }
+    return `${base}${Math.floor(Math.random()*90000)}`;
+  }
+  if (!outputInput.value) outputInput.value = makeUniqueId('G');
 
   const insertBtn = $("#fault-tree-insert-btn") as HTMLButtonElement;
   if (!insertBtn) return;
@@ -1498,18 +1509,41 @@ function renderFaultTreeBuilder() {
       const n = ($("#fault-tree-builder-n") as HTMLInputElement).value;
       const layer = layerSel.value || "Logic";
       const component = compSel.value || "";
-      const output = (outputInput.value || `G${Math.random().toString(36).slice(2,7).toUpperCase()}`).trim();
+      let output = (outputInput.value || makeUniqueId('G')).trim();
+      // auto-fill label with output if needed
+      const label = output;
+      // validate output id
+      if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(output)){
+        alert('Invalid output id. Use letters, numbers and underscore, start with a letter or underscore.');
+        outputInput.focus();
+        return;
+      }
+      if(existingIds.has(output)){
+        alert(`Identifier '${output}' already exists in the model. Choose a unique output id.`);
+        outputInput.focus();
+        return;
+      }
       const selectedInputs = Array.from(inputsSel.selectedOptions).map(o => o.value).filter(Boolean);
+      // validate selected inputs for gates (basic/top don't require children)
+      if(snippetType === 'gate'){
+        if(gateType !== 'NOT' && selectedInputs.length < 1){
+          if(!confirm('No children selected for this gate. Insert anyway?')) return;
+        }
+        if(gateType === 'KOFN'){
+          const ki = Number(k), ni = Number(n);
+          if(!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni){ alert('Invalid K-of-N settings: ensure 1 ≤ K ≤ N and both integers.'); return; }
+        }
+      }
       const editor = $("#fault-tree-source") as HTMLTextAreaElement;
       let snippet = "";
       if (snippetType === "basic") {
-        snippet = `\nbasic ${output} {\n  label: "${output}"\n  component: ${component ? `"${component}"` : '""'}\n  layer: ${layer}\n}\n`;
+        snippet = `\nbasic ${output} {\n  label: "${label}"\n  component: ${component ? `"${component}"` : '""'}\n  layer: ${layer}\n}\n`;
       } else if (snippetType === "top") {
-        snippet = `\nfault_tree "${output}" {\n  top: ${output}\n\n  gate ${output} {\n    type: ${gateType}\n    label: "${output}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n}\n`;
+        snippet = `\nfault_tree "${label}" {\n  top: ${output}\n\n  gate ${output} {\n    type: ${gateType}\n    label: "${label}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n}\n`;
       } else {
         let typeTxt = gateType;
         if (gateType === "KOFN") typeTxt = `KOFN:${k}/${n}`;
-        snippet = `\n  gate ${output} {\n    type: ${typeTxt}\n    label: "${output}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n`;
+        snippet = `\n  gate ${output} {\n    type: ${typeTxt}\n    label: "${label}"\n    children: [${selectedInputs.join(", ")}]\n    layer: ${layer}\n  }\n`;
       }
       // insert at cursor if possible, else append
       try {
@@ -1522,6 +1556,8 @@ function renderFaultTreeBuilder() {
       }
       editor.focus();
       persistState();
+      // update model caches and builder lists so new id becomes available immediately
+      try{ model = parseFaultTreeDsl(editor.value || state.faultTree.dsl); existingIds.add(output); inputsSel.innerHTML = [...model.nodes.keys()].map(id => `<option value="${esc(id)}">${esc(id)}</option>`).join(""); }catch(e){}
       renderFaultTree();
     });
     insertBtn.dataset.builderAttached = "1";
