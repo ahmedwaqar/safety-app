@@ -1676,7 +1676,24 @@ function renderFaultTree() {
   const analysis = $("#fault-tree-analysis");
   const layers = $("#fault-tree-layer");
   try {
-    let draw2 = function(id, depth = 0) {
+    let getGateSvg2 = function(gate) {
+      const t = String(gate || "").toUpperCase();
+      if (t.startsWith("KOFN"))
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/><text x="6" y="16" font-size="10" fill="currentColor">${esc(t)}</text></svg>`;
+      if (t === "AND")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 H18 A12 12 0 0 1 18 20 H0 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      if (t === "OR")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      if (t === "NOT")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 L28 12 L2 20 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="32" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "NAND")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 H18 A12 12 0 0 1 18 20 H0 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="28" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "NOR")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="34" cy="12" r="2" fill="none" stroke="currentColor"/></svg>`;
+      if (t === "XOR")
+        return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 Q12 12 2 20" fill="none" stroke="currentColor" stroke-width="1"/><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+      return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/></svg>`;
+    }, draw2 = function(id, depth = 0) {
       const node = model.nodes.get(id);
       const hidden = state.faultTree.activeLayer !== "All" && node.layer !== state.faultTree.activeLayer && node.children.length === 0;
       if (hidden)
@@ -1684,11 +1701,11 @@ function renderFaultTree() {
       const gate = node.kind === "basic" ? "BASIC" : node.gate;
       const children = node.children.map((child) => draw2(child, depth + 1)).filter(Boolean).join("");
       return `<article class="fault-node ${node.kind}" style="--depth:${depth}">
-        <div class="fault-node-card"><span class="fault-gate">${esc(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
+        <div class="fault-node-card"><span class="fault-gate">${getGateSvg2(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>Layer: ${esc(node.layer)}</small></div>
         ${children ? `<div class="fault-children">${children}</div>` : ""}
       </article>`;
     };
-    var draw = draw2;
+    var getGateSvg = getGateSvg2, draw = draw2;
     const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
     if (!model.layers.includes(state.faultTree.activeLayer))
@@ -1802,6 +1819,169 @@ function renderArchitecture() {
   $("#component-count").textContent = state.components.length;
   $("#component-list").innerHTML = state.components.map((x) => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("");
 }
+function renderFaultTreeBuilder() {
+  const layerSel = $("#fault-tree-builder-layer");
+  const compSel = $("#fault-tree-builder-component");
+  const inputsSel = $("#fault-tree-builder-inputs");
+  const outputInput = $("#fault-tree-builder-output");
+  compSel.innerHTML = state.components.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  let model;
+  try {
+    model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl);
+  } catch (e) {
+    model = { top: "", nodes: new Map, layers: ["All"], warnings: [] };
+  }
+  layerSel.innerHTML = (model.layers || ["All"]).map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join("");
+  state.faultTree.customInputs = state.faultTree.customInputs || [];
+  const customInputs = state.faultTree.customInputs || [];
+  function updateInputsOptions() {
+    const nodeIds = model && model.nodes ? [...model.nodes.keys()] : [];
+    const union = Array.from(new Set([...nodeIds, ...customInputs]));
+    inputsSel.innerHTML = union.map((id) => `<option value="${esc(id)}">${esc(id)}</option>`).join("");
+  }
+  updateInputsOptions();
+  const existingIds = new Set(model.nodes ? [...model.nodes.keys()] : []);
+  function makeUniqueId(base = "G") {
+    base = String(base).replace(/[^A-Za-z0-9_]/g, "") || "G";
+    if (!existingIds.has(base))
+      return base;
+    for (let i = 1;i < 1e4; i++) {
+      const cand = `${base}${i}`;
+      if (!existingIds.has(cand))
+        return cand;
+    }
+    return `${base}${Math.floor(Math.random() * 90000)}`;
+  }
+  if (!outputInput.value)
+    outputInput.value = makeUniqueId("G");
+  const insertBtn = $("#fault-tree-insert-btn");
+  if (!insertBtn)
+    return;
+  const newInputField = $("#fault-tree-builder-new-input");
+  const addInputBtn = $("#fault-tree-builder-add-input");
+  function addCustomInput(valueRaw) {
+    const v = String(valueRaw || "").trim();
+    if (!v)
+      return;
+    const token = v.replace(/\s+/g, "_").replace(/[^A-Za-z0-9_\-]/g, "");
+    if (!token)
+      return;
+    if (!customInputs.includes(token)) {
+      customInputs.push(token);
+      state.faultTree.customInputs = customInputs;
+      persistState();
+    }
+    updateInputsOptions();
+    const opt = Array.from(inputsSel.options).find((o) => o.value === token);
+    if (opt) {
+      opt.selected = true;
+      inputsSel.focus();
+    }
+    if (newInputField)
+      newInputField.value = "";
+  }
+  if (newInputField) {
+    newInputField.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addCustomInput(newInputField.value);
+      }
+    });
+  }
+  if (addInputBtn) {
+    addInputBtn.addEventListener("click", () => addCustomInput(newInputField ? newInputField.value : ""));
+  }
+  if (!insertBtn.dataset.builderAttached) {
+    insertBtn.addEventListener("click", () => {
+      const snippetType = $("#fault-tree-snippet-type").value;
+      const gateType = $("#fault-tree-builder-gate-type").value;
+      const k = $("#fault-tree-builder-k").value;
+      const n = $("#fault-tree-builder-n").value;
+      const layer = layerSel.value || "Logic";
+      const component = compSel.value || "";
+      let output = (outputInput.value || makeUniqueId("G")).trim();
+      const label = output;
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(output)) {
+        alert("Invalid output id. Use letters, numbers and underscore, start with a letter or underscore.");
+        outputInput.focus();
+        return;
+      }
+      if (existingIds.has(output)) {
+        alert(`Identifier '${output}' already exists in the model. Choose a unique output id.`);
+        outputInput.focus();
+        return;
+      }
+      const selectedInputs = Array.from(inputsSel.selectedOptions).map((o) => o.value).filter(Boolean);
+      if (snippetType === "gate") {
+        if (gateType !== "NOT" && selectedInputs.length < 1) {
+          if (!confirm("No children selected for this gate. Insert anyway?"))
+            return;
+        }
+        if (gateType === "KOFN") {
+          const ki = Number(k), ni = Number(n);
+          if (!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni) {
+            alert("Invalid K-of-N settings: ensure 1 ≤ K ≤ N and both integers.");
+            return;
+          }
+        }
+      }
+      const editor = $("#fault-tree-source");
+      let snippet = "";
+      if (snippetType === "basic") {
+        snippet = `
+basic ${output} {
+  label: "${label}"
+  component: ${component ? `"${component}"` : '""'}
+  layer: ${layer}
+}
+`;
+      } else if (snippetType === "top") {
+        snippet = `
+fault_tree "${label}" {
+  top: ${output}
+
+  gate ${output} {
+    type: ${gateType}
+    label: "${label}"
+    children: [${selectedInputs.join(", ")}]
+    layer: ${layer}
+  }
+}
+`;
+      } else {
+        let typeTxt = gateType;
+        if (gateType === "KOFN")
+          typeTxt = `KOFN:${k}/${n}`;
+        snippet = `
+  gate ${output} {
+    type: ${typeTxt}
+    label: "${label}"
+    children: [${selectedInputs.join(", ")}]
+    layer: ${layer}
+  }
+`;
+      }
+      try {
+        const start = editor.selectionStart || editor.value.length;
+        const before = editor.value.slice(0, start);
+        const after = editor.value.slice(start);
+        editor.value = before + snippet + after;
+      } catch (e) {
+        editor.value = (editor.value || "") + `
+` + snippet;
+      }
+      editor.focus();
+      persistState();
+      try {
+        model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
+        existingIds.add(output);
+        updateInputsOptions();
+      } catch (e) {}
+      renderFaultTree();
+    });
+    insertBtn.dataset.builderAttached = "1";
+  }
+}
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = tabWorkspaces().map((workspace) => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
@@ -1821,6 +2001,7 @@ var FEATURE_RENDERERS = [
   renderSil,
   renderQuantitative,
   renderFmeda,
+  renderFaultTreeBuilder,
   renderFaultTree,
   renderArchitecture
 ];

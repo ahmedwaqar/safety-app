@@ -323,24 +323,36 @@
             <textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off"></textarea>
             <div class="fault-tree-builder">
               <style>
-                /* Inline override to make builder controls wrap on narrow windows */
-                .fault-tree-builder .fault-tree-builder-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
-                .fault-tree-builder .fault-tree-builder-row>label{flex:1 1 160px;min-width:120px}
-                .fault-tree-builder .fault-tree-builder-row>button{flex:0 0 auto}
-                .fault-tree-builder .fault-tree-builder-row select,.fault-tree-builder .fault-tree-builder-row input{width:100%}
+                .fault-tree-builder {margin-top:16px;padding:12px;background:#f8f9fa;border-radius:4px;border-left:4px solid #2563eb}
+                .fault-tree-builder-row{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:12px}
+                .fault-tree-builder-row>label{flex:1 1 160px;min-width:120px}
+                .fault-tree-builder-row>button{flex:0 0 auto}
+                .fault-tree-builder-row select,.fault-tree-builder-row input{width:100%}
+                .fault-tree-builder-inputs-panel{display:flex;gap:12px;margin-bottom:12px}
+                .fault-tree-builder-inputs-panel .inputs-select{flex:2;min-width:200px}
+                .fault-tree-builder-inputs-panel .add-input{flex:1;min-width:180px}
+                .fault-tree-builder-inputs-panel .inputs-select select{height:120px;border:2px solid #2563eb}
+                .fault-tree-validation{margin-top:12px;padding:10px;border-radius:4px;display:none;font-size:13px}
+                .fault-tree-validation.error{display:block;background:#fee;border:1px solid #fcc;color:#c33}
+                .fault-tree-validation.warning{display:block;background:#fef3cd;border:1px solid #ffc107;color:#856404}
               </style>
               <div class="fault-tree-builder-row">
-                <label><span>Insert</span><select id="fault-tree-snippet-type"><option value="gate">Gate</option><option value="basic">Basic event</option><option value="top">Top event</option></select></label>
-                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND</option><option value="OR">OR</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR</option><option value="NOT">NOT</option><option value="KOFN">K-of-N</option></select></label>
-                <label class="fault-tree-kofn-settings"><span>K / N</span><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="1" value="2" /></label>
+                <label><span>Insert</span><select id="fault-tree-snippet-type"><option value="gate">Gate (multiple inputs)</option><option value="basic">Basic event (terminal)</option><option value="top">Top event (root)</option></select></label>
+                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND (all inputs)</option><option value="OR">OR (any input)</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR (one input)</option><option value="NOT">NOT (single input)</option><option value="KOFN">K-of-N</option></select></label>
+                <label class="fault-tree-kofn-settings" style="display:none"><span>K / N</span><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="1" value="2" /></label>
                 <label><span>Layer</span><select id="fault-tree-builder-layer"></select></label>
-                <label><span>Inputs</span><select id="fault-tree-builder-inputs" multiple size="3"></select></label>
-                <label><span>Or add event</span><div style="display:flex;gap:6px"><input id="fault-tree-builder-new-input" type="text" placeholder="new_event" /><button id="fault-tree-builder-add-input" type="button">Add</button></div></label>
+              </div>
+              <div class="fault-tree-builder-inputs-panel">
+                <label class="inputs-select"><span>Select inputs (hold Ctrl/Cmd to select multiple)</span><select id="fault-tree-builder-inputs" multiple></select></label>
+                <label class="add-input"><span>Or add new event</span><div style="display:flex;gap:6px;margin-top:4px"><input id="fault-tree-builder-new-input" type="text" placeholder="event_name" /><button id="fault-tree-builder-add-input" type="button">Add</button></div></label>
+              </div>
+              <div class="fault-tree-builder-row">
                 <label><span>Output id</span><input id="fault-tree-builder-output" type="text" placeholder="G1" /></label>
                 <label><span>Component</span><select id="fault-tree-builder-component"></select></label>
                 <button class="button secondary" id="fault-tree-insert-btn" type="button">Insert DSL snippet</button>
               </div>
-              <p class="standards-note">Use the builder controls to insert structured DSL scaffolds for top events, gates, and basic events. The editor keeps the title, component, and layer metadata consistent.</p>
+              <div class="fault-tree-validation" id="fault-tree-builder-validation"></div>
+              <p class="standards-note"><strong>How to use:</strong> Fault-tree gates combine multiple input events (faults) to produce one output (intermediate event). Select 2+ inputs for most gates, or create a basic event as a terminal node. Each node must have a unique output ID.</p>
             </div>
           </section>
           <section class="card fault-analysis-card">

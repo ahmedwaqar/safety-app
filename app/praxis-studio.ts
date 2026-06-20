@@ -1475,12 +1475,36 @@ function renderArchitecture() {
 }
 // Builder UI: populate builder selects and handle insertion of DSL snippets
 function renderFaultTreeBuilder() {
+  const snippetTypeSel = $("#fault-tree-snippet-type") as HTMLSelectElement;
+  const gateTypeSel = $("#fault-tree-builder-gate-type") as HTMLSelectElement;
   const layerSel = $("#fault-tree-builder-layer") as HTMLSelectElement;
   const compSel = $("#fault-tree-builder-component") as HTMLSelectElement;
   const inputsSel = $("#fault-tree-builder-inputs") as HTMLSelectElement;
   const outputInput = $("#fault-tree-builder-output") as HTMLInputElement;
+  const validationDiv = $("#fault-tree-builder-validation") as HTMLDivElement;
   // populate components
   compSel.innerHTML = state.components.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+  // toggle K/N settings visibility based on gate type
+  function updateKofnVisibility(){
+    const kofnSetting = gateTypeSel.parentElement?.nextElementSibling as HTMLElement | null;
+    if(kofnSetting && kofnSetting.classList.contains('fault-tree-kofn-settings')){
+      kofnSetting.style.display = gateTypeSel.value === 'KOFN' ? '' : 'none';
+    }
+  }
+  gateTypeSel.addEventListener('change', updateKofnVisibility);
+  updateKofnVisibility();
+  
+  // helper to show validation messages inline
+  function showValidation(message: string, type: 'error' | 'warning' = 'error'){
+    validationDiv.className = `fault-tree-validation ${type}`;
+    const icon = type === 'error' ? '⚠' : 'ⓘ';
+    validationDiv.innerHTML = `<strong>${icon}</strong> ${message}`;
+  }
+  function clearValidation(){
+    validationDiv.className = 'fault-tree-validation';
+    validationDiv.innerHTML = '';
+  }
+  
   // derive model nodes for input suggestions
   let model;
   try { model = parseFaultTreeDsl($("#fault-tree-source").value || state.faultTree.dsl); } catch (e) { model = { top: "", nodes: new Map(), layers: ["All"], warnings: [] }; }
@@ -1552,26 +1576,45 @@ function renderFaultTreeBuilder() {
       const label = output;
       // validate output id
       if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(output)){
-        alert('Invalid output id. Use letters, numbers and underscore, start with a letter or underscore.');
+        showValidation('Invalid output ID. Use letters, numbers, underscore; start with letter or underscore.');
         outputInput.focus();
         return;
       }
       if(existingIds.has(output)){
-        alert(`Identifier '${output}' already exists in the model. Choose a unique output id.`);
+        showValidation(`Output ID '${output}' already exists. Gates and events must have unique IDs.`);
         outputInput.focus();
         return;
       }
       const selectedInputs = Array.from(inputsSel.selectedOptions).map(o => o.value).filter(Boolean);
-      // validate selected inputs for gates (basic/top don't require children)
+      // validate selected inputs for gates
       if(snippetType === 'gate'){
-        if(gateType !== 'NOT' && selectedInputs.length < 1){
-          if(!confirm('No children selected for this gate. Insert anyway?')) return;
+        // NOT gate requires exactly 1 input
+        if(gateType === 'NOT'){
+          if(selectedInputs.length !== 1){
+            showValidation('NOT gate requires exactly 1 input. Please select one input (uncheck others if selected).');
+            return;
+          }
         }
+        // Other gates require at least 2 inputs for meaningful logic
+        else if(selectedInputs.length < 2){
+          showValidation(`${gateType} gate requires at least 2 inputs. You selected ${selectedInputs.length}. Use Ctrl/Cmd+Click to select multiple events.`, 'error');
+          return;
+        }
+        
+        // K-of-N validation
         if(gateType === 'KOFN'){
-          const ki = Number(k), ni = Number(n);
-          if(!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni){ alert('Invalid K-of-N settings: ensure 1 ≤ K ≤ N and both integers.'); return; }
+          const ki = Number($("#fault-tree-builder-k").value || 1);
+          const ni = Number($("#fault-tree-builder-n").value || 2);
+          if(!Number.isInteger(ki) || !Number.isInteger(ni) || ki < 1 || ni < 1 || ki > ni){
+            showValidation('K-of-N: must have 1 ≤ K ≤ N with both as integers. Adjust K and N fields.');
+            return;
+          }
+          if(ni !== selectedInputs.length){
+            showValidation(`K-of-N gate expects N=${ni} inputs but you selected ${selectedInputs.length}. Adjust N or select ${ni} inputs.`, 'warning');
+          }
         }
       }
+      clearValidation();
       const editor = $("#fault-tree-source") as HTMLTextAreaElement;
       let snippet = "";
       if (snippetType === "basic") {
