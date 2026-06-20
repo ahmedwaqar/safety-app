@@ -23,6 +23,8 @@ Use `AND`, `OR`, and voting gates for the normal fault-tree path. If a negation 
 
 The editor rejects missing nodes, duplicate IDs, cycles, invalid K-of-N declarations, and invalid NOT-gate arity. It warns when a non-NOT gate has a single input or a voting gate merely duplicates OR/AND.
 
+Select **Check DSL** whenever you have edited the source. It evaluates the current text without claiming analysis closure, reports parser errors in the diagram panel, and lists review findings for unreachable nodes, configured layers, and basic events whose architecture component is no longer defined.
+
 ## Current DSL
 
 ```text

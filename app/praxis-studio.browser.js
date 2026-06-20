@@ -852,6 +852,8 @@ function configuredFaultTreeLayers() {
 }
 function validateFaultTreeGate(id, gate, children, warnings) {
   const count = children.length;
+  if (new Set(children.map((child) => child.toLowerCase())).size !== count)
+    throw new Error(`Gate "${id}" contains the same input more than once.`);
   if (gate === "NOT" && count !== 1)
     throw new Error(`NOT gate "${id}" must have exactly one child.`);
   if (gate !== "NOT" && !gate.startsWith("KOFN:") && count === 1)
@@ -1772,7 +1774,21 @@ function renderFmeda() {
     return `<tr><td><strong>${esc(row.component)} · ${esc(named("components", row.component))}</strong></td><td>${esc(row.failureMode)}</td><td>${esc(row.localEffect)}</td><td>${esc(row.endEffect)}</td><td><span class="category">${esc(labels[row.classification])}</span></td><td>${esc(row.diagnostic || "—")}</td><td><code>${esc(row.expression)}</code>${error ? `<span class="subtext">${esc(error)}</span>` : ""}</td><td><strong>${esc(value)}</strong></td><td><div class="row-actions"><button class="mini-btn" title="Edit" data-edit-fmeda="${row.id}">✎</button><button class="mini-btn" title="Delete" data-delete-fmeda="${row.id}">×</button></div></td></tr>`;
   }).join("");
 }
-function renderFaultTree() {
+function faultTreeDslFindings(model) {
+  const findings = [...model.warnings];
+  const architectureIds = new Set(state.components.map((component) => String(component.id).toLowerCase()));
+  const allowedLayers = new Set(configuredFaultTreeLayers());
+  for (const node of model.nodes.values()) {
+    if (node.component && !architectureIds.has(String(node.component).toLowerCase()))
+      findings.push(`Basic event "${node.id}" references architecture component "${node.component}", which is not defined in the current architecture.`);
+    if (!allowedLayers.has(node.layer))
+      findings.push(`Node "${node.id}" uses "${node.layer}"; assign it to one of the configured numbered layers.`);
+  }
+  if (model.nodes.get(model.top)?.kind === "basic")
+    findings.push(`Top event "${model.top}" is a basic event; normally the top event should be produced by a gate.`);
+  return [...new Set(findings)];
+}
+function renderFaultTree(checkMode = false) {
   const editor = $("#fault-tree-source");
   if (document.activeElement !== editor)
     editor.value = state.faultTree.dsl;
@@ -1830,13 +1846,14 @@ function renderFaultTree() {
     var getGateSvg = getGateSvg2, branchFor = branchFor2, place = place2, drawConnectors = drawConnectors2, drawNode = drawNode2;
     const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
+    const findings = faultTreeDslFindings(model);
     const configuredLayers = configuredFaultTreeLayers();
     layerCount.value = String(state.faultTree.layerCount);
     if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer))
       state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success";
-    status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
+    status.textContent = checkMode ? `DSL check passed${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}` : `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
     const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()].filter((node) => node.layer === state.faultTree.activeLayer).filter((node) => node.id === model.top || ![...model.nodes.values()].some((parent) => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id))).map((node) => node.id);
     const visible = (id) => state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
     const branches = rootIds.map((id) => branchFor2(id)).filter(Boolean);
@@ -1859,11 +1876,11 @@ function renderFaultTree() {
     const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map((id) => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map((id) => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
     analysis.innerHTML = `<div class="fault-analysis-grid">
       <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. The diagram is rendered and validated, but minimal cut sets are not valid for the complete top event. Use a dedicated Boolean/probabilistic analysis and document the modelling assumptions." : "Minimal cut sets are reduced so supersets are removed. This is qualitative only: independence, common-cause, exposure, and mission-time assumptions still require review."}</p></section>
-      <section><h3>Model quality</h3><p>${model.warnings.length ? model.warnings.map(esc).join(" ") : "All declared nodes are reachable from the top event."}</p></section>
+      <section><h3>DSL checks</h3><p>${findings.length ? findings.map(esc).join(" ") : "Passed: identifiers, references, structure, layers, and architecture links have no findings."}</p></section>
     </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
   } catch (error) {
     status.className = "render-status error";
-    status.textContent = "FTA model error";
+    status.textContent = checkMode ? "DSL check failed" : "FTA model error";
     canvas.innerHTML = `<p>${esc(error.message)}</p>`;
     analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
   }
@@ -3197,6 +3214,11 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
   } catch (error) {
     handleFormError(error);
   }
+});
+$("#fault-tree-validate-btn").addEventListener("click", () => {
+  state.faultTree.dsl = $("#fault-tree-source").value;
+  persistState();
+  renderFaultTree(true);
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
   const source = $("#plantuml-source").value || state.plantuml;

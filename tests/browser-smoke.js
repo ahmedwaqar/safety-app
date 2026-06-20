@@ -978,6 +978,8 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("KOFN:2/3")`), "K-of-N gate was not rendered");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("NAND") && document.querySelector("#fault-tree-source").value.includes("NOR") && document.querySelector("#fault-tree-source").value.includes("XOR")`), "standard logical gates were not accepted");
     assert(await evaluate(`document.querySelector("#fault-tree-analysis").textContent.includes("Non-coherent gates")`), "non-coherent gate guidance was missing");
+    await click("#fault-tree-validate-btn");
+    assert(await evaluate(`document.querySelector("#fault-tree-status").textContent.includes("DSL check passed") && document.querySelector("#fault-tree-analysis").textContent.includes("DSL checks")`), "explicit DSL check did not report validation findings");
     await fill("#fault-tree-source", dsl.replaceAll("layer: Sensors", "layer: Layer 2"));
     await fill("#fault-tree-layer-count", "4");
     assert(await evaluate(`document.querySelector("#fault-tree-layer").textContent.includes("Layer 4")`), "configured layer count did not update the layer view");

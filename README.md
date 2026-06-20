@@ -284,7 +284,7 @@ Beginner lesson: [`training/fmeda-for-beginners.md`](training/fmeda-for-beginner
 
 ### Fault Tree Analysis
 
-Use **Fault tree analysis** to model top events deductively with a structured domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, top-down connector layout, and zoom controls. The builder provides `AND`, `OR`, `NAND`, `NOR`, `XOR`, and `NOT`; existing DSL files with `KOFN:k/n` remain readable.
+Use **Fault tree analysis** to model top events deductively with a structured domain-specific language. The editor supports nested and layered diagrams, architecture-linked basic events, architecture-generated starter trees, top-down connector layout, zoom controls, and **Check DSL** validation. The builder provides `AND`, `OR`, `NAND`, `NOR`, `XOR`, and `NOT`; existing DSL files with `KOFN:k/n` remain readable.
 
 ```text
 fault_tree "Loss of safety function" {
@@ -322,7 +322,7 @@ fault_tree "Loss of safety function" {
 }
 ```
 
-The app validates duplicate identifiers, unsupported gates, missing children, unreachable nodes, cycles, NOT-gate arity, and K-of-N cardinality. Qualitative analysis derives reduced minimal cut sets only for coherent `AND`/`OR`/K-of-N trees. It flags `NOT`, `NAND`, `NOR`, and `XOR` as non-coherent: use a dedicated Boolean/probabilistic analysis and do not treat the displayed cut sets as a complete top-event result. FTA output is qualitative; independence, common-cause, mission-time, exposure, and quantitative-rate assumptions remain review items.
+Use **Check DSL** to evaluate the current editor content without treating it as a completed analysis. It reports parse errors directly and flags structural, layer, unreachable-node, and missing architecture-component findings. The app validates duplicate identifiers, duplicate gate inputs, unsupported gates, missing children, cycles, NOT-gate arity, and K-of-N cardinality. Qualitative analysis derives reduced minimal cut sets only for coherent `AND`/`OR`/K-of-N trees. It flags `NOT`, `NAND`, `NOR`, and `XOR` as non-coherent: use a dedicated Boolean/probabilistic analysis and do not treat the displayed cut sets as a complete top-event result. FTA output is qualitative; independence, common-cause, mission-time, exposure, and quantitative-rate assumptions remain review items.
 
 #### Fault Tree DSL BNF
 
