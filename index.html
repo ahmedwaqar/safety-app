@@ -281,7 +281,17 @@
           <section class="editor-card">
             <div class="editor-top"><span>fault-tree.fta</span><div class="editor-actions"><label class="fault-layer-control"><span>Layer</span><select id="fault-tree-layer"></select></label><span class="render-status" id="fault-tree-status">Ready</span></div></div>
             <textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off"></textarea>
-            <p class="standards-note">Structured DSL syntax: <code>fault_tree "Title" { top: TOP gate TOP { type: AND children: [A, B] } basic A { label: "Event" component: PLC layer: Logic } }</code>. Gates: AND, OR, NAND, NOR, XOR, NOT, and KOFN:k/n.</p>
+            <div class="fault-tree-builder">
+              <div class="fault-tree-builder-row">
+                <label><span>Insert</span><select id="fault-tree-snippet-type"><option value="gate">Gate</option><option value="basic">Basic event</option><option value="top">Top event</option></select></label>
+                <label><span>Gate type</span><select id="fault-tree-builder-gate-type"><option value="AND">AND</option><option value="OR">OR</option><option value="NAND">NAND</option><option value="NOR">NOR</option><option value="XOR">XOR</option><option value="NOT">NOT</option><option value="KOFN">K-of-N</option></select></label>
+                <label class="fault-tree-kofn-settings"><span>K / N</span><input id="fault-tree-builder-k" type="number" min="1" value="1" /><input id="fault-tree-builder-n" type="number" min="1" value="2" /></label>
+                <label><span>Layer</span><select id="fault-tree-builder-layer"></select></label>
+                <label><span>Component</span><select id="fault-tree-builder-component"></select></label>
+                <button class="button secondary" id="fault-tree-insert-btn" type="button">Insert DSL snippet</button>
+              </div>
+              <p class="standards-note">Use the builder controls to insert structured DSL scaffolds for top events, gates, and basic events. The editor keeps the title, component, and layer metadata consistent.</p>
+            </div>
           </section>
           <section class="card fault-analysis-card">
             <div class="card-header"><div><p class="eyebrow">Qualitative analysis</p><h3>Minimal cut sets and model quality</h3></div></div>
