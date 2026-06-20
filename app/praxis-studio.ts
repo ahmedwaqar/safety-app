@@ -1413,7 +1413,14 @@ function faultTreeDslFindings(model: FaultTreeModel) {
   if (model.nodes.get(model.top)?.kind === "basic") findings.push(`Top event "${model.top}" is a basic event; normally the top event should be produced by a gate.`);
   return [...new Set(findings)];
 }
-function renderFaultTree(checkMode = false) {
+function renderFaultTreeLineNumbers(errorLine?: number) {
+  const source = $("#fault-tree-source") as HTMLTextAreaElement;
+  const gutter = $("#fault-tree-line-numbers");
+  const lineCount = Math.max(1, source.value.split(/\r?\n/).length);
+  gutter.innerHTML = Array.from({ length: lineCount }, (_, index) => `<span${index + 1 === errorLine ? ' class="error"' : ""}>${index + 1}</span>`).join("");
+  gutter.scrollTop = source.scrollTop;
+}
+function renderFaultTree() {
   const editor = $("#fault-tree-source") as HTMLTextAreaElement;
   if (document.activeElement !== editor) editor.value = state.faultTree.dsl;
   const status = $("#fault-tree-status");
@@ -1421,6 +1428,7 @@ function renderFaultTree(checkMode = false) {
   const analysis = $("#fault-tree-analysis");
   const layers = $("#fault-tree-layer") as HTMLSelectElement;
   const layerCount = $("#fault-tree-layer-count") as HTMLInputElement;
+  renderFaultTreeLineNumbers();
   try {
     function getGateSvg(gate) {
       const t = String(gate || "").toUpperCase();
@@ -1440,7 +1448,7 @@ function renderFaultTree(checkMode = false) {
     layerCount.value = String(state.faultTree.layerCount);
     if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map(layer => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
-    status.className = "render-status success"; status.textContent = checkMode ? `DSL check passed${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}` : `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
+    status.className = "render-status success"; status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}`;
     const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()]
       .filter(node => node.layer === state.faultTree.activeLayer)
       .filter(node => node.id === model.top || ![...model.nodes.values()].some(parent => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id)))
@@ -1488,7 +1496,9 @@ function renderFaultTree(checkMode = false) {
       <section><h3>DSL checks</h3><p>${findings.length ? findings.map(esc).join(" ") : "Passed: identifiers, references, structure, layers, and architecture links have no findings."}</p></section>
     </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
   } catch (error) {
-    status.className = "render-status error"; status.textContent = checkMode ? "DSL check failed" : "FTA model error";
+    const line = Number(String(error.message || "").match(/line\s+(\d+)/i)?.[1]);
+    renderFaultTreeLineNumbers(Number.isFinite(line) ? line : undefined);
+    status.className = "render-status error"; status.textContent = "FTA model error";
     canvas.innerHTML = `<p>${esc(error.message)}</p>`;
     analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
   }
@@ -2400,6 +2410,9 @@ $("#fault-tree-source").addEventListener("input", event => {
   persistState();
   renderFaultTree();
 });
+$("#fault-tree-source").addEventListener("scroll", () => {
+  ($("#fault-tree-line-numbers") as HTMLElement).scrollTop = ($("#fault-tree-source") as HTMLTextAreaElement).scrollTop;
+});
 $("#fault-tree-help-btn").addEventListener("click", () => {
   let modal = document.getElementById('fault-tree-help-modal') as HTMLDivElement;
   if(!modal){
@@ -2488,11 +2501,6 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
     parseFaultTreeDsl(state.faultTree.dsl);
     save();
   } catch (error) { handleFormError(error); }
-});
-$("#fault-tree-validate-btn").addEventListener("click", () => {
-  state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
-  persistState();
-  renderFaultTree(true);
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
   const source = ($("#plantuml-source") as HTMLTextAreaElement).value || state.plantuml;

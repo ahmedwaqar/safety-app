@@ -1788,7 +1788,14 @@ function faultTreeDslFindings(model) {
     findings.push(`Top event "${model.top}" is a basic event; normally the top event should be produced by a gate.`);
   return [...new Set(findings)];
 }
-function renderFaultTree(checkMode = false) {
+function renderFaultTreeLineNumbers(errorLine) {
+  const source = $("#fault-tree-source");
+  const gutter = $("#fault-tree-line-numbers");
+  const lineCount = Math.max(1, source.value.split(/\r?\n/).length);
+  gutter.innerHTML = Array.from({ length: lineCount }, (_, index) => `<span${index + 1 === errorLine ? ' class="error"' : ""}>${index + 1}</span>`).join("");
+  gutter.scrollTop = source.scrollTop;
+}
+function renderFaultTree() {
   const editor = $("#fault-tree-source");
   if (document.activeElement !== editor)
     editor.value = state.faultTree.dsl;
@@ -1797,6 +1804,7 @@ function renderFaultTree(checkMode = false) {
   const analysis = $("#fault-tree-analysis");
   const layers = $("#fault-tree-layer");
   const layerCount = $("#fault-tree-layer-count");
+  renderFaultTreeLineNumbers();
   try {
     let getGateSvg2 = function(gate) {
       const t = String(gate || "").toUpperCase();
@@ -1853,7 +1861,7 @@ function renderFaultTree(checkMode = false) {
       state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success";
-    status.textContent = checkMode ? `DSL check passed${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}` : `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
+    status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}`;
     const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()].filter((node) => node.layer === state.faultTree.activeLayer).filter((node) => node.id === model.top || ![...model.nodes.values()].some((parent) => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id))).map((node) => node.id);
     const visible = (id) => state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
     const branches = rootIds.map((id) => branchFor2(id)).filter(Boolean);
@@ -1879,8 +1887,10 @@ function renderFaultTree(checkMode = false) {
       <section><h3>DSL checks</h3><p>${findings.length ? findings.map(esc).join(" ") : "Passed: identifiers, references, structure, layers, and architecture links have no findings."}</p></section>
     </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
   } catch (error) {
+    const line = Number(String(error.message || "").match(/line\s+(\d+)/i)?.[1]);
+    renderFaultTreeLineNumbers(Number.isFinite(line) ? line : undefined);
     status.className = "render-status error";
-    status.textContent = checkMode ? "DSL check failed" : "FTA model error";
+    status.textContent = "FTA model error";
     canvas.innerHTML = `<p>${esc(error.message)}</p>`;
     analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
   }
@@ -3126,6 +3136,9 @@ $("#fault-tree-source").addEventListener("input", (event) => {
   persistState();
   renderFaultTree();
 });
+$("#fault-tree-source").addEventListener("scroll", () => {
+  $("#fault-tree-line-numbers").scrollTop = $("#fault-tree-source").scrollTop;
+});
 $("#fault-tree-help-btn").addEventListener("click", () => {
   let modal = document.getElementById("fault-tree-help-modal");
   if (!modal) {
@@ -3214,11 +3227,6 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
   } catch (error) {
     handleFormError(error);
   }
-});
-$("#fault-tree-validate-btn").addEventListener("click", () => {
-  state.faultTree.dsl = $("#fault-tree-source").value;
-  persistState();
-  renderFaultTree(true);
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
   const source = $("#plantuml-source").value || state.plantuml;
