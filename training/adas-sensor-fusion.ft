@@ -1,0 +1,21 @@
+FAULTTREE FT_ADAS_FUSION {
+  BE CAM_CAL: "Camera calibration drift" [prob=0.0015];
+  BE LIDAR_CAL: "Lidar mis-calibration" [prob=0.0007];
+  BE RADAR_CAL: "Radar mis-calibration" [prob=0.0006];
+  BE TIME_SYNC: "Sensor time-sync failure" [prob=0.0004];
+  BE FUSION_SW: "Fusion software regression" [prob=0.0009];
+  BE WATCHDOG: "Watchdog failure (no recovery)" [prob=0.0001];
+  BE BACKUP_SYS: "Backup algorithm disabled" [prob=0.0002];
+
+  // Calibration-related correlated failure (conservative OR)
+  GATE CAL_OR: OR(CAM_CAL,LIDAR_CAL,RADAR_CAL) -> outCAL [label="Any sensor calibration drift"];
+
+  // Fusion degraded when sync or major calibration issue or fusion SW fails
+  GATE FUSION_OR: OR(TIME_SYNC,outCAL,FUSION_SW) -> outFUSION [label="Fusion degraded"];
+
+  // Recovery inhibited if watchdog or backup disabled
+  GATE RECOVER_AND: AND(WATCHDOG,BACKUP_SYS) -> outREC_FAIL [label="Recovery chain failed"];
+
+  // Hazard: fusion degraded and recovery failed
+  GATE TOP_AND: AND(outFUSION,outREC_FAIL) -> outTOP [label="Sensor-fusion failure causing hazardous perception"];
+}

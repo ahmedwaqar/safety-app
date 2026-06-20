@@ -1,0 +1,7 @@
+FAULTTREE FT1 {
+  BE E01: "Pump fails" [prob=0.001];
+  BE E02: "Valve stuck" [prob=0.002];
+
+  GATE G1: AND(E01,E02) -> outG1 [label="Pump+Valve AND"];
+  GATE G2: OR(outG1,E02) -> outG2;
+}

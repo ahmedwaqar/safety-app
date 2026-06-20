@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SVG Logic Gates Demo</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Roboto, Arial; margin: 0; display:flex; height:100vh; }
+    #controls { width: 320px; padding: 16px; border-right:1px solid #ddd; box-sizing:border-box; }
+    #canvas-wrap { flex:1; position:relative; }
+    svg { width:100%; height:100%; background: #f9f9fb; }
+    .gate { cursor:move; }
+    .gate rect, .gate path { fill:#fff; stroke:#222; stroke-width:2px; }
+    .gate .label { font-size:12px; text-anchor:middle; fill:#111; }
+    .port { fill:#fff; stroke:#333; stroke-width:1px; }
+    .wire { stroke:#07f; stroke-width:2px; fill:none; }
+    .output-id { font-size:11px; color:#444; word-break:break-all }
+    .small { font-size:12px }
+    .controls-row { margin-bottom:12px }
+    .list { max-height:240px; overflow:auto; border:1px solid #eee; padding:8px; background:#fff }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <h3>Gates</h3>
+    <div class="controls-row">
+      <label class="small">Type</label>
+      <select id="gate-type"><option>AND</option><option>OR</option><option>NAND</option><option>NOR</option><option>XOR</option><option>NOT</option></select>
+    </div>
+    <div class="controls-row">
+      <label class="small">Inputs (n)</label>
+      <input id="gate-n" type="number" min="1" value="2" style="width:80px" />
+    </div>
+    <div class="controls-row">
+      <button id="add-gate">Add Gate</button>
+    </div>
+
+    <h4>Available Outputs</h4>
+    <div id="outputs" class="list"></div>
+
+    <h4>Gates / Wiring</h4>
+    <div id="gates-list" class="list"></div>
+  </div>
+
+  <div id="canvas-wrap">
+    <svg id="svg-canvas" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet"></svg>
+  </div>
+
+  <script>
+  // Simple demo: create n-input gate shapes and wire by referencing output IDs.
+  const svg = document.getElementById('svg-canvas');
+  const outputsEl = document.getElementById('outputs');
+  const gatesListEl = document.getElementById('gates-list');
+
+  let gateCounter = 0;
+  const gates = [];
+
+  function uid() { gateCounter++; return 'G' + String(gateCounter).padStart(3,'0'); }
+
+  function createGateElement(type, n, x=150, y=80) {
+    const id = uid();
+    const outId = 'out-' + id;
+    const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+    g.classList.add('gate');
+    g.setAttribute('transform', `translate(${x},${y})`);
+    g.dataset.gid = id;
+    g.dataset.type = type;
+    g.dataset.n = n;
+    g.dataset.outputId = outId;
+
+    // bounding box sizes
+    const w = 120, h = Math.max(40, n*14 + 20);
+
+    // draw gate body depending on type
+    if (type === 'AND' || type === 'NAND') {
+      // rectangle left, semicircle right
+      const rect = document.createElementNS(svg.namespaceURI,'rect');
+      rect.setAttribute('x',0); rect.setAttribute('y',0); rect.setAttribute('width',w/2); rect.setAttribute('height',h);
+      const path = document.createElementNS(svg.namespaceURI,'path');
+      const rx = w/2, ry = h/2;
+      path.setAttribute('d', `M${w/2} 0 L${w-10} 0 Q${w+10} ${ry} ${w-10} ${h} L${w/2} ${h} Z`);
+      g.appendChild(rect);
+      g.appendChild(path);
+    } else if (type === 'OR' || type === 'NOR') {
+      const path = document.createElementNS(svg.namespaceURI,'path');
+      path.setAttribute('d', `M0 ${h*0.05} Q30 ${h/2} 0 ${h*0.95} L${w-10} ${h*0.95} Q${w+10} ${h/2} ${w-10} ${h*0.05} Z`);
+      g.appendChild(path);
+    } else if (type === 'XOR' || type === 'XNOR') {
+      const back = document.createElementNS(svg.namespaceURI,'path');
+      back.setAttribute('d', `M-8 ${h*0.05} Q22 ${h/2} -8 ${h*0.95}`);
+      back.setAttribute('stroke','#222'); back.setAttribute('fill','none'); back.setAttribute('stroke-width','2');
+      g.appendChild(back);
+      const path = document.createElementNS(svg.namespaceURI,'path');
+      path.setAttribute('d', `M0 ${h*0.05} Q30 ${h/2} 0 ${h*0.95} L${w-10} ${h*0.95} Q${w+10} ${h/2} ${w-10} ${h*0.05} Z`);
+      g.appendChild(path);
+    } else if (type === 'NOT') {
+      const path = document.createElementNS(svg.namespaceURI,'path');
+      path.setAttribute('d', `M0 ${h*0.1} L${w-20} ${h/2} L0 ${h*0.9} Z`);
+      g.appendChild(path);
+      // bubble for NOT
+      const circle = document.createElementNS(svg.namespaceURI,'circle');
+      circle.setAttribute('cx', w-12); circle.setAttribute('cy', h/2); circle.setAttribute('r',6);
+      circle.classList.add('port');
+      g.appendChild(circle);
+    } else {
+      // default box
+      const rect = document.createElementNS(svg.namespaceURI,'rect');
+      rect.setAttribute('x',0); rect.setAttribute('y',0); rect.setAttribute('width',w); rect.setAttribute('height',h);
+      g.appendChild(rect);
+    }
+
+    // label
+    const text = document.createElementNS(svg.namespaceURI,'text');
+    text.classList.add('label');
+    text.setAttribute('x', w/2); text.setAttribute('y', h/2 + 4);
+    text.textContent = `${type} (${n})`;
+    g.appendChild(text);
+
+    // input ports (left)
+    for (let i=0;i<n;i++){
+      const iy = 12 + i * ((h-24)/Math.max(1,n-1));
+      const port = document.createElementNS(svg.namespaceURI,'circle');
+      port.setAttribute('cx', -6); port.setAttribute('cy', iy); port.setAttribute('r',4);
+      port.classList.add('port');
+      port.dataset.inputIndex = i;
+      g.appendChild(port);
+    }
+
+    // output port (right)
+    const outY = h/2;
+    const out = document.createElementNS(svg.namespaceURI,'circle');
+    out.setAttribute('cx', w+6); out.setAttribute('cy', outY); out.setAttribute('r',5);
+    out.classList.add('port');
+    out.id = outId; // unique ID for output
+    g.appendChild(out);
+
+    // label the output id near the controls panel
+    svg.appendChild(g);
+
+    makeDraggable(g);
+
+    const gate = { id, type, n, element: g, outputId: outId };
+    gates.push(gate);
+    refreshOutputs();
+    refreshGatesList();
+    drawWires();
+    return gate;
+  }
+
+  function makeDraggable(g){
+    let startX, startY, orig;
+    g.addEventListener('pointerdown', e=>{
+      startX = e.clientX; startY = e.clientY;
+      const t = g.getAttribute('transform');
+      const match = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(t);
+      orig = match ? [parseFloat(match[1]), parseFloat(match[2])] : [0,0];
+      g.setPointerCapture(e.pointerId);
+    });
+    window.addEventListener('pointermove', e=>{
+      if (orig==null) return;
+      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      const nx = orig[0] + dx; const ny = orig[1] + dy;
+      g.setAttribute('transform', `translate(${nx},${ny})`);
+      drawWires();
+    });
+    window.addEventListener('pointerup', e=>{ orig = null; });
+  }
+
+  function refreshOutputs(){
+    outputsEl.innerHTML='';
+    for(const gt of gates){
+      const div = document.createElement('div');
+      div.innerHTML = `<strong>${gt.id}</strong>: <span class="output-id">${gt.outputId}</span>`;
+      outputsEl.appendChild(div);
+    }
+  }
+
+  function refreshGatesList(){
+    gatesListEl.innerHTML='';
+    for(const gt of gates){
+      const row = document.createElement('div');
+      row.style.marginBottom='8px';
+      const inputs = [];
+      for(let i=0;i<gt.n;i++){
+        const sel = document.createElement('select');
+        const empty = document.createElement('option'); empty.value=''; empty.textContent='(none)'; sel.appendChild(empty);
+        for(const s of gates) { const opt = document.createElement('option'); opt.value = s.outputId; opt.textContent = s.id + ' → ' + s.outputId; sel.appendChild(opt); }
+        sel.dataset.gid = gt.id; sel.dataset.inputIndex = i;
+        sel.addEventListener('change', onInputSelect);
+        row.appendChild(document.createTextNode('in' + i + ': '));
+        row.appendChild(sel);
+        row.appendChild(document.createElement('br'));
+      }
+      const lbl = document.createElement('div'); lbl.innerHTML = `<strong>${gt.id}</strong> (${gt.type}) <span style="font-size:11px;color:#666">id:${gt.outputId}</span>`;
+      gatesListEl.appendChild(lbl);
+      gatesListEl.appendChild(row);
+    }
+  }
+
+  // connections: list of {toGateId, inputIndex, fromOutputId}
+  const connections = [];
+
+  function onInputSelect(e){
+    const gid = e.target.dataset.gid; const idx = Number(e.target.dataset.inputIndex);
+    const from = e.target.value;
+    // remove existing for same to gate + input
+    for(let i=connections.length-1;i>=0;i--){ if(connections[i].toGateId===gid && connections[i].inputIndex===idx) connections.splice(i,1); }
+    if(from) connections.push({ toGateId: gid, inputIndex: idx, fromOutputId: from });
+    drawWires();
+  }
+
+  function drawWires(){
+    // remove existing wires
+    const existing = Array.from(svg.querySelectorAll('.wire')); existing.forEach(n=>n.remove());
+    // build map of gates by id
+    const map = new Map(gates.map(g=>[g.id,g]));
+    for(const conn of connections){
+      const to = map.get(conn.toGateId);
+      if(!to) continue;
+      const fromOut = svg.getElementById(conn.fromOutputId);
+      const toG = to.element;
+      const tTrans = toG.getAttribute('transform');
+      const m1 = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(tTrans);
+      const toX = m1 ? parseFloat(m1[1]) : 0; const toY = m1 ? parseFloat(m1[2]) : 0;
+      const toPort = to.element.querySelector(`circle[data-input-index='${conn.inputIndex}']`);
+      if(!fromOut || !toPort) continue;
+      const fromTrans = fromOut.closest('g').getAttribute('transform');
+      const m2 = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(fromTrans);
+      const fromX = m2 ? parseFloat(m2[1]) : 0; const fromY = m2 ? parseFloat(m2[2]) : 0;
+      const fx = fromX + Number(fromOut.getAttribute('cx'));
+      const fy = fromY + Number(fromOut.getAttribute('cy'));
+      const tx = toX + Number(toPort.getAttribute('cx'));
+      const ty = toY + Number(toPort.getAttribute('cy'));
+      const path = document.createElementNS(svg.namespaceURI,'path');
+      const dx = Math.abs(tx-fx)/2;
+      path.setAttribute('d', `M ${fx} ${fy} C ${fx+dx} ${fy} ${tx-dx} ${ty} ${tx} ${ty}`);
+      path.classList.add('wire');
+      svg.appendChild(path);
+    }
+  }
+
+  document.getElementById('add-gate').addEventListener('click', ()=>{
+    const type = document.getElementById('gate-type').value;
+    const n = Number(document.getElementById('gate-n').value) || 1;
+    createGateElement(type, n, 100 + gateCounter*20, 60 + gateCounter*20);
+  });
+
+  // small starter
+  createGateElement('AND', 3, 200, 120);
+  createGateElement('OR', 2, 420, 180);
+
+  // expose for debugging
+  window.gatesDemo = { gates, connections, createGateElement, drawWires };
+  </script>
+</body>
+</html>

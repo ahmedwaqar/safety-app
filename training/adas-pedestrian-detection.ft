@@ -1,0 +1,20 @@
+FAULTTREE FT_ADAS_PED { 
+  // Basic sensor and component failures
+  BE CAM_FAIL: "Camera hardware failure" [prob=0.0005];
+  BE CAM_BLIND: "Camera blinded by glare" [prob=0.001];
+  BE LIDAR_FAIL: "Lidar hardware failure" [prob=0.0003];
+  BE RADAR_FAIL: "Radar hardware failure" [prob=0.0004];
+  BE PERCEP_SW: "Perception software false-negative" [prob=0.002];
+  BE FUSION_SW: "Sensor-fusion algorithm error" [prob=0.0008];
+  BE CAN_COMM: "CAN bus communication loss" [prob=0.0002];
+  BE BRAKE_ACT: "Brake actuator stuck" [prob=0.0001];
+
+  // Sensor majority: at least two sensors must fail
+  GATE SENS_MAJ: MAJ(2)(CAM_FAIL,LIDAR_FAIL,RADAR_FAIL) -> outSENS [label="Sensor majority failure"];
+
+  // Perception failure: either perception software misses or fusion fails or sensors majority failed
+  GATE PERCEP_OR: OR(PERCEP_SW,FUSION_SW,outSENS) -> outPERCEP [label="Perception pipeline failure"];
+
+  // Top-level hazardous event: failure to detect and brake for pedestrian
+  GATE TOP_AND: AND(outPERCEP,BRAKE_ACT) -> outTOP [label="Missed pedestrian & braking failure"];
+}

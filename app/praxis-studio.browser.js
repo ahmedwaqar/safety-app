@@ -382,7 +382,7 @@ function validateWorkspaceData(data) {
 function handleFormError(error) {
   alert(error.message);
 }
-var VIEW_NAMES = ["overview", "training", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "fault-tree", "hara", "fmea", "requirements", "assurance"];
+var VIEW_NAMES = ["overview", "notepad", "workflow", "architecture", "situations", "hazards", "sil", "quantitative", "fmeda", "fault-tree", "hara", "fmea", "requirements", "assurance"];
 function workspaceId() {
   return `workspace-${crypto.randomUUID()}`;
 }
@@ -1005,37 +1005,6 @@ function parseLegacyFaultTreeDsl(dsl = state.faultTree.dsl) {
 function parseFaultTreeDsl(dsl = state.faultTree.dsl) {
   return /^\s*fault_tree\b/i.test(dsl) ? parseStructuredFaultTreeDsl(dsl) : parseLegacyFaultTreeDsl(dsl);
 }
-function faultTreeUniqueId(prefix) {
-  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`;
-}
-function faultTreeInsertSnippet(type, gateType, k, n, layer, component) {
-  const gateId = faultTreeUniqueId("GATE");
-  const eventA = faultTreeUniqueId("EVENT");
-  const eventB = faultTreeUniqueId("EVENT");
-  const layerText = layer ? `layer: ${layer}` : "layer: Events";
-  const componentText = component ? `  component: ${component}\n` : "";
-  const kOfN = gateType === "KOFN" ? `KOFN:${k}/${n}` : gateType;
-  if (type === "basic") {
-    return `\n  basic ${eventA} {\n    label: \"New basic event\"\n${componentText}    ${layerText}\n  }\n`;
-  }
-  if (type === "top") {
-    return `\n  top: TOP\n\n  gate TOP {\n    type: ${kOfN}\n    label: \"Top event\"\n    children: [${gateId}]\n    ${layerText}\n  }\n\n  basic ${gateId} {\n    label: \"New basic event\"\n${componentText}    ${layerText}\n  }\n`;
-  }
-  return `\n  gate ${gateId} {\n    type: ${kOfN}\n    label: \"New ${gateType} gate\"\n    children: [${eventA}, ${eventB}]\n    ${layerText}\n  }\n\n  basic ${eventA} {\n    label: \"Event A\"\n${componentText}    ${layerText}\n  }\n\n  basic ${eventB} {\n    label: \"Event B\"\n${componentText}    ${layerText}\n  }\n`;
-}
-function populateFaultTreeBuilderOptions(model) {
-  const layerSelect = $("#fault-tree-builder-layer");
-  const componentSelect = $("#fault-tree-builder-component");
-  const layers = model?.layers?.filter((layer) => layer !== "All") || ["Events", "Logic", "System"];
-  layerSelect.innerHTML = layers.map((layer) => `<option value="${esc(layer)}">${esc(layer)}</option>`).join("");
-  componentSelect.innerHTML = [`<option value="">No component</option>`, ...state.components.map((component) => `<option value="${esc(component.id)}">${esc(component.id)} · ${esc(component.name)}</option>`) ].join("");
-}
-function updateFaultTreeKofnVisibility() {
-  const gateType = $("#fault-tree-builder-gate-type").value;
-  const row = $(".fault-tree-kofn-settings");
-  if (row)
-    row.style.display = gateType === "KOFN" ? "grid" : "none";
-}
 function combineCutSets(left, right) {
   const combined = [];
   left.forEach((a) => right.forEach((b) => combined.push([...new Set([...a, ...b])].sort())));
@@ -1564,7 +1533,7 @@ function showView(name, historyMode = "push") {
   $$(".view").forEach((view) => view.classList.remove("active"));
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
   $(`#${name}-view`).classList.add("active");
-  $("#page-title").textContent = { training: "Safety training", notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", "fault-tree": "Fault tree analysis", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
+  $("#page-title").textContent = { notepad: "Engineering notes", workflow: "Engineering workflow", fmea: "FMEA worksheet", fmeda: "FMEDA worksheet", "fault-tree": "Fault tree analysis", hara: "ISO 26262 HARA", sil: "AMR SIL assessment", quantitative: "Quantitative safety", hazards: "Hazard catalogue", situations: "Operational situations", requirements: "Safety requirements", assurance: "Lifecycle assurance", architecture: "Architecture" }[name] || "Overview";
   $("#add-fmea-row-btn").hidden = name !== "fmea";
   if (historyMode && (historyMode === "replace" || previous !== name))
     updateBrowserLocation(activeWorkspace().id, name, historyMode);
@@ -1606,12 +1575,6 @@ function renderMetrics() {
   ];
   $("#coverage-list").innerHTML = coverage.map(([label, value]) => `<div class="coverage-row"><div class="coverage-label"><span>${label}</span><strong>${value}%</strong></div><div class="coverage-track"><i style="width:${value}%"></i></div></div>`).join("");
   $("#overview-components").innerHTML = state.components.map((x) => `<span class="component-chip">${esc(x.name)}</span>`).join("");
-}
-function renderTraining() {
-  $("#training-component-count").textContent = state.components.length;
-  $("#training-hazard-count").textContent = state.hazards.length;
-  $("#training-requirement-count").textContent = state.requirements.length;
-  $("#training-fmea-count").textContent = state.fmea.length;
 }
 function renderFmea() {
   const query = $("#fmea-search").value.toLowerCase();
@@ -1730,9 +1693,7 @@ function renderFaultTree() {
     const cut = faultTreeCutSets(model);
     if (!model.layers.includes(state.faultTree.activeLayer))
       state.faultTree.activeLayer = "All";
-      layers.innerHTML = model.layers.map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${esc(layer)}</option>`).join("");
-    populateFaultTreeBuilderOptions(model);
-    updateFaultTreeKofnVisibility();
+    layers.innerHTML = model.layers.map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${esc(layer)}</option>`).join("");
     status.className = "render-status success";
     status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
     canvas.innerHTML = draw2(model.top);
@@ -1849,7 +1810,6 @@ function renderWorkspaceControls() {
 var FEATURE_RENDERERS = [
   renderWorkspaceControls,
   renderMetrics,
-  renderTraining,
   renderNotepad,
   renderWorkflow,
   renderFmea,
@@ -2780,44 +2740,6 @@ $("#fault-tree-layer").addEventListener("change", (event) => {
   persistState();
   renderFaultTree();
 });
-$("#fault-tree-builder-gate-type").addEventListener("change", updateFaultTreeKofnVisibility);
-$("#fault-tree-insert-btn").addEventListener("click", () => {
-  const editor = $("#fault-tree-source");
-  const type = $("#fault-tree-snippet-type").value;
-  const gateType = $("#fault-tree-builder-gate-type").value;
-  const k = Number($("#fault-tree-builder-k").value) || 1;
-  const n = Number($("#fault-tree-builder-n").value) || 2;
-  const layer = $("#fault-tree-builder-layer").value;
-  const component = $("#fault-tree-builder-component").value;
-  if (type === "top" && /^\s*fault_tree\b/i.test(editor.value) && /top\s*:/i.test(editor.value)) {
-    alert("A top event is already defined in the current fault tree. Insert a gate or basic event instead.");
-    return;
-  }
-  const snippet = faultTreeInsertSnippet(type, gateType, k, n, layer, component);
-  if (/^\s*fault_tree\b/i.test(editor.value)) {
-    const closing = editor.value.lastIndexOf("}");
-    if (closing >= 0) {
-      editor.value = `${editor.value.slice(0, closing)}${snippet}\n}`;
-    } else {
-      editor.value += snippet;
-    }
-  } else {
-    editor.value += snippet;
-  }
-  state.faultTree.dsl = editor.value;
-  persistState();
-  renderFaultTree();
-});
-$("#fault-tree-snippet-type").addEventListener("change", () => {
-  const topField = $("#fault-tree-builder-gate-type");
-  if ($("#fault-tree-snippet-type").value === "basic") {
-    topField.parentElement.style.display = "none";
-  } else {
-    topField.parentElement.style.display = "flex";
-  }
-  updateFaultTreeKofnVisibility();
-});
-$("#fault-tree-builder-gate-type").dispatchEvent(new Event("change"));
 $("#parse-btn").addEventListener("click", () => {
   state.plantuml = $("#plantuml-source").value;
   const components = [];

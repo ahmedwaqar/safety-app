@@ -1,0 +1,16 @@
+FAULTTREE FT_ADAS_LANEKEEP {
+  BE CAM_LANE: "Lane-marking camera failure" [prob=0.0006];
+  BE LANE_DET_SW: "Lane detection algorithm drift" [prob=0.0012];
+  BE LOCALIZATION: "Localization/GNSS loss or drift" [prob=0.0009];
+  BE STEER_ACT: "Steering actuator fault" [prob=0.0002];
+  BE ECU_SW: "Control ECU software crash" [prob=0.0005];
+
+  // Perception or localization problems
+  GATE PERCEP_OR: OR(CAM_LANE,LANE_DET_SW,LOCALIZATION) -> outPERCEP [label="Perception/localization failure"];
+
+  // Control chain degraded: ECU crash or steering actuator fault
+  GATE CONTROL_OR: OR(ECU_SW,STEER_ACT) -> outCONTROL [label="Control path failure"];
+
+  // Lane-keeping hazardous event: perception/localization AND control failure
+  GATE TOP_AND: AND(outPERCEP,outCONTROL) -> outTOP [label="Lane-keeping loss leading to hazard"];
+}

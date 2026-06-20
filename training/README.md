@@ -361,3 +361,19 @@ Answer without using the answer key:
 ## Answer Key
 
 Instructor guidance and model answers are kept separately in [`answer-key.md`](answer-key.md).
+
+## ADAS Fault-Tree Examples
+
+The `training` folder now includes three automotive ADAS fault-tree examples you can parse with the built-in parser:
+
+- `training/adas-pedestrian-detection.ft` — complex sensor/perception+actuator chain leading to failure to detect and brake for a pedestrian.
+- `training/adas-lane-keeping.ft` — lane-keeping loss due to perception/localization combined with control failures.
+- `training/adas-sensor-fusion.ft` — sensor calibration, timing, and recovery-path failures affecting fusion.
+
+Parse them with:
+
+```bash
+cd /Users/waqarahmed/Documents/Docs/Jobs/Cobot/SafetyApp
+bun tools/parse-ft.js training/adas-pedestrian-detection.ft
+```
+
