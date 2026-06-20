@@ -2263,6 +2263,71 @@ $("#fault-tree-help-btn").addEventListener("click", () => {
     if(e.target === modal) modal.style.display = 'none';
   });
 });
+$("#fault-tree-export-btn").addEventListener("click", () => {
+  const dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
+  if(!dsl.trim()) return alert("No fault tree to export. Create or load a fault tree first.");
+  const model = parseFaultTreeDsl(dsl);
+  
+  // Create export menu
+  const menu = document.createElement('div');
+  menu.style.cssText = `position:fixed;top:200px;left:50%;transform:translateX(-50%);background:white;border:1px solid #ddd;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9999;min-width:200px`;
+  menu.innerHTML = `
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer;border-bottom:1px solid #eee" id="export-dsl">📄 Export DSL (.ft)</button>
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer;border-bottom:1px solid #eee" id="export-cutsets">📊 Export Cut Sets (.csv)</button>
+    <button style="display:block;width:100%;padding:10px;border:none;background:none;text-align:left;cursor:pointer" id="export-json">📋 Export as JSON</button>
+  `;
+  document.body.appendChild(menu);
+  
+  // Export DSL
+  document.getElementById("export-dsl").addEventListener("click", () => {
+    const fileName = (model.id || "fault-tree") + ".ft";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([dsl], { type: "text/plain" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  
+  // Export Cut Sets
+  document.getElementById("export-cutsets").addEventListener("click", () => {
+    const cutSets = faultTreeCutSets(model, model.id);
+    let csv = "Order,Cut Set,Event IDs\n";
+    const byOrder = {};
+    cutSets.forEach((cs, i) => {
+      const order = cs.length;
+      if(!byOrder[order]) byOrder[order] = [];
+      byOrder[order].push(cs);
+    });
+    Object.keys(byOrder).sort((a,b) => parseInt(a) - parseInt(b)).forEach(order => {
+      byOrder[order].forEach((cs, i) => {
+        csv += `${order},"${cs.join(', ')}","${cs.join("; ")}"\n`;
+      });
+    });
+    const fileName = (model.id || "cut-sets") + ".csv";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  
+  // Export JSON
+  document.getElementById("export-json").addEventListener("click", () => {
+    const json = JSON.stringify({ model, cutSets: faultTreeCutSets(model, model.id) }, null, 2);
+    const fileName = (model.id || "fault-tree") + ".json";
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    link.download = fileName;
+    link.click();
+    document.body.removeChild(menu);
+  });
+  
+  // Close menu on Escape
+  const closeMenu = (e) => {
+    if(e.key === "Escape") { document.body.removeChild(menu); document.removeEventListener("keydown", closeMenu); }
+  };
+  document.addEventListener("keydown", closeMenu);
+});
 $("#fault-tree-save-btn").addEventListener("click", () => {
   try {
     state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
