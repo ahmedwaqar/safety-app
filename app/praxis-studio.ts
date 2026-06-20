@@ -1,4 +1,6 @@
 // Application configuration and persisted project formats.
+
+// Note: fault-tree-help.ts imported inline (defined in same bundle)
 const STORAGE_KEY = "safeguard-cobot-workspace-v1";
 const WORKSPACES_KEY = "safeguard-workspaces-v1";
 const ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
@@ -2245,6 +2247,21 @@ $("#fault-tree-source").addEventListener("input", event => {
   state.faultTree.dsl = (event.target as HTMLTextAreaElement).value;
   persistState();
   renderFaultTree();
+});
+$("#fault-tree-help-btn").addEventListener("click", () => {
+  let modal = document.getElementById('fault-tree-help-modal') as HTMLDivElement;
+  if(!modal){
+    // Create help content inline (no external dependency)
+    modal = document.createElement('div');
+    modal.id = 'fault-tree-help-modal';
+    modal.style.cssText = `display:none;position:fixed;z-index:9999;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6)`;
+    modal.innerHTML = `<div style="background:white;margin:5% auto;padding:20px;border-radius:8px;width:90%;max-width:900px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;border-bottom:3px solid #2563eb;padding-bottom:10px"><h2 style="margin:0;font-size:22px;color:#1e40af">Fault Tree Analysis Guide</h2><button style="background:none;border:none;font-size:24px;cursor:pointer;color:#666" onclick="document.getElementById('fault-tree-help-modal').style.display='none'">✕</button></div><div style="color:#333;line-height:1.6"><h3 style="color:#2563eb;margin-top:0">What is FTA?</h3><p>Fault Tree Analysis (ISO 61025) is a deductive method to identify how component failures combine to cause system failure. Each gate combines multiple inputs (faults) into one output (intermediate fault).</p><h3 style="color:#2563eb">Gate Types</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:15px"><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">AND</strong><br><small>Output if ALL inputs occur</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">OR</strong><br><small>Output if ANY input occurs</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">XOR</strong><br><small>Output if exactly ONE input</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">K-of-N</strong><br><small>Output if K of N inputs occur</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">NOT</strong><br><small>Single input inverted</small></div><div style="border:1px solid #ddd;padding:10px;background:#f9f9f9"><strong style="color:#1e40af">NAND/NOR</strong><br><small>Negated AND/OR</small></div></div><h3 style="color:#2563eb">How to Build</h3><ul><li><strong>Select gate type:</strong> AND, OR, XOR, K-of-N, etc.</li><li><strong>Multi-select inputs:</strong> Hold Ctrl/Cmd and click to select 2+ events</li><li><strong>Set output ID:</strong> Unique identifier (auto-generated if blank)</li><li><strong>Insert:</strong> Adds DSL scaffold to editor</li></ul><p><strong>⚠ Important:</strong> Most gates need 2+ inputs. NOT requires exactly 1 input. The DSL will validate your model on save.</p></div></div>`;
+    document.body.appendChild(modal);
+  }
+  modal.style.display = 'block';
+  modal.addEventListener('click', (e) => {
+    if(e.target === modal) modal.style.display = 'none';
+  });
 });
 $("#fault-tree-save-btn").addEventListener("click", () => {
   try {
