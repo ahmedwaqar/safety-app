@@ -322,7 +322,7 @@ fault_tree "Loss of safety function" {
 }
 ```
 
-The renderer evaluates the current DSL continuously without treating it as a completed analysis. It reports parse errors directly and flags structural, layer, unreachable-node, and missing architecture-component findings. The app validates duplicate identifiers, duplicate gate inputs, unsupported gates, missing children, cycles, NOT-gate arity, and K-of-N cardinality. Qualitative analysis derives reduced minimal cut sets only for coherent `AND`/`OR`/K-of-N trees. It flags `NOT`, `NAND`, `NOR`, and `XOR` as non-coherent: use a dedicated Boolean/probabilistic analysis and do not treat the displayed cut sets as a complete top-event result. FTA output is qualitative; independence, common-cause, mission-time, exposure, and quantitative-rate assumptions remain review items.
+The renderer evaluates the current DSL continuously without treating it as a completed analysis. It reports parse errors directly. The app validates duplicate identifiers, duplicate gate inputs, unsupported gates, missing children, cycles, NOT-gate arity, and K-of-N cardinality. Qualitative analysis derives reduced minimal cut sets only for coherent `AND`/`OR`/K-of-N trees, with cut-set order profiles, single-point-failure identification, and transparent event-participation screening. Use the layer/entity filters and visible-row control to focus large reviews. It flags `NOT`, `NAND`, `NOR`, and `XOR` as non-coherent: use a dedicated Boolean/probabilistic analysis and do not treat the displayed cut sets as a complete top-event result. FTA output is qualitative; independence, common-cause, mission-time, exposure, and quantitative-rate assumptions remain review items.
 
 #### Fault Tree DSL BNF
 

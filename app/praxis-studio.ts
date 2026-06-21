@@ -219,6 +219,8 @@ let notepadSaveTimer: ReturnType<typeof setTimeout>;
 let notepadStatusTimer: ReturnType<typeof setTimeout>;
 let notepadDirty = false;
 let faultTreeZoom = 1;
+let faultTreeSearch = "";
+let faultTreeCutSetLimit = 25;
 
 // Shared DOM and presentation helpers.
 const $ = <T extends Element = any>(selector: string, parent: ParentNode = document): T => parent.querySelector(selector) as T;
@@ -1454,17 +1456,6 @@ function renderFmeda() {
   }).join("");
 }
 
-function faultTreeDslFindings(model: FaultTreeModel) {
-  const findings = [...model.warnings];
-  const architectureIds = new Set(state.components.map(component => String(component.id).toLowerCase()));
-  const allowedLayers = new Set(configuredFaultTreeLayers());
-  for (const node of model.nodes.values()) {
-    if (node.component && !architectureIds.has(String(node.component).toLowerCase())) findings.push(`Basic event "${node.id}" references architecture component "${node.component}", which is not defined in the current architecture.`);
-    if (!allowedLayers.has(node.layer)) findings.push(`Node "${node.id}" uses "${node.layer}"; assign it to one of the configured numbered layers.`);
-  }
-  if (model.nodes.get(model.top)?.kind === "basic") findings.push(`Top event "${model.top}" is a basic event; normally the top event should be produced by a gate.`);
-  return [...new Set(findings)];
-}
 function renderFaultTreeLineNumbers(errorLine?: number) {
   const source = $("#fault-tree-source") as HTMLTextAreaElement;
   const gutter = $("#fault-tree-line-numbers") as HTMLElement;
@@ -1496,18 +1487,25 @@ function renderFaultTree() {
     }
     const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
-    const findings = faultTreeDslFindings(model);
+    const searchInput = $("#fault-tree-search") as HTMLInputElement;
+    searchInput.value = faultTreeSearch;
+    const query = faultTreeSearch.trim().toLowerCase();
+    const matchesNode = (node: FaultTreeNode) => !query || [node.id, node.label, node.component, node.layer].some(value => String(value || "").toLowerCase().includes(query));
     const configuredLayers = configuredFaultTreeLayers();
     layerCount.value = String(state.faultTree.layerCount);
     if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map(layer => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
-    status.className = "render-status success"; status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}${findings.length ? ` · ${findings.length} review item${findings.length === 1 ? "" : "s"}` : ""}`;
+    status.className = "render-status success"; status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
     const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()]
       .filter(node => node.layer === state.faultTree.activeLayer)
       .filter(node => node.id === model.top || ![...model.nodes.values()].some(parent => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id)))
       .map(node => node.id);
     type LayoutBranch = { id: string; depth: number; children: LayoutBranch[]; x: number; y: number };
-    const visible = (id: string) => state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
+    const matchesBranch = (id: string): boolean => {
+      const node = model.nodes.get(id)!;
+      return matchesNode(node) || node.children.some(matchesBranch);
+    };
+    const visible = (id: string) => (state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer) && matchesBranch(id);
     function branchFor(id: string, depth = 0): LayoutBranch | null {
       if (!visible(id)) return null;
       const node = model.nodes.get(id)!;
@@ -1532,7 +1530,7 @@ function renderFaultTree() {
     function drawNode(branch: LayoutBranch): string {
       const node = model.nodes.get(branch.id)!;
       const gate = node.kind === "basic" ? "BASIC EVENT" : node.gate || "GATE";
-      return `<article class="fault-node ${node.kind}" style="left:${branch.x}px;top:${branch.y}px">
+      return `<article class="fault-node ${node.kind} ${matchesNode(node) && query ? "search-match" : ""}" style="left:${branch.x}px;top:${branch.y}px">
         <div class="fault-node-card"><span class="fault-gate">${getGateSvg(gate)}</span><span class="fault-gate-label">${esc(gate)}</span><strong>${esc(node.id)}</strong><p>${esc(node.label)}</p>${node.component ? `<small>Component: ${esc(node.component)} · ${esc(named("components", node.component))}</small>` : ""}<small>${esc(node.layer)}</small></div>
       </article>${branch.children.map(drawNode).join("")}`;
     }
@@ -1543,11 +1541,21 @@ function renderFaultTree() {
       canvas.innerHTML = `<div class="fault-tree-viewport" style="width:${zoomedWidth}px;height:${zoomedHeight}px"><div class="fault-tree-layout" style="width:${width}px;height:${height}px;transform:scale(${faultTreeZoom})"><svg class="fault-tree-connectors" width="${width}" height="${height}" aria-hidden="true">${branches.map(drawConnectors).join("")}</svg>${branches.map(drawNode).join("")}</div></div>`;
     }
     $("#fault-tree-zoom-value").textContent = `${Math.round(faultTreeZoom * 100)}%`;
-    const cutRows = cut.sets.slice(0, 50).map((set, index) => `<tr><td>${index + 1}</td><td>${set.map(id => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map(id => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
+    const selectedCuts = query ? cut.sets.filter(set => set.some(id => matchesNode(model.nodes.get(id)!))) : cut.sets;
+    const orderCounts = new Map<number, number>(); const participation = new Map<string, { count: number; score: number }>();
+    selectedCuts.forEach(set => {
+      orderCounts.set(set.length, (orderCounts.get(set.length) || 0) + 1);
+      set.forEach(id => { const item = participation.get(id) || { count: 0, score: 0 }; item.count += 1; item.score += 1 / set.length; participation.set(id, item); });
+    });
+    const singletonCuts = selectedCuts.filter(set => set.length === 1);
+    const priorityEvents = [...participation.entries()].sort(([, left], [, right]) => right.score - left.score || right.count - left.count).slice(0, 5);
+    const visibleCuts = faultTreeCutSetLimit === 0 ? selectedCuts : selectedCuts.slice(0, faultTreeCutSetLimit);
+    const cutRows = visibleCuts.map((set, index) => `<tr><td>${index + 1}</td><td>${set.map(id => `<code>${esc(id)}</code>`).join(" + ")}</td><td>${set.map(id => esc(model.nodes.get(id)?.label || id)).join("; ")}</td></tr>`).join("");
+    const orderSummary = [...orderCounts.entries()].sort(([left], [right]) => left - right).map(([order, count]) => `${count} × order ${order}`).join(" · ") || "No coherent cut sets";
     analysis.innerHTML = `<div class="fault-analysis-grid">
-      <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. The diagram is rendered and validated, but minimal cut sets are not valid for the complete top event. Use a dedicated Boolean/probabilistic analysis and document the modelling assumptions." : "Minimal cut sets are reduced so supersets are removed. This is qualitative only: independence, common-cause, exposure, and mission-time assumptions still require review."}</p></section>
-      <section><h3>DSL checks</h3><p>${findings.length ? findings.map(esc).join(" ") : "Passed: identifiers, references, structure, layers, and architecture links have no findings."}</p></section>
-    </div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
+      <section><h3>Qualitative result</h3><p>${cut.nonCoherent ? "Non-coherent gates such as NOT, NAND, NOR, or XOR are present. Minimal cut sets are not valid for the complete top event; use a dedicated Boolean/probabilistic analysis." : `Minimal cut sets are reduced so supersets are removed. ${selectedCuts.length}${query ? ` of ${cut.sets.length}` : ""} cut sets shown by the current filter.`}</p><p class="subtext">Order profile: ${esc(orderSummary)}.</p></section>
+      <section><h3>Review priorities</h3><p>${singletonCuts.length ? `${singletonCuts.length} single-point failure${singletonCuts.length === 1 ? "" : "s"} identified: ${singletonCuts.map(set => esc(set[0])).join(", ")}.` : "No order-1 minimal cut sets in the current result."}</p><p class="subtext">Top-event participation: ${priorityEvents.length ? priorityEvents.map(([id, item]) => `${esc(id)} (${item.count})`).join(", ") : "No events to rank."}</p></section>
+    </div><div class="fault-cut-controls"><label>Visible rows <select id="fault-tree-cutset-limit"><option value="10" ${faultTreeCutSetLimit === 10 ? "selected" : ""}>10</option><option value="25" ${faultTreeCutSetLimit === 25 ? "selected" : ""}>25</option><option value="50" ${faultTreeCutSetLimit === 50 ? "selected" : ""}>50</option><option value="100" ${faultTreeCutSetLimit === 100 ? "selected" : ""}>100</option><option value="0" ${faultTreeCutSetLimit === 0 ? "selected" : ""}>All</option></select></label><span>${visibleCuts.length} of ${selectedCuts.length} cut sets visible</span></div><div class="table-scroll"><table class="fault-cut-table"><thead><tr><th>#</th><th>Minimal cut set</th><th>Basic event descriptions</th></tr></thead><tbody>${cutRows || '<tr><td colspan="3">No coherent cut sets available for this top event.</td></tr>'}</tbody></table></div>`;
   } catch (error) {
     const line = Number(String(error.message || "").match(/line\s+(\d+)/i)?.[1]);
     renderFaultTreeLineNumbers(Number.isFinite(line) ? line : undefined);
@@ -2607,6 +2615,11 @@ function adjustFaultTreeZoom(change: number) {
 $("#fault-tree-zoom-in").addEventListener("click", () => adjustFaultTreeZoom(0.1));
 $("#fault-tree-zoom-out").addEventListener("click", () => adjustFaultTreeZoom(-0.1));
 $("#fault-tree-zoom-reset").addEventListener("click", () => { faultTreeZoom = 1; renderFaultTree(); });
+$("#fault-tree-search").addEventListener("input", event => { faultTreeSearch = (event.target as HTMLInputElement).value; renderFaultTree(); });
+$("#fault-tree-analysis").addEventListener("change", event => {
+  const target = event.target as HTMLSelectElement;
+  if (target.id === "fault-tree-cutset-limit") { faultTreeCutSetLimit = Number(target.value); renderFaultTree(); }
+});
 
 $("#render-btn").addEventListener("click", async () => {
   const button = $("#render-btn"); const status = $("#render-status"); const preview = $("#diagram-preview");

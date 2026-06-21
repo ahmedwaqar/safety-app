@@ -82,6 +82,10 @@ Use the **+**, **−**, and **Reset zoom** controls above the rendered tree to i
 - If quantified elsewhere: are rate source, failure mode, diagnostic coverage, mission time, repair/proof-test interval, beta/common-cause model, and independence assumptions controlled?
 - Has the tree been configuration-managed and independently reviewed as part of the safety case?
 
+## Qualitative review aids
+
+The analysis panel groups minimal cut sets by order, identifies order-1 single-point failures, and lists basic events that recur most often in the displayed cut sets. That participation value is a structural screening aid, not a probability-based importance measure. Use the layer/entity filters and 10/25/50/100/all row selector to keep large reviews focused. Common-cause dependencies, systematic faults, and probabilities still require explicit modelling and, where appropriate, reviewed quantitative analysis.
+
 ## Scope and references
 
 Use ISO 61025 for FTA method vocabulary and ISO 26262:2018—particularly the concept, system, hardware, supporting-process, and ASIL-oriented analysis parts—for automotive lifecycle, traceability, confirmation, and analysis context. For automated driving, distinguish functional-safety malfunctions from intended-functionality/performance limitations and define the ODD and fallback/minimal-risk concept.
