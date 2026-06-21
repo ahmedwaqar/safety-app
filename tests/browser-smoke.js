@@ -881,6 +881,11 @@ try {
     await fill("#fault-tree-builder-gate-type", "NOT");
     assert(!await evaluate(`document.querySelector("#fault-tree-builder-inputs").multiple`), "NOT gate should restrict the input picker to one event");
     await fill("#fault-tree-builder-gate-type", "AND");
+    await fill("#fault-tree-source", "bas");
+    assert(!await evaluate(`document.querySelector("#fault-tree-completions").hidden`), "fault tree completion menu did not open");
+    assert(await evaluate(`document.querySelector("#fault-tree-completions").textContent.includes("basic")`), "basic-event DSL template is missing");
+    await evaluate(`document.querySelector("#fault-tree-source").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))`);
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.startsWith("basic ")`), "fault tree basic-event template was not inserted");
 
     const legacyDsl = `TOP TOP "Legacy top"
 GATE TOP OR "Legacy gate" -> LEGACY_A

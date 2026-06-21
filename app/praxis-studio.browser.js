@@ -752,6 +752,93 @@ function insertPlantumlCompletion(index = plantumlCompletionIndex) {
   closePlantumlCompletions();
   editor.dispatchEvent(new Event("input", { bubbles: true }));
 }
+var faultTreeCompletions = [
+  ["fault_tree", `fault_tree "$0" {
+  top: TOP
+
+  gate TOP {
+    type: OR
+    label: "Top event"
+    children: [EVENT_ID]
+    layer: Layer 1
+  }
+}`, "new fault tree"],
+  ["top", "top: $0", "select top event"],
+  ["gate", `gate $0 {
+  type: OR
+  label: "Intermediate event"
+  children: [EVENT_ID]
+  layer: Layer 1
+}`, "intermediate gate"],
+  ["basic", `basic $0 {
+  label: "Basic failure event"
+  component: COMPONENT_ID
+  layer: Layer 2
+}`, "basic event"],
+  ["AND", "type: AND", "all inputs required"],
+  ["OR", "type: OR", "any input causes output"],
+  ["NOT", "type: NOT", "single inverted input"],
+  ["label", 'label: "$0"', "event description"],
+  ["children", "children: [$0]", "input event IDs"],
+  ["component", "component: $0", "architecture component ID"],
+  ["layer", "layer: Layer $0", "numbered review layer"]
+].map(([label, insert, detail]) => ({ label, insert, detail }));
+var faultTreeMatches = [];
+var faultTreeCompletionIndex = 0;
+var faultTreeCompletionRange;
+function currentFaultTreeToken(editor = $("#fault-tree-source")) {
+  const beforeCursor = editor.value.slice(0, editor.selectionStart);
+  const match = beforeCursor.match(/(?:^|\s)([A-Za-z_][A-Za-z_]*)$/);
+  if (!match)
+    return null;
+  const text = match[1];
+  return { text, start: editor.selectionStart - text.length, end: editor.selectionStart };
+}
+function closeFaultTreeCompletions() {
+  const editor = $("#fault-tree-source");
+  const menu = $("#fault-tree-completions");
+  faultTreeMatches = [];
+  faultTreeCompletionRange = null;
+  menu.hidden = true;
+  menu.replaceChildren();
+  editor.setAttribute("aria-expanded", "false");
+  editor.removeAttribute("aria-activedescendant");
+}
+function renderFaultTreeCompletions() {
+  const editor = $("#fault-tree-source");
+  const menu = $("#fault-tree-completions");
+  const token = currentFaultTreeToken(editor);
+  if (!token?.text)
+    return closeFaultTreeCompletions();
+  const query = token.text.toLowerCase();
+  faultTreeMatches = faultTreeCompletions.filter((item) => item.label.toLowerCase().startsWith(query)).slice(0, 7);
+  if (!faultTreeMatches.length)
+    return closeFaultTreeCompletions();
+  faultTreeCompletionRange = token;
+  faultTreeCompletionIndex = Math.min(faultTreeCompletionIndex, faultTreeMatches.length - 1);
+  menu.innerHTML = faultTreeMatches.map((item, index) => `<button type="button" class="completion-item ${index === faultTreeCompletionIndex ? "active" : ""}" id="fault-tree-completion-${index}" role="option" aria-selected="${index === faultTreeCompletionIndex}" data-fault-tree-completion-index="${index}"><strong>${esc(item.label)}</strong><span>${esc(item.detail)}</span></button>`).join("");
+  menu.hidden = false;
+  editor.setAttribute("aria-expanded", "true");
+  editor.setAttribute("aria-activedescendant", `fault-tree-completion-${faultTreeCompletionIndex}`);
+}
+function insertFaultTreeCompletion(index = faultTreeCompletionIndex) {
+  const editor = $("#fault-tree-source");
+  const item = faultTreeMatches[index];
+  if (!item || !faultTreeCompletionRange)
+    return;
+  const lineStart = editor.value.lastIndexOf(`
+`, faultTreeCompletionRange.start - 1) + 1;
+  const indent = editor.value.slice(lineStart, faultTreeCompletionRange.start).match(/^\s*/)?.[0] || "";
+  const marker = item.insert.indexOf("$0");
+  const inserted = item.insert.replace("$0", "").replace(/\n/g, `
+${indent}`);
+  editor.setRangeText(inserted, faultTreeCompletionRange.start, faultTreeCompletionRange.end, "end");
+  const cursor = faultTreeCompletionRange.start + (marker === -1 ? inserted.length : marker);
+  editor.setSelectionRange(cursor, cursor);
+  editor.focus();
+  closeFaultTreeCompletions();
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
 function componentRates(row) {
   const lambdaDangerous = Number(row.lambdaTotal) * Number(row.dangerousFraction);
   const singleResidual = lambdaDangerous * (1 - Number(row.diagnosticCoverage));
@@ -1793,6 +1880,7 @@ function renderFaultTreeLineNumbers(errorLine) {
   const gutter = $("#fault-tree-line-numbers");
   const lineCount = Math.max(1, source.value.split(/\r?\n/).length);
   gutter.innerHTML = Array.from({ length: lineCount }, (_, index) => `<span${index + 1 === errorLine ? ' class="error"' : ""}>${index + 1}</span>`).join("");
+  gutter.style.width = `${Math.max(3, String(lineCount).length + 1.4)}ch`;
   gutter.scrollTop = source.scrollTop;
 }
 function renderFaultTree() {
@@ -3135,7 +3223,31 @@ $("#fault-tree-source").addEventListener("input", (event) => {
   state.faultTree.dsl = event.target.value;
   persistState();
   renderFaultTree();
+  renderFaultTreeCompletions();
 });
+$("#fault-tree-source").addEventListener("keydown", (event) => {
+  if ($("#fault-tree-completions").hidden)
+    return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    faultTreeCompletionIndex = (faultTreeCompletionIndex + (event.key === "ArrowDown" ? 1 : -1) + faultTreeMatches.length) % faultTreeMatches.length;
+    renderFaultTreeCompletions();
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    event.preventDefault();
+    insertFaultTreeCompletion();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeFaultTreeCompletions();
+  }
+});
+$("#fault-tree-completions").addEventListener("mousedown", (event) => {
+  const item = eventElement(event).closest("[data-fault-tree-completion-index]");
+  if (item) {
+    event.preventDefault();
+    insertFaultTreeCompletion(Number(item.dataset.faultTreeCompletionIndex));
+  }
+});
+$("#fault-tree-source").addEventListener("blur", () => setTimeout(closeFaultTreeCompletions));
 $("#fault-tree-source").addEventListener("scroll", () => {
   $("#fault-tree-line-numbers").scrollTop = $("#fault-tree-source").scrollTop;
 });

@@ -320,7 +320,7 @@
         <div class="fault-tree-grid">
           <section class="editor-card">
             <div class="editor-top"><span>fault-tree.fta</span><div class="editor-actions"><label class="fault-layer-control"><span>Layers</span><input id="fault-tree-layer-count" type="number" min="1" max="12" value="3" title="Number of logical layers" /></label><label class="fault-layer-control"><span>View</span><select id="fault-tree-layer"></select></label><span class="render-status" id="fault-tree-status">Ready</span></div></div>
-            <div class="fault-tree-editor-shell"><pre class="fault-tree-line-numbers" id="fault-tree-line-numbers" aria-hidden="true">1</pre><textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off" aria-label="Fault tree DSL source"></textarea></div>
+            <div class="fault-tree-editor-shell" title="Drag the lower edge to resize the DSL editor"><pre class="fault-tree-line-numbers" id="fault-tree-line-numbers" aria-hidden="true">1</pre><textarea class="fault-tree-editor" id="fault-tree-source" spellcheck="false" autocomplete="off" aria-autocomplete="list" aria-controls="fault-tree-completions" aria-expanded="false" aria-label="Fault tree DSL source"></textarea><div class="completion-menu fault-tree-completion-menu" id="fault-tree-completions" role="listbox" aria-label="Fault tree DSL completions" hidden></div></div>
             <div class="fault-tree-builder">
               <style>
                 .fault-tree-builder {margin-top:16px;padding:12px;background:#f8f9fa;border-radius:4px;border-left:4px solid #2563eb}
@@ -336,10 +336,13 @@
                 .fault-tree-validation.error{display:block;background:#fee;border:1px solid #fcc;color:#c33}
                 .fault-tree-validation.warning{display:block;background:#fef3cd;border:1px solid #ffc107;color:#856404}
                 .fault-node-card small{color:var(--muted)}
-                .fault-tree-editor-shell{background:#fbfcfa;display:flex;min-height:430px;overflow:hidden}
-                .fault-tree-editor-shell .fault-tree-editor{flex:1;min-height:430px;padding-left:14px;width:auto}
-                .fault-tree-line-numbers{background:#eef3f0;border-right:1px solid var(--line);color:#7a8b86;font-family:"DM Mono",monospace;font-size:12px;line-height:1.6;margin:0;min-width:46px;overflow:hidden;padding:16px 10px;text-align:right;user-select:none}
+                .fault-tree-editor-shell{background:#fbfcfa;border-bottom:1px solid var(--line);display:flex;height:330px;min-height:180px;overflow:hidden;position:relative;resize:vertical}
+                .fault-tree-editor-shell .fault-tree-editor{background:#fbfcfa;flex:1;height:100%;min-height:0;padding:16px 16px 16px 14px;resize:none;width:auto}
+                .fault-tree-editor-shell:focus-within{box-shadow:inset 0 0 0 2px rgba(39,113,102,.28)}
+                .fault-tree-editor-shell .fault-tree-editor{caret-color:#1c6258;color:#1d403a;tab-size:2}
+                .fault-tree-line-numbers{background:#f1f5f2;border-right:1px solid var(--line);color:#7a8b86;font-family:"DM Mono",monospace;font-size:12px;line-height:1.6;margin:0;overflow:hidden;padding:16px 9px;text-align:right;user-select:none}
                 .fault-tree-line-numbers span{display:block}.fault-tree-line-numbers span.error{background:#f9dfdd;color:#a33b34;font-weight:800;margin:0 -10px;padding:0 10px}
+                .fault-tree-completion-menu{bottom:12px;left:56px;max-width:440px;top:auto;width:calc(100% - 72px)}
                 .fault-tree-canvas{background:#f8faf9;background-image:radial-gradient(#dce6e1 1px,transparent 1px);background-size:18px 18px;display:block;min-height:440px;overflow:auto;padding:24px}
                 .fault-tree-layout{min-width:760px;position:relative}
                 .fault-tree-viewport{position:relative}
