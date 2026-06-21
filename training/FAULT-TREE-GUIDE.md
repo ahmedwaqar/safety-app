@@ -57,6 +57,8 @@ Every property occupies its own line. IDs may contain letters, digits, `_`, `.`,
 
 Set the layer count in the editor, then assign each node to `Layer 1`, `Layer 2`, and so on. The layer selector provides focused review of that layer, while the full view retains the complete top-down tree.
 
+Layer views are a non-destructive review aid over one canonical DSL model: start in **All layers**, enter gates and basic events with their layer assignments, then filter the rendered diagram. Switching the filter never replaces or discards the source. For genuinely separate subsystem trees, use a named intermediate event and a controlled interface/transfer convention rather than maintaining unrelated copies of the same top-event logic.
+
 ## Architecture starter generator
 
 Define the architecture in PlantUML; its component declarations automatically populate **Components defined in architecture**. Then use **Generate starter from architecture** to start architecture rendering and produce an editable two-layer starter tree. It recognizes common component names and proposes three malfunctioning behaviours for each:

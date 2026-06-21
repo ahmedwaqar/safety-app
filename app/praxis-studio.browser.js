@@ -1011,13 +1011,13 @@ function completeFaultTreeModel(top, nodes, warnings) {
   for (const node of nodes.values())
     node.children.forEach((child) => {
       if (!nodes.has(child))
-        throw new Error(`Gate "${node.id}" references missing child "${child}".`);
+        throw new Error(`Gate "${node.id}" references missing child "${child}" on line ${node.line}.`);
     });
   const visiting = new Set;
   const visited = new Set;
   function visit(id) {
     if (visiting.has(id))
-      throw new Error(`Fault tree contains a cycle at "${id}".`);
+      throw new Error(`Fault tree contains a cycle at "${id}" on line ${nodes.get(id)?.line || "?"}.`);
     if (visited.has(id))
       return;
     visiting.add(id);
@@ -1871,6 +1871,19 @@ function renderFaultTreeLineNumbers(errorLine) {
   gutter.style.width = `${Math.max(3, String(lineCount).length + 1.4)}ch`;
   gutter.scrollTop = source.scrollTop;
 }
+function focusFaultTreeLine(line) {
+  if (!Number.isInteger(line) || line < 1)
+    return;
+  const editor = $("#fault-tree-source");
+  const lines = editor.value.split(/\r?\n/);
+  const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
+  const end = start + (lines[line - 1] || "").length;
+  const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 19;
+  editor.focus();
+  editor.setSelectionRange(start, end);
+  editor.scrollTop = Math.max(0, (line - 2) * lineHeight);
+  renderFaultTreeLineNumbers(line);
+}
 function renderFaultTree() {
   const editor = $("#fault-tree-source");
   if (document.activeElement !== editor)
@@ -1941,12 +1954,14 @@ function renderFaultTree() {
     layers.innerHTML = ["All", ...configuredLayers].map((layer) => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success";
     status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
-    const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()].filter((node) => node.layer === state.faultTree.activeLayer).filter((node) => node.id === model.top || ![...model.nodes.values()].some((parent) => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id))).map((node) => node.id);
+    const allLayers = state.faultTree.activeLayer === "All";
+    const inSelectedLayer = (id) => allLayers || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
+    const rootIds = allLayers ? [model.top] : [...model.nodes.values()].filter((node) => node.layer === state.faultTree.activeLayer).filter((node) => node.id === model.top || ![...model.nodes.values()].some((parent) => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id))).map((node) => node.id);
     const matchesBranch = (id) => {
       const node = model.nodes.get(id);
-      return matchesNode(node) || node.children.some(matchesBranch);
+      return inSelectedLayer(id) && (matchesNode(node) || node.children.some((child) => inSelectedLayer(child) && matchesBranch(child)));
     };
-    const visible = (id) => (state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer) && matchesBranch(id);
+    const visible = (id) => inSelectedLayer(id) && matchesBranch(id);
     const branches = rootIds.map((id) => branchFor2(id)).filter(Boolean);
     let cursor = 140;
     let maxDepth = 0;
@@ -1991,7 +2006,7 @@ function renderFaultTree() {
     status.className = "render-status error";
     status.textContent = "FTA model error";
     canvas.innerHTML = `<p>${esc(error.message)}</p>`;
-    analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
+    analysis.innerHTML = `<p class="standards-note">${esc(error.message)}${Number.isFinite(line) ? ` <button class="text-btn" type="button" data-fault-tree-go-to-line="${line}">Go to line ${line}</button>` : ""}</p>`;
   }
 }
 function renderHara() {
@@ -2296,6 +2311,7 @@ ${snippet}`;
         editor.value = `${editor.value}
 ${snippet}`;
       }
+      state.faultTree.dsl = editor.value;
       editor.focus();
       persistState();
       try {
@@ -3348,6 +3364,10 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
     parseFaultTreeDsl(state.faultTree.dsl);
     save();
   } catch (error) {
+    const line = Number(String(error.message || "").match(/line\s+(\d+)/i)?.[1]);
+    renderFaultTree();
+    if (Number.isFinite(line))
+      focusFaultTreeLine(line);
     handleFormError(error);
   }
 });
@@ -3368,6 +3388,7 @@ $("#fault-tree-generate-btn").addEventListener("click", () => {
   alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", (event) => {
+  state.faultTree.dsl = $("#fault-tree-source").value;
   state.faultTree.activeLayer = event.target.value;
   persistState();
   renderFaultTree();
@@ -3401,6 +3422,11 @@ $("#fault-tree-analysis").addEventListener("change", (event) => {
     faultTreeCutSetLimit = Number(target.value);
     renderFaultTree();
   }
+});
+$("#fault-tree-analysis").addEventListener("click", (event) => {
+  const target = eventElement(event).closest("[data-fault-tree-go-to-line]");
+  if (target)
+    focusFaultTreeLine(Number(target.dataset.faultTreeGoToLine));
 });
 $("#render-btn").addEventListener("click", async () => {
   const button = $("#render-btn");

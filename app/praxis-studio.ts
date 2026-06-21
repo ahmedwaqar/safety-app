@@ -787,10 +787,10 @@ function completeFaultTreeModel(top: string, nodes: Map<string, FaultTreeNode>, 
   if (!nodes.has(top)) throw new Error(`Top event "${top}" is not defined.`);
   const topNode = nodes.get(top)!;
   topNode.kind = topNode.kind === "basic" ? "basic" : "top";
-  for (const node of nodes.values()) node.children.forEach(child => { if (!nodes.has(child)) throw new Error(`Gate "${node.id}" references missing child "${child}".`); });
+  for (const node of nodes.values()) node.children.forEach(child => { if (!nodes.has(child)) throw new Error(`Gate "${node.id}" references missing child "${child}" on line ${node.line}.`); });
   const visiting = new Set<string>(); const visited = new Set<string>();
   function visit(id) {
-    if (visiting.has(id)) throw new Error(`Fault tree contains a cycle at "${id}".`);
+    if (visiting.has(id)) throw new Error(`Fault tree contains a cycle at "${id}" on line ${nodes.get(id)?.line || "?"}.`);
     if (visited.has(id)) return;
     visiting.add(id); nodes.get(id)!.children.forEach(visit); visiting.delete(id); visited.add(id);
   }
@@ -1464,6 +1464,17 @@ function renderFaultTreeLineNumbers(errorLine?: number) {
   gutter.style.width = `${Math.max(3, String(lineCount).length + 1.4)}ch`;
   gutter.scrollTop = source.scrollTop;
 }
+function focusFaultTreeLine(line: number) {
+  if (!Number.isInteger(line) || line < 1) return;
+  const editor = $("#fault-tree-source") as HTMLTextAreaElement;
+  const lines = editor.value.split(/\r?\n/);
+  const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
+  const end = start + (lines[line - 1] || "").length;
+  const lineHeight = Number.parseFloat(getComputedStyle(editor).lineHeight) || 19;
+  editor.focus(); editor.setSelectionRange(start, end);
+  editor.scrollTop = Math.max(0, (line - 2) * lineHeight);
+  renderFaultTreeLineNumbers(line);
+}
 function renderFaultTree() {
   const editor = $("#fault-tree-source") as HTMLTextAreaElement;
   if (document.activeElement !== editor) editor.value = state.faultTree.dsl;
@@ -1496,16 +1507,18 @@ function renderFaultTree() {
     if (!["All", ...configuredLayers].includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
     layers.innerHTML = ["All", ...configuredLayers].map(layer => `<option value="${esc(layer)}" ${layer === state.faultTree.activeLayer ? "selected" : ""}>${layer === "All" ? "All layers" : esc(layer)}</option>`).join("");
     status.className = "render-status success"; status.textContent = `${model.nodes.size} nodes · ${cut.sets.length} minimal cut set${cut.sets.length === 1 ? "" : "s"}`;
-    const rootIds = state.faultTree.activeLayer === "All" ? [model.top] : [...model.nodes.values()]
+    const allLayers = state.faultTree.activeLayer === "All";
+    const inSelectedLayer = (id: string) => allLayers || model.nodes.get(id)?.layer === state.faultTree.activeLayer;
+    const rootIds = allLayers ? [model.top] : [...model.nodes.values()]
       .filter(node => node.layer === state.faultTree.activeLayer)
       .filter(node => node.id === model.top || ![...model.nodes.values()].some(parent => parent.layer === state.faultTree.activeLayer && parent.children.includes(node.id)))
       .map(node => node.id);
     type LayoutBranch = { id: string; depth: number; children: LayoutBranch[]; x: number; y: number };
     const matchesBranch = (id: string): boolean => {
       const node = model.nodes.get(id)!;
-      return matchesNode(node) || node.children.some(matchesBranch);
+      return inSelectedLayer(id) && (matchesNode(node) || node.children.some(child => inSelectedLayer(child) && matchesBranch(child)));
     };
-    const visible = (id: string) => (state.faultTree.activeLayer === "All" || model.nodes.get(id)?.layer === state.faultTree.activeLayer) && matchesBranch(id);
+    const visible = (id: string) => inSelectedLayer(id) && matchesBranch(id);
     function branchFor(id: string, depth = 0): LayoutBranch | null {
       if (!visible(id)) return null;
       const node = model.nodes.get(id)!;
@@ -1561,7 +1574,7 @@ function renderFaultTree() {
     renderFaultTreeLineNumbers(Number.isFinite(line) ? line : undefined);
     status.className = "render-status error"; status.textContent = "FTA model error";
     canvas.innerHTML = `<p>${esc(error.message)}</p>`;
-    analysis.innerHTML = `<p class="standards-note">${esc(error.message)}</p>`;
+    analysis.innerHTML = `<p class="standards-note">${esc(error.message)}${Number.isFinite(line) ? ` <button class="text-btn" type="button" data-fault-tree-go-to-line="${line}">Go to line ${line}</button>` : ""}</p>`;
   }
 }
 
@@ -1848,6 +1861,7 @@ function renderFaultTreeBuilder() {
       } else {
         editor.value = `${editor.value}\n${snippet}`;
       }
+      state.faultTree.dsl = editor.value;
       editor.focus();
       persistState();
       // update model caches and builder lists so new id becomes available immediately
@@ -2579,7 +2593,12 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
     state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
     parseFaultTreeDsl(state.faultTree.dsl);
     save();
-  } catch (error) { handleFormError(error); }
+  } catch (error) {
+    const line = Number(String(error.message || "").match(/line\s+(\d+)/i)?.[1]);
+    renderFaultTree();
+    if (Number.isFinite(line)) focusFaultTreeLine(line);
+    handleFormError(error);
+  }
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
   const source = ($("#plantuml-source") as HTMLTextAreaElement).value || state.plantuml;
@@ -2597,6 +2616,7 @@ $("#fault-tree-generate-btn").addEventListener("click", () => {
   alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", event => {
+  state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
   state.faultTree.activeLayer = (event.target as HTMLSelectElement).value;
   persistState();
   renderFaultTree();
@@ -2619,6 +2639,10 @@ $("#fault-tree-search").addEventListener("input", event => { faultTreeSearch = (
 $("#fault-tree-analysis").addEventListener("change", event => {
   const target = event.target as HTMLSelectElement;
   if (target.id === "fault-tree-cutset-limit") { faultTreeCutSetLimit = Number(target.value); renderFaultTree(); }
+});
+$("#fault-tree-analysis").addEventListener("click", event => {
+  const target = eventElement(event).closest<HTMLElement>("[data-fault-tree-go-to-line]");
+  if (target) focusFaultTreeLine(Number(target.dataset.faultTreeGoToLine));
 });
 
 $("#render-btn").addEventListener("click", async () => {

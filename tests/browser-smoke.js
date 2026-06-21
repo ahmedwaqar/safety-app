@@ -873,6 +873,9 @@ try {
     await fill("#fault-tree-builder-component", "TEST_CTRL");
     await click("#fault-tree-insert-btn");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("basic EXTRA_BASIC") && document.querySelector("#fault-tree-source").value.includes("component: TEST_CTRL")`), "basic event was not added inside the structured tree with its architecture link");
+    await fill("#fault-tree-layer", "Layer 1");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("basic EXTRA_BASIC")`), "switching the layer filter discarded an unsaved builder change");
+    await fill("#fault-tree-layer", "All");
     await fill("#fault-tree-snippet-type", "gate");
     assert(!await evaluate(`document.querySelector(".fault-tree-gate-fields").hidden`), "gate controls did not appear for gate mode");
     assert(await evaluate(`document.querySelector(".fault-tree-basic-field").hidden`), "basic-only controls remained visible in gate mode");
@@ -996,7 +999,9 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     await fill("#fault-tree-layer", "Layer 2");
     assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Layer 2", "fault tree layer selection was not retained");
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Sensor one dangerous failure")`), "fault tree layer did not render matching basic events");
+    assert(!await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Channel A dangerous failure")`), "numbered layer filter rendered an entity from another layer");
     await fill("#fault-tree-layer", "All");
+    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Channel A dangerous failure")`), "All layers view did not restore every layer entity");
     await evaluate(`(() => {
       const ids = Array.from({ length: 120 }, (_, index) => "E" + String(index + 1).padStart(3, "0"));
       const dsl = ['fault_tree "Large top event" {', "  top: TOP", "", "  gate TOP {", "    type: OR", '    label: "Large generated tree"', "    children: [" + ids.join(", ") + "]", "  }", "", ...ids.flatMap(id => ['  basic ' + id + ' {', '    label: "Generated basic event ' + id + '"', '    layer: Large', '  }']), "}"].join("\\n");
@@ -1015,6 +1020,9 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
   }
 }`);
     assert(await evaluate(`document.querySelector("#fault-tree-status").textContent`) === "FTA model error", "fault tree validation error was not shown");
+    assert(await count("[data-fault-tree-go-to-line]") === 1, "fault tree error did not offer direct line navigation");
+    await click("[data-fault-tree-go-to-line]");
+    assert(await evaluate(`document.activeElement === document.querySelector("#fault-tree-source")`), "fault tree error navigation did not focus the DSL editor");
     await fill("#fault-tree-source", `fault_tree "Invalid voting" {
   top: TOP
   gate TOP {
