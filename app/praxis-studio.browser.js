@@ -143,7 +143,7 @@ function createRelationship(kind, source, target, label = "") {
     target,
     label,
     endpoints: { sourceMultiplicity: "", targetMultiplicity: "", navigable: true, ownership: "none" },
-    route: { points: [], labelOffset: { x: 0, y: -8 } },
+    route: { points: [], labelOffset: { x: 0, y: -8 }, sourceSide: "", targetSide: "" },
     validation: []
   };
 }
@@ -305,38 +305,115 @@ function bounds(diagram) {
 function center(el) {
   return { x: el.view.x + el.view.width / 2, y: el.view.y + el.view.height / 2 };
 }
-function boundaryPoint(el, toward) {
+function sidePoint(el, side) {
+  const { x, y, width, height } = el.view;
+  if (el.kind === "interfaceConnector")
+    return { x: side === "right" ? x + width - 4 : x + 4, y: y + height / 2 };
+  if (side === "top")
+    return { x: x + width / 2, y };
+  if (side === "right")
+    return { x: x + width, y: y + height / 2 };
+  if (side === "bottom")
+    return { x: x + width / 2, y: y + height };
+  if (side === "left")
+    return { x, y: y + height / 2 };
+  return center(el);
+}
+function sideToward(el, toward) {
   const c = center(el);
   const dx = toward.x - c.x;
   const dy = toward.y - c.y;
-  if (dx === 0 && dy === 0)
-    return c;
-  const halfW = el.view.width / 2;
-  const halfH = el.view.height / 2;
-  const scale = Math.min(Math.abs(halfW / (dx || 0.0001)), Math.abs(halfH / (dy || 0.0001)));
-  return {
-    x: c.x + dx * scale,
-    y: c.y + dy * scale
-  };
+  if (el.kind === "interfaceConnector")
+    return dx >= 0 ? "right" : "left";
+  return Math.abs(dx / el.view.width) >= Math.abs(dy / el.view.height) ? dx >= 0 ? "right" : "left" : dy >= 0 ? "bottom" : "top";
+}
+var sideVector = (side) => ({ top: { x: 0, y: -1 }, right: { x: 1, y: 0 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 } })[side] || { x: 1, y: 0 };
+function orthogonalPoints(start, end, sourceSide, targetSide) {
+  const stub = 24;
+  const sourceVector = sideVector(sourceSide);
+  const targetVector = sideVector(targetSide);
+  const sourceStub = { x: start.x + sourceVector.x * stub, y: start.y + sourceVector.y * stub };
+  const targetStub = { x: end.x + targetVector.x * stub, y: end.y + targetVector.y * stub };
+  let points;
+  const sourceHorizontal = sourceVector.x !== 0;
+  const targetHorizontal = targetVector.x !== 0;
+  if (sourceSide === targetSide) {
+    if (sourceHorizontal) {
+      const outsideX = sourceSide === "right" ? Math.max(sourceStub.x, targetStub.x) + stub : Math.min(sourceStub.x, targetStub.x) - stub;
+      points = [start, sourceStub, { x: outsideX, y: sourceStub.y }, { x: outsideX, y: targetStub.y }, targetStub, end];
+    } else {
+      const outsideY = sourceSide === "bottom" ? Math.max(sourceStub.y, targetStub.y) + stub : Math.min(sourceStub.y, targetStub.y) - stub;
+      points = [start, sourceStub, { x: sourceStub.x, y: outsideY }, { x: targetStub.x, y: outsideY }, targetStub, end];
+    }
+  } else if (sourceHorizontal && targetHorizontal) {
+    const midX = (sourceStub.x + targetStub.x) / 2;
+    points = [start, sourceStub, { x: midX, y: sourceStub.y }, { x: midX, y: targetStub.y }, targetStub, end];
+  } else if (!sourceHorizontal && !targetHorizontal) {
+    const midY = (sourceStub.y + targetStub.y) / 2;
+    points = [start, sourceStub, { x: sourceStub.x, y: midY }, { x: targetStub.x, y: midY }, targetStub, end];
+  } else {
+    points = sourceHorizontal ? [start, sourceStub, { x: targetStub.x, y: sourceStub.y }, targetStub, end] : [start, sourceStub, { x: sourceStub.x, y: targetStub.y }, targetStub, end];
+  }
+  return points.filter((point, index) => !index || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
+}
+function roundedPath(points, radius = 10) {
+  if (points.length < 2)
+    return "";
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1;index < points.length - 1; index++) {
+    const previous = points[index - 1];
+    const corner = points[index];
+    const next = points[index + 1];
+    const beforeLength = Math.hypot(corner.x - previous.x, corner.y - previous.y);
+    const afterLength = Math.hypot(next.x - corner.x, next.y - corner.y);
+    const bend = Math.min(radius, beforeLength / 2, afterLength / 2);
+    const before = { x: corner.x + (previous.x - corner.x) * bend / (beforeLength || 1), y: corner.y + (previous.y - corner.y) * bend / (beforeLength || 1) };
+    const after = { x: corner.x + (next.x - corner.x) * bend / (afterLength || 1), y: corner.y + (next.y - corner.y) * bend / (afterLength || 1) };
+    path += ` L ${before.x} ${before.y} Q ${corner.x} ${corner.y} ${after.x} ${after.y}`;
+  }
+  const end = points[points.length - 1];
+  return `${path} L ${end.x} ${end.y}`;
+}
+function pathMidpoint(points) {
+  const segments = points.slice(1).map((point, index) => ({ start: points[index], end: point, length: Math.hypot(point.x - points[index].x, point.y - points[index].y) }));
+  const halfway = segments.reduce((sum, segment) => sum + segment.length, 0) / 2;
+  let travelled = 0;
+  for (const segment of segments) {
+    if (travelled + segment.length >= halfway) {
+      const ratio = (halfway - travelled) / (segment.length || 1);
+      return { x: segment.start.x + (segment.end.x - segment.start.x) * ratio, y: segment.start.y + (segment.end.y - segment.start.y) * ratio };
+    }
+    travelled += segment.length;
+  }
+  return points[points.length - 1];
+}
+function relationshipGeometry(rel, byId) {
+  const source = byId.get(rel.source);
+  const target = byId.get(rel.target);
+  if (!source || !target)
+    return null;
+  const sourceSide = rel.route?.sourceSide || sideToward(source, center(target));
+  const targetSide = rel.route?.targetSide || sideToward(target, center(source));
+  const start = sidePoint(source, sourceSide);
+  const end = sidePoint(target, targetSide);
+  const points = orthogonalPoints(start, end, sourceSide, targetSide);
+  return { start, end, sourceSide, targetSide, points, path: roundedPath(points) };
 }
 function renderRelationship(rel, byId) {
-  const s = byId.get(rel.source);
-  const t = byId.get(rel.target);
-  if (!s || !t)
+  const geometry = relationshipGeometry(rel, byId);
+  if (!geometry)
     return "";
-  const sourceCenter = center(s);
-  const targetCenter = center(t);
-  const a = boundaryPoint(s, targetCenter);
-  const b = boundaryPoint(t, sourceCenter);
+  const { start: a, end: b, points, path } = geometry;
   const dash = ["realization", "include", "extend", "objectFlow"].includes(rel.kind) ? `stroke-dasharray="7 6"` : rel.kind === "dependency" ? `stroke-dasharray="2 6" stroke-linecap="round"` : "";
   const relClass = rel.kind === "dependency" ? "uml-dependency" : rel.kind === "interfaceConnector" ? "uml-interface-link" : "";
-  const labelX = (a.x + b.x) / 2 + (rel.route?.labelOffset?.x || 0);
-  const labelY = (a.y + b.y) / 2 + (rel.route?.labelOffset?.y || -8);
-  const cap = renderConnectorCap(rel.kind, a, b);
+  const midpoint = pathMidpoint(points);
+  const labelX = midpoint.x + (rel.route?.labelOffset?.x || 0);
+  const labelY = midpoint.y + (rel.route?.labelOffset?.y || -8);
+  const cap = renderConnectorCap(rel.kind, points.at(-2) || a, b);
   const interrupt = rel.kind === "interruptFlow" ? renderInterruptZigZag(a, b) : "";
   return `<g class="uml-edge ${relClass}" data-id="${esc(rel.id)}">
-    <line class="edge-hit" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width="16"/>
-    <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#3c4658" stroke-width="2" ${dash}/>
+    <path class="edge-hit" d="${path}" fill="none" stroke="transparent" stroke-width="16"/>
+    <path class="edge-path" d="${path}" fill="none" stroke="#3c4658" stroke-width="2" stroke-linejoin="round" ${dash}/>
     ${cap}
     ${interrupt}
     <rect x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
@@ -636,13 +713,14 @@ function renderSvg(diagram, options = {}) {
   const selectedRel = options.selectedRelationshipId ? (diagram.relationships || []).find((rel) => rel.id === options.selectedRelationshipId) : null;
   const selection = selected && !options.includeMetadata ? renderSelection(selected) : "";
   const relationshipSelection = selectedRel && !options.includeMetadata ? renderRelationshipSelection(selectedRel, byId) : "";
+  const connectionPreview = options.connectionPreview && !options.includeMetadata ? renderConnectionPreview(options.connectionPreview, byId) : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${box.width}" height="${box.height}" viewBox="${box.minX} ${box.minY} ${box.width} ${box.height}" role="img" aria-label="${esc(diagram.name)}">
   <defs>
     <pattern id="editor-grid" width="24" height="24" patternUnits="userSpaceOnUse">
       <path d="M 24 0 H 0 V 24" fill="none" stroke="#dfe6f1" stroke-width="1"/>
     </pattern>
     <style>
-      .uml-node{cursor:move}.uml-edge{cursor:pointer}.edge-hit{pointer-events:stroke}.node-title{font-family:Inter,Arial,sans-serif;font-size:var(--title-size,14px);font-weight:700;fill:#172033}.member{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--member-size,12px);fill:#172033}.stereo{font-family:Inter,Arial,sans-serif;font-size:var(--stereo-size,11px);fill:#516072}.edge-label{font-family:Inter,Arial,sans-serif;font-size:12px;fill:#334155}.selection-outline{fill:none;stroke:#1f6feb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.selection-handle{fill:#fff;stroke:#1f6feb;stroke-width:2;pointer-events:none}
+      .uml-node{cursor:move}.uml-edge{cursor:pointer}.edge-hit{pointer-events:stroke}.node-title{font-family:Inter,Arial,sans-serif;font-size:var(--title-size,14px);font-weight:700;fill:#172033}.member{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--member-size,12px);fill:#172033}.stereo{font-family:Inter,Arial,sans-serif;font-size:var(--stereo-size,11px);fill:#516072}.edge-label{font-family:Inter,Arial,sans-serif;font-size:12px;fill:#334155}.selection-outline{fill:none;stroke:#1f6feb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.selection-handle{fill:#fff;stroke:#1f6feb;stroke-width:2;pointer-events:none}.connection-handle,.edge-endpoint-handle{fill:#fff;stroke:#137c68;stroke-width:2;cursor:crosshair;pointer-events:all}.connection-handle:hover,.edge-endpoint-handle:hover{fill:#137c68;stroke:#fff}.connection-preview{pointer-events:none}.connection-target{fill:none;stroke:#137c68;stroke-width:3;stroke-dasharray:7 5;pointer-events:none}
     </style>
   </defs>
   ${metadata}
@@ -650,6 +728,7 @@ function renderSvg(diagram, options = {}) {
   ${!options.includeMetadata ? `<rect x="${box.minX}" y="${box.minY}" width="${box.width}" height="${box.height}" fill="url(#editor-grid)"/>` : ""}
   ${(diagram.relationships || []).map((r) => renderRelationship(r, byId)).join(`
 `)}
+  ${connectionPreview}
   ${(diagram.elements || []).map(renderElement).join(`
 `)}
   ${relationshipSelection}
@@ -657,18 +736,30 @@ function renderSvg(diagram, options = {}) {
 </svg>`;
 }
 function renderRelationshipSelection(rel, byId) {
-  const s = byId.get(rel.source);
-  const t = byId.get(rel.target);
-  if (!s || !t)
+  const geometry = relationshipGeometry(rel, byId);
+  if (!geometry)
     return "";
-  const sourceCenter = center(s);
-  const targetCenter = center(t);
-  const a = boundaryPoint(s, targetCenter);
-  const b = boundaryPoint(t, sourceCenter);
+  const { start: a, end: b, path } = geometry;
   return `<g class="uml-edge-selection" data-selected="${esc(rel.id)}">
-    <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#1f6feb" stroke-width="7" opacity=".18" pointer-events="none"/>
-    <circle cx="${a.x}" cy="${a.y}" r="5" fill="#fff" stroke="#1f6feb" stroke-width="2" pointer-events="none"/>
-    <circle cx="${b.x}" cy="${b.y}" r="5" fill="#fff" stroke="#1f6feb" stroke-width="2" pointer-events="none"/>
+    <path d="${path}" fill="none" stroke="#1f6feb" stroke-width="7" opacity=".18" pointer-events="none"/>
+    <circle class="edge-endpoint-handle" data-relationship-id="${esc(rel.id)}" data-endpoint="source" cx="${a.x}" cy="${a.y}" r="7"/>
+    <circle class="edge-endpoint-handle" data-relationship-id="${esc(rel.id)}" data-endpoint="target" cx="${b.x}" cy="${b.y}" r="7"/>
+  </g>`;
+}
+function renderConnectionPreview(preview, byId) {
+  const fixed = byId.get(preview.fixedElementId);
+  if (!fixed)
+    return "";
+  const start = sidePoint(fixed, preview.fixedSide);
+  const target = byId.get(preview.targetId);
+  const end = target && preview.targetSide ? sidePoint(target, preview.targetSide) : preview.point || start;
+  const targetSide = target && preview.targetSide ? preview.targetSide : sideToward({ kind: "preview", view: { x: end.x - 1, y: end.y - 1, width: 2, height: 2 } }, start);
+  const path = roundedPath(orthogonalPoints(start, end, preview.fixedSide, targetSide));
+  const targetOutline = target ? `<rect class="connection-target" x="${target.view.x - 5}" y="${target.view.y - 5}" width="${target.view.width + 10}" height="${target.view.height + 10}" rx="7"/>` : "";
+  return `<g class="connection-preview">
+    <path d="${path}" fill="none" stroke="#137c68" stroke-width="2.5" stroke-dasharray="8 5"/>
+    <circle cx="${end.x}" cy="${end.y}" r="5" fill="#fff" stroke="#137c68" stroke-width="2"/>
+    ${targetOutline}
   </g>`;
 }
 function renderSelection(el) {
@@ -688,9 +779,19 @@ function renderSelection(el) {
     [left, bottom],
     [left, (top + bottom) / 2]
   ];
+  const connectionPoints = el.kind === "interfaceConnector" ? [
+    [x + 4, y + h / 2, "left"],
+    [x + w - 4, y + h / 2, "right"]
+  ] : [
+    [x + w / 2, y, "top"],
+    [x + w, y + h / 2, "right"],
+    [x + w / 2, y + h, "bottom"],
+    [x, y + h / 2, "left"]
+  ];
   return `<g class="uml-selection" data-selected="${esc(el.id)}">
     <rect class="selection-outline" x="${left}" y="${top}" width="${w + pad * 2}" height="${h + pad * 2}" rx="6"/>
     ${points.map(([cx, cy]) => `<rect class="selection-handle" x="${cx - 4}" y="${cy - 4}" width="8" height="8" rx="1.5"/>`).join("")}
+    ${connectionPoints.map(([cx, cy, side]) => `<circle class="connection-handle" data-element-id="${esc(el.id)}" data-side="${side}" cx="${cx}" cy="${cy}" r="7"/>`).join("")}
   </g>`;
 }
 function parseNotation(text, type = "class") {
@@ -1098,9 +1199,11 @@ var architectureZoom = 1;
 var architectureHistory = [];
 var architectureFuture = [];
 var architecturePaletteGroup = "Structural";
+var architectureConnectorKind = "dependency";
 var architectureInspectorEditing = false;
 var architectureInspectorRenderTimer;
 var architectureDrag = null;
+var architectureConnection = null;
 var architectureSuppressClick = false;
 var $ = (selector, parent = document) => parent.querySelector(selector);
 var $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
@@ -2143,8 +2246,16 @@ function updateArchitectureInspectorDraft(target) {
   }
   if (rel && target.id === "architecture-edge-label")
     rel.label = target.value;
-  if (rel && target.id === "architecture-edge-target")
+  if (rel && target.id === "architecture-edge-kind")
+    rel.kind = target.value;
+  if (rel && target.id === "architecture-edge-source") {
+    rel.source = target.value;
+    rel.route.sourceSide = "";
+  }
+  if (rel && target.id === "architecture-edge-target") {
     rel.target = target.value;
+    rel.route.targetSide = "";
+  }
   if (!selected && !rel)
     return false;
   diagram.revision = (diagram.revision || 0) + 1;
@@ -2168,8 +2279,83 @@ function renderArchitectureCanvas() {
   stage.innerHTML = renderSvg(diagram, {
     selectedId: architectureSelectedId.startsWith("edge:") ? "" : architectureSelectedId,
     selectedRelationshipId: architectureSelectedId.startsWith("edge:") ? architectureSelectedId.slice(5) : "",
-    viewport: architectureDrag?.viewport
+    viewport: architectureDrag?.viewport || architectureConnection?.viewport,
+    connectionPreview: architectureConnection ? {
+      fixedElementId: architectureConnection.fixedElementId,
+      fixedSide: architectureConnection.fixedSide,
+      point: architectureConnection.point,
+      targetId: architectureConnection.targetId,
+      targetSide: architectureConnection.targetSide
+    } : null
   });
+}
+function architectureClientPoint(clientX, clientY) {
+  const svg = $("#architecture-stage svg");
+  const matrix = svg?.getScreenCTM();
+  if (svg && matrix) {
+    const point = svg.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    const local = point.matrixTransform(matrix.inverse());
+    return { x: local.x, y: local.y };
+  }
+  return { x: clientX / architectureZoom, y: clientY / architectureZoom };
+}
+function architectureSideToward(element, point) {
+  const centerX = element.view.x + element.view.width / 2;
+  const centerY = element.view.y + element.view.height / 2;
+  const dx = point.x - centerX;
+  const dy = point.y - centerY;
+  if (element.kind === "interfaceConnector")
+    return dx >= 0 ? "right" : "left";
+  return Math.abs(dx / element.view.width) >= Math.abs(dy / element.view.height) ? dx >= 0 ? "right" : "left" : dy >= 0 ? "bottom" : "top";
+}
+function architectureAnchorPoint(element, side) {
+  const { x, y, width, height } = element.view;
+  if (element.kind === "interfaceConnector")
+    return { x: side === "right" ? x + width - 4 : x + 4, y: y + height / 2 };
+  if (side === "top")
+    return { x: x + width / 2, y };
+  if (side === "right")
+    return { x: x + width, y: y + height / 2 };
+  if (side === "bottom")
+    return { x: x + width / 2, y: y + height };
+  return { x, y: y + height / 2 };
+}
+function architectureConnectionTarget(point, fixedElementId) {
+  const target = [...activeArchitectureDiagram().elements].reverse().find((element) => element.id !== fixedElementId && point.x >= element.view.x && point.x <= element.view.x + element.view.width && point.y >= element.view.y && point.y <= element.view.y + element.view.height);
+  if (!target)
+    return { id: "", side: "" };
+  const fixed = activeArchitectureDiagram().elements.find((element) => element.id === fixedElementId);
+  if (target.kind === "interfaceConnector") {
+    const fixedCenterX = fixed ? fixed.view.x + fixed.view.width / 2 : point.x;
+    return { id: target.id, side: fixedCenterX >= target.view.x + target.view.width / 2 ? "right" : "left" };
+  }
+  const edgeDistances = [
+    [point.y - target.view.y, "top"],
+    [target.view.x + target.view.width - point.x, "right"],
+    [target.view.y + target.view.height - point.y, "bottom"],
+    [point.x - target.view.x, "left"]
+  ];
+  edgeDistances.sort((a, b) => a[0] - b[0]);
+  const nearEdge = edgeDistances[0][0] <= Math.min(target.view.width, target.view.height) * 0.22;
+  const fixedCenter = fixed ? { x: fixed.view.x + fixed.view.width / 2, y: fixed.view.y + fixed.view.height / 2 } : point;
+  return { id: target.id, side: nearEdge ? edgeDistances[0][1] : architectureSideToward(target, fixedCenter) };
+}
+function scheduleArchitectureConnectionFrame(clientX, clientY) {
+  if (!architectureConnection)
+    return;
+  architectureConnection.point = architectureClientPoint(clientX, clientY);
+  const target = architectureConnectionTarget(architectureConnection.point, architectureConnection.fixedElementId);
+  architectureConnection.targetId = target.id;
+  architectureConnection.targetSide = target.side;
+  if (!architectureConnection.frame)
+    architectureConnection.frame = requestAnimationFrame(() => {
+      if (!architectureConnection)
+        return;
+      architectureConnection.frame = 0;
+      renderArchitectureCanvas();
+    });
 }
 function applyArchitectureDragFrame() {
   if (!architectureDrag)
@@ -3149,6 +3335,7 @@ function renderArchitecture() {
   $("#architecture-palette-group").innerHTML = UML_PALETTE_GROUPS.map((group) => `<option value="${esc2(group.name)}" ${group.name === architecturePaletteGroup ? "selected" : ""}>${esc2(group.name)}</option>`).join("");
   $("#architecture-palette").innerHTML = UML_PALETTE_GROUPS.filter((group) => group.name === architecturePaletteGroup).map((group) => `<div class="palette-grid">${group.kinds.map((kind) => `<button class="shape-pick" data-add-architecture="${esc2(kind)}" title="Add ${esc2(kind)}"><span>${esc2(kind.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase()))}</span></button>`).join("")}</div>`).join("");
   renderArchitectureCanvas();
+  $("#architecture-connector-kind").innerHTML = UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}" ${kind === architectureConnectorKind ? "selected" : ""}>${esc2(kind.replace(/([A-Z])/g, " $1"))}</option>`).join("");
   $("#architecture-zoom-value").textContent = `${Math.round(architectureZoom * 100)}%`;
   const validationClass = validation.status === "valid" ? "valid" : validation.status === "warning" ? "warning" : "error";
   $("#architecture-validation").className = validationClass;
@@ -3160,8 +3347,9 @@ function renderArchitecture() {
   $("#component-list").innerHTML = state.components.length ? state.components.map((x) => `<div class="component-item"><strong>${esc2(x.name)}</strong><span>${esc2(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
   $("#architecture-outline").innerHTML = diagram.elements.length ? diagram.elements.map((element) => `<button class="${element.id === architectureSelectedId ? "active" : ""}" data-select-architecture="${esc2(element.id)}">${esc2(element.kind)} · ${esc2(element.name)}</button>`).join("") : `<p class="dialog-copy">Add elements from the palette.</p>`;
   if (selectedRelationship) {
-    const elementOptions = diagram.elements.map((element) => `<option value="${esc2(element.id)}" ${element.id === selectedRelationship.target ? "selected" : ""}>${esc2(element.name)}</option>`).join("");
-    $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc2(selectedRelationship.label || "")}" /></label><label><span>Destination</span><select id="architecture-edge-target">${elementOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
+    const sourceOptions = diagram.elements.map((element) => `<option value="${esc2(element.id)}" ${element.id === selectedRelationship.source ? "selected" : ""}>${esc2(element.name)}</option>`).join("");
+    const targetOptions = diagram.elements.map((element) => `<option value="${esc2(element.id)}" ${element.id === selectedRelationship.target ? "selected" : ""}>${esc2(element.name)}</option>`).join("");
+    $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc2(selectedRelationship.label || "")}" /></label><label><span>Connector type</span><select id="architecture-edge-kind">${UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}" ${kind === selectedRelationship.kind ? "selected" : ""}>${esc2(kind)}</option>`).join("")}</select></label><label><span>Source</span><select id="architecture-edge-source">${sourceOptions}</select></label><label><span>Destination</span><select id="architecture-edge-target">${targetOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
   } else if (selectedElement) {
     const targets = diagram.elements.filter((element) => element.id !== selectedElement.id);
     $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc2(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap((group) => group.kinds).map((kind) => `<option value="${esc2(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc2(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc2(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><label><span>Documentation</span><textarea id="architecture-element-docs">${esc2(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map((element) => `<option value="${esc2(element.id)}">${esc2(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}">${esc2(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
@@ -4275,6 +4463,9 @@ $("#architecture-palette-group").addEventListener("change", (event) => {
   architecturePaletteGroup = event.target.value;
   renderArchitecture();
 });
+$("#architecture-connector-kind").addEventListener("change", (event) => {
+  architectureConnectorKind = event.target.value;
+});
 $("#architecture-palette").addEventListener("click", (event) => {
   const target = eventElement(event).closest("[data-add-architecture]");
   if (!target)
@@ -4291,14 +4482,57 @@ $("#architecture-stage").addEventListener("pointerdown", (event) => {
   if (event.button !== 0)
     return;
   const stage = $("#architecture-stage");
+  const connectionHandle = eventElement(event).closest(".connection-handle");
+  const endpointHandle = eventElement(event).closest(".edge-endpoint-handle");
+  const svg = stage.querySelector("svg");
+  const viewBox = svg?.viewBox.baseVal;
+  const viewport = viewBox ? { minX: viewBox.x, minY: viewBox.y, width: viewBox.width, height: viewBox.height } : { minX: 0, minY: 0, width: 960, height: 640 };
+  if (connectionHandle?.dataset.elementId && connectionHandle.dataset.side) {
+    const element2 = activeArchitectureDiagram().elements.find((item) => item.id === connectionHandle.dataset.elementId);
+    if (!element2)
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    architectureSelectedId = element2.id;
+    architectureConnection = { pointerId: event.pointerId, relationshipId: "", endpoint: "target", fixedElementId: element2.id, fixedSide: connectionHandle.dataset.side, point: architectureAnchorPoint(element2, connectionHandle.dataset.side), targetId: "", targetSide: "", moved: false, frame: 0, viewport };
+    stage.classList.add("is-connecting");
+    try {
+      stage.setPointerCapture?.(event.pointerId);
+    } catch {}
+    renderArchitectureCanvas();
+    return;
+  }
+  if (endpointHandle?.dataset.relationshipId && endpointHandle.dataset.endpoint) {
+    const relationship = activeArchitectureDiagram().relationships.find((item) => item.id === endpointHandle.dataset.relationshipId);
+    if (!relationship)
+      return;
+    const endpoint = endpointHandle.dataset.endpoint;
+    const fixedElementId = endpoint === "source" ? relationship.target : relationship.source;
+    const draggedElementId = endpoint === "source" ? relationship.source : relationship.target;
+    const fixedElement = activeArchitectureDiagram().elements.find((item) => item.id === fixedElementId);
+    const draggedElement = activeArchitectureDiagram().elements.find((item) => item.id === draggedElementId);
+    if (!fixedElement || !draggedElement)
+      return;
+    const fixedRouteKey = endpoint === "source" ? "targetSide" : "sourceSide";
+    const draggedRouteKey = endpoint === "source" ? "sourceSide" : "targetSide";
+    const fixedSide = relationship.route?.[fixedRouteKey] || architectureSideToward(fixedElement, { x: draggedElement.view.x + draggedElement.view.width / 2, y: draggedElement.view.y + draggedElement.view.height / 2 });
+    const draggedSide = relationship.route?.[draggedRouteKey] || architectureSideToward(draggedElement, { x: fixedElement.view.x + fixedElement.view.width / 2, y: fixedElement.view.y + fixedElement.view.height / 2 });
+    event.preventDefault();
+    event.stopPropagation();
+    architectureConnection = { pointerId: event.pointerId, relationshipId: relationship.id, endpoint, fixedElementId, fixedSide, point: architectureAnchorPoint(draggedElement, draggedSide), targetId: "", targetSide: "", moved: false, frame: 0, viewport };
+    stage.classList.add("is-connecting");
+    try {
+      stage.setPointerCapture?.(event.pointerId);
+    } catch {}
+    renderArchitectureCanvas();
+    return;
+  }
   const node = eventElement(event).closest(".uml-node");
   if (!node?.dataset.id)
     return;
   const element = activeArchitectureDiagram().elements.find((item) => item.id === node.dataset.id);
   if (!element)
     return;
-  const viewBox = stage.querySelector("svg")?.viewBox.baseVal;
-  const viewport = viewBox ? { minX: viewBox.x, minY: viewBox.y, width: viewBox.width, height: viewBox.height } : { minX: 0, minY: 0, width: 960, height: 640 };
   event.preventDefault();
   architectureSelectedId = element.id;
   architectureDrag = { id: element.id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, latestX: event.clientX, latestY: event.clientY, x: element.view.x, y: element.view.y, moved: false, remembered: false, frame: 0, viewport };
@@ -4320,6 +4554,12 @@ $("#architecture-stage").addEventListener("click", (event) => {
   renderArchitecture();
 });
 window.addEventListener("pointermove", (event) => {
+  if (architectureConnection && event.pointerId === architectureConnection.pointerId) {
+    architectureConnection.moved = true;
+    scheduleArchitectureConnectionFrame(event.clientX, event.clientY);
+    event.preventDefault();
+    return;
+  }
   if (!architectureDrag || event.pointerId !== architectureDrag.pointerId)
     return;
   const dx = (event.clientX - architectureDrag.startX) / architectureZoom;
@@ -4338,6 +4578,42 @@ window.addEventListener("pointermove", (event) => {
   event.preventDefault();
 });
 window.addEventListener("pointerup", (event) => {
+  if (architectureConnection && event.pointerId === architectureConnection.pointerId) {
+    const stage2 = $("#architecture-stage");
+    scheduleArchitectureConnectionFrame(event.clientX, event.clientY);
+    const connection = architectureConnection;
+    if (connection.frame)
+      cancelAnimationFrame(connection.frame);
+    architectureConnection = null;
+    try {
+      stage2.releasePointerCapture?.(connection.pointerId);
+    } catch {}
+    stage2.classList.remove("is-connecting");
+    architectureSuppressClick = true;
+    if (connection.moved && connection.targetId) {
+      mutateArchitecture((diagram) => {
+        if (connection.relationshipId) {
+          const relationship = diagram.relationships.find((item) => item.id === connection.relationshipId);
+          if (!relationship)
+            return;
+          relationship[connection.endpoint] = connection.targetId;
+          relationship.route ||= { points: [], labelOffset: { x: 0, y: -8 } };
+          relationship.route[connection.endpoint === "source" ? "sourceSide" : "targetSide"] = connection.targetSide;
+          architectureSelectedId = `edge:${relationship.id}`;
+        } else {
+          const relationship = createRelationship(architectureConnectorKind, connection.fixedElementId, connection.targetId, "");
+          relationship.route.sourceSide = connection.fixedSide;
+          relationship.route.targetSide = connection.targetSide;
+          diagram.relationships.push(relationship);
+          architectureSelectedId = `edge:${relationship.id}`;
+        }
+      });
+    } else {
+      renderArchitecture();
+    }
+    event.preventDefault();
+    return;
+  }
   if (!architectureDrag || event.pointerId !== architectureDrag.pointerId)
     return;
   const stage = $("#architecture-stage");

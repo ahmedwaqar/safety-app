@@ -105,7 +105,7 @@ export function createRelationship(kind, source, target, label = "") {
     target,
     label,
     endpoints: { sourceMultiplicity: "", targetMultiplicity: "", navigable: true, ownership: "none" },
-    route: { points: [], labelOffset: { x: 0, y: -8 } },
+    route: { points: [], labelOffset: { x: 0, y: -8 }, sourceSide: "", targetSide: "" },
     validation: []
   };
 }
@@ -273,6 +273,7 @@ function boundaryPoint(el, toward) {
   const dx = toward.x - c.x;
   const dy = toward.y - c.y;
   if (dx === 0 && dy === 0) return c;
+  if (el.kind === "interfaceConnector") return sidePoint(el, dx >= 0 ? "right" : "left");
   const halfW = el.view.width / 2;
   const halfH = el.view.height / 2;
   const scale = Math.min(Math.abs(halfW / (dx || 0.0001)), Math.abs(halfH / (dy || 0.0001)));
@@ -282,23 +283,115 @@ function boundaryPoint(el, toward) {
   };
 }
 
+function sidePoint(el, side) {
+  const { x, y, width, height } = el.view;
+  if (el.kind === "interfaceConnector") return { x: side === "right" ? x + width - 4 : x + 4, y: y + height / 2 };
+  if (side === "top") return { x: x + width / 2, y };
+  if (side === "right") return { x: x + width, y: y + height / 2 };
+  if (side === "bottom") return { x: x + width / 2, y: y + height };
+  if (side === "left") return { x, y: y + height / 2 };
+  return center(el);
+}
+
+function sideToward(el, toward) {
+  const c = center(el);
+  const dx = toward.x - c.x;
+  const dy = toward.y - c.y;
+  if (el.kind === "interfaceConnector") return dx >= 0 ? "right" : "left";
+  return Math.abs(dx / el.view.width) >= Math.abs(dy / el.view.height) ? (dx >= 0 ? "right" : "left") : (dy >= 0 ? "bottom" : "top");
+}
+
+const sideVector = side => ({ top: { x: 0, y: -1 }, right: { x: 1, y: 0 }, bottom: { x: 0, y: 1 }, left: { x: -1, y: 0 } })[side] || { x: 1, y: 0 };
+
+function orthogonalPoints(start, end, sourceSide, targetSide) {
+  const stub = 24;
+  const sourceVector = sideVector(sourceSide);
+  const targetVector = sideVector(targetSide);
+  const sourceStub = { x: start.x + sourceVector.x * stub, y: start.y + sourceVector.y * stub };
+  const targetStub = { x: end.x + targetVector.x * stub, y: end.y + targetVector.y * stub };
+  let points;
+  const sourceHorizontal = sourceVector.x !== 0;
+  const targetHorizontal = targetVector.x !== 0;
+  if (sourceSide === targetSide) {
+    if (sourceHorizontal) {
+      const outsideX = sourceSide === "right" ? Math.max(sourceStub.x, targetStub.x) + stub : Math.min(sourceStub.x, targetStub.x) - stub;
+      points = [start, sourceStub, { x: outsideX, y: sourceStub.y }, { x: outsideX, y: targetStub.y }, targetStub, end];
+    } else {
+      const outsideY = sourceSide === "bottom" ? Math.max(sourceStub.y, targetStub.y) + stub : Math.min(sourceStub.y, targetStub.y) - stub;
+      points = [start, sourceStub, { x: sourceStub.x, y: outsideY }, { x: targetStub.x, y: outsideY }, targetStub, end];
+    }
+  } else if (sourceHorizontal && targetHorizontal) {
+    const midX = (sourceStub.x + targetStub.x) / 2;
+    points = [start, sourceStub, { x: midX, y: sourceStub.y }, { x: midX, y: targetStub.y }, targetStub, end];
+  } else if (!sourceHorizontal && !targetHorizontal) {
+    const midY = (sourceStub.y + targetStub.y) / 2;
+    points = [start, sourceStub, { x: sourceStub.x, y: midY }, { x: targetStub.x, y: midY }, targetStub, end];
+  } else {
+    points = sourceHorizontal
+      ? [start, sourceStub, { x: targetStub.x, y: sourceStub.y }, targetStub, end]
+      : [start, sourceStub, { x: sourceStub.x, y: targetStub.y }, targetStub, end];
+  }
+  return points.filter((point, index) => !index || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
+}
+
+function roundedPath(points, radius = 10) {
+  if (points.length < 2) return "";
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length - 1; index++) {
+    const previous = points[index - 1];
+    const corner = points[index];
+    const next = points[index + 1];
+    const beforeLength = Math.hypot(corner.x - previous.x, corner.y - previous.y);
+    const afterLength = Math.hypot(next.x - corner.x, next.y - corner.y);
+    const bend = Math.min(radius, beforeLength / 2, afterLength / 2);
+    const before = { x: corner.x + (previous.x - corner.x) * bend / (beforeLength || 1), y: corner.y + (previous.y - corner.y) * bend / (beforeLength || 1) };
+    const after = { x: corner.x + (next.x - corner.x) * bend / (afterLength || 1), y: corner.y + (next.y - corner.y) * bend / (afterLength || 1) };
+    path += ` L ${before.x} ${before.y} Q ${corner.x} ${corner.y} ${after.x} ${after.y}`;
+  }
+  const end = points[points.length - 1];
+  return `${path} L ${end.x} ${end.y}`;
+}
+
+function pathMidpoint(points) {
+  const segments = points.slice(1).map((point, index) => ({ start: points[index], end: point, length: Math.hypot(point.x - points[index].x, point.y - points[index].y) }));
+  const halfway = segments.reduce((sum, segment) => sum + segment.length, 0) / 2;
+  let travelled = 0;
+  for (const segment of segments) {
+    if (travelled + segment.length >= halfway) {
+      const ratio = (halfway - travelled) / (segment.length || 1);
+      return { x: segment.start.x + (segment.end.x - segment.start.x) * ratio, y: segment.start.y + (segment.end.y - segment.start.y) * ratio };
+    }
+    travelled += segment.length;
+  }
+  return points[points.length - 1];
+}
+
+function relationshipGeometry(rel, byId) {
+  const source = byId.get(rel.source);
+  const target = byId.get(rel.target);
+  if (!source || !target) return null;
+  const sourceSide = rel.route?.sourceSide || sideToward(source, center(target));
+  const targetSide = rel.route?.targetSide || sideToward(target, center(source));
+  const start = sidePoint(source, sourceSide);
+  const end = sidePoint(target, targetSide);
+  const points = orthogonalPoints(start, end, sourceSide, targetSide);
+  return { start, end, sourceSide, targetSide, points, path: roundedPath(points) };
+}
+
 function renderRelationship(rel, byId) {
-  const s = byId.get(rel.source);
-  const t = byId.get(rel.target);
-  if (!s || !t) return "";
-  const sourceCenter = center(s);
-  const targetCenter = center(t);
-  const a = boundaryPoint(s, targetCenter);
-  const b = boundaryPoint(t, sourceCenter);
+  const geometry = relationshipGeometry(rel, byId);
+  if (!geometry) return "";
+  const { start: a, end: b, points, path } = geometry;
   const dash = ["realization", "include", "extend", "objectFlow"].includes(rel.kind) ? `stroke-dasharray="7 6"` : rel.kind === "dependency" ? `stroke-dasharray="2 6" stroke-linecap="round"` : "";
   const relClass = rel.kind === "dependency" ? "uml-dependency" : rel.kind === "interfaceConnector" ? "uml-interface-link" : "";
-  const labelX = (a.x + b.x) / 2 + (rel.route?.labelOffset?.x || 0);
-  const labelY = (a.y + b.y) / 2 + (rel.route?.labelOffset?.y || -8);
-  const cap = renderConnectorCap(rel.kind, a, b);
+  const midpoint = pathMidpoint(points);
+  const labelX = midpoint.x + (rel.route?.labelOffset?.x || 0);
+  const labelY = midpoint.y + (rel.route?.labelOffset?.y || -8);
+  const cap = renderConnectorCap(rel.kind, points.at(-2) || a, b);
   const interrupt = rel.kind === "interruptFlow" ? renderInterruptZigZag(a, b) : "";
   return `<g class="uml-edge ${relClass}" data-id="${esc(rel.id)}">
-    <line class="edge-hit" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="transparent" stroke-width="16"/>
-    <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#3c4658" stroke-width="2" ${dash}/>
+    <path class="edge-hit" d="${path}" fill="none" stroke="transparent" stroke-width="16"/>
+    <path class="edge-path" d="${path}" fill="none" stroke="#3c4658" stroke-width="2" stroke-linejoin="round" ${dash}/>
     ${cap}
     ${interrupt}
     <rect x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
@@ -610,19 +703,21 @@ export function renderSvg(diagram, options = {}) {
   const selectedRel = options.selectedRelationshipId ? (diagram.relationships || []).find((rel) => rel.id === options.selectedRelationshipId) : null;
   const selection = selected && !options.includeMetadata ? renderSelection(selected) : "";
   const relationshipSelection = selectedRel && !options.includeMetadata ? renderRelationshipSelection(selectedRel, byId) : "";
+  const connectionPreview = options.connectionPreview && !options.includeMetadata ? renderConnectionPreview(options.connectionPreview, byId) : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${box.width}" height="${box.height}" viewBox="${box.minX} ${box.minY} ${box.width} ${box.height}" role="img" aria-label="${esc(diagram.name)}">
   <defs>
     <pattern id="editor-grid" width="24" height="24" patternUnits="userSpaceOnUse">
       <path d="M 24 0 H 0 V 24" fill="none" stroke="#dfe6f1" stroke-width="1"/>
     </pattern>
     <style>
-      .uml-node{cursor:move}.uml-edge{cursor:pointer}.edge-hit{pointer-events:stroke}.node-title{font-family:Inter,Arial,sans-serif;font-size:var(--title-size,14px);font-weight:700;fill:#172033}.member{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--member-size,12px);fill:#172033}.stereo{font-family:Inter,Arial,sans-serif;font-size:var(--stereo-size,11px);fill:#516072}.edge-label{font-family:Inter,Arial,sans-serif;font-size:12px;fill:#334155}.selection-outline{fill:none;stroke:#1f6feb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.selection-handle{fill:#fff;stroke:#1f6feb;stroke-width:2;pointer-events:none}
+      .uml-node{cursor:move}.uml-edge{cursor:pointer}.edge-hit{pointer-events:stroke}.node-title{font-family:Inter,Arial,sans-serif;font-size:var(--title-size,14px);font-weight:700;fill:#172033}.member{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--member-size,12px);fill:#172033}.stereo{font-family:Inter,Arial,sans-serif;font-size:var(--stereo-size,11px);fill:#516072}.edge-label{font-family:Inter,Arial,sans-serif;font-size:12px;fill:#334155}.selection-outline{fill:none;stroke:#1f6feb;stroke-width:2;stroke-dasharray:6 4;pointer-events:none}.selection-handle{fill:#fff;stroke:#1f6feb;stroke-width:2;pointer-events:none}.connection-handle,.edge-endpoint-handle{fill:#fff;stroke:#137c68;stroke-width:2;cursor:crosshair;pointer-events:all}.connection-handle:hover,.edge-endpoint-handle:hover{fill:#137c68;stroke:#fff}.connection-preview{pointer-events:none}.connection-target{fill:none;stroke:#137c68;stroke-width:3;stroke-dasharray:7 5;pointer-events:none}
     </style>
   </defs>
   ${metadata}
   <rect x="${box.minX}" y="${box.minY}" width="${box.width}" height="${box.height}" fill="#f8fafc"/>
   ${!options.includeMetadata ? `<rect x="${box.minX}" y="${box.minY}" width="${box.width}" height="${box.height}" fill="url(#editor-grid)"/>` : ""}
   ${(diagram.relationships || []).map((r) => renderRelationship(r, byId)).join("\n")}
+  ${connectionPreview}
   ${(diagram.elements || []).map(renderElement).join("\n")}
   ${relationshipSelection}
   ${selection}
@@ -630,17 +725,29 @@ export function renderSvg(diagram, options = {}) {
 }
 
 function renderRelationshipSelection(rel, byId) {
-  const s = byId.get(rel.source);
-  const t = byId.get(rel.target);
-  if (!s || !t) return "";
-  const sourceCenter = center(s);
-  const targetCenter = center(t);
-  const a = boundaryPoint(s, targetCenter);
-  const b = boundaryPoint(t, sourceCenter);
+  const geometry = relationshipGeometry(rel, byId);
+  if (!geometry) return "";
+  const { start: a, end: b, path } = geometry;
   return `<g class="uml-edge-selection" data-selected="${esc(rel.id)}">
-    <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#1f6feb" stroke-width="7" opacity=".18" pointer-events="none"/>
-    <circle cx="${a.x}" cy="${a.y}" r="5" fill="#fff" stroke="#1f6feb" stroke-width="2" pointer-events="none"/>
-    <circle cx="${b.x}" cy="${b.y}" r="5" fill="#fff" stroke="#1f6feb" stroke-width="2" pointer-events="none"/>
+    <path d="${path}" fill="none" stroke="#1f6feb" stroke-width="7" opacity=".18" pointer-events="none"/>
+    <circle class="edge-endpoint-handle" data-relationship-id="${esc(rel.id)}" data-endpoint="source" cx="${a.x}" cy="${a.y}" r="7"/>
+    <circle class="edge-endpoint-handle" data-relationship-id="${esc(rel.id)}" data-endpoint="target" cx="${b.x}" cy="${b.y}" r="7"/>
+  </g>`;
+}
+
+function renderConnectionPreview(preview, byId) {
+  const fixed = byId.get(preview.fixedElementId);
+  if (!fixed) return "";
+  const start = sidePoint(fixed, preview.fixedSide);
+  const target = byId.get(preview.targetId);
+  const end = target && preview.targetSide ? sidePoint(target, preview.targetSide) : preview.point || start;
+  const targetSide = target && preview.targetSide ? preview.targetSide : sideToward({ kind: "preview", view: { x: end.x - 1, y: end.y - 1, width: 2, height: 2 } }, start);
+  const path = roundedPath(orthogonalPoints(start, end, preview.fixedSide, targetSide));
+  const targetOutline = target ? `<rect class="connection-target" x="${target.view.x - 5}" y="${target.view.y - 5}" width="${target.view.width + 10}" height="${target.view.height + 10}" rx="7"/>` : "";
+  return `<g class="connection-preview">
+    <path d="${path}" fill="none" stroke="#137c68" stroke-width="2.5" stroke-dasharray="8 5"/>
+    <circle cx="${end.x}" cy="${end.y}" r="5" fill="#fff" stroke="#137c68" stroke-width="2"/>
+    ${targetOutline}
   </g>`;
 }
 
@@ -656,9 +763,16 @@ function renderSelection(el) {
     [right, (top + bottom) / 2], [right, bottom], [(left + right) / 2, bottom],
     [left, bottom], [left, (top + bottom) / 2]
   ];
+  const connectionPoints = el.kind === "interfaceConnector" ? [
+    [x + 4, y + h / 2, "left"], [x + w - 4, y + h / 2, "right"]
+  ] : [
+    [x + w / 2, y, "top"], [x + w, y + h / 2, "right"],
+    [x + w / 2, y + h, "bottom"], [x, y + h / 2, "left"]
+  ];
   return `<g class="uml-selection" data-selected="${esc(el.id)}">
     <rect class="selection-outline" x="${left}" y="${top}" width="${w + pad * 2}" height="${h + pad * 2}" rx="6"/>
     ${points.map(([cx, cy]) => `<rect class="selection-handle" x="${cx - 4}" y="${cy - 4}" width="8" height="8" rx="1.5"/>`).join("")}
+    ${connectionPoints.map(([cx, cy, side]) => `<circle class="connection-handle" data-element-id="${esc(el.id)}" data-side="${side}" cx="${cx}" cy="${cy}" r="7"/>`).join("")}
   </g>`;
 }
 

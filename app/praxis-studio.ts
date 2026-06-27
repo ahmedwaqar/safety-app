@@ -247,9 +247,11 @@ let architectureZoom = 1;
 let architectureHistory = [];
 let architectureFuture = [];
 let architecturePaletteGroup = "Structural";
+let architectureConnectorKind = "dependency";
 let architectureInspectorEditing = false;
 let architectureInspectorRenderTimer: ReturnType<typeof setTimeout>;
 let architectureDrag: { id: string; pointerId: number; startX: number; startY: number; x: number; y: number; latestX: number; latestY: number; moved: boolean; remembered: boolean; frame: number; viewport: { minX: number; minY: number; width: number; height: number } } | null = null;
+let architectureConnection: { pointerId: number; relationshipId: string; endpoint: "source" | "target"; fixedElementId: string; fixedSide: string; point: { x: number; y: number }; targetId: string; targetSide: string; moved: boolean; frame: number; viewport: { minX: number; minY: number; width: number; height: number } } | null = null;
 let architectureSuppressClick = false;
 
 // Shared DOM and presentation helpers.
@@ -1022,7 +1024,9 @@ function updateArchitectureInspectorDraft(target: HTMLInputElement | HTMLTextAre
   if (selected && target.id === "architecture-element-alias") { selected.taggedValues ||= {}; selected.taggedValues.alias = architectureAlias(target.value); }
   if (selected && target.id === "architecture-element-docs") { selected.properties ||= {}; selected.properties.documentation = target.value; selected.properties.body = target.value; }
   if (rel && target.id === "architecture-edge-label") rel.label = target.value;
-  if (rel && target.id === "architecture-edge-target") rel.target = target.value;
+  if (rel && target.id === "architecture-edge-kind") rel.kind = target.value;
+  if (rel && target.id === "architecture-edge-source") { rel.source = target.value; rel.route.sourceSide = ""; }
+  if (rel && target.id === "architecture-edge-target") { rel.target = target.value; rel.route.targetSide = ""; }
   if (!selected && !rel) return false;
   diagram.revision = (diagram.revision || 0) + 1;
   syncArchitectureContext(diagram);
@@ -1045,7 +1049,72 @@ function renderArchitectureCanvas() {
   stage.innerHTML = renderSvg(diagram, {
     selectedId: architectureSelectedId.startsWith("edge:") ? "" : architectureSelectedId,
     selectedRelationshipId: architectureSelectedId.startsWith("edge:") ? architectureSelectedId.slice(5) : "",
-    viewport: architectureDrag?.viewport
+    viewport: architectureDrag?.viewport || architectureConnection?.viewport,
+    connectionPreview: architectureConnection ? {
+      fixedElementId: architectureConnection.fixedElementId,
+      fixedSide: architectureConnection.fixedSide,
+      point: architectureConnection.point,
+      targetId: architectureConnection.targetId,
+      targetSide: architectureConnection.targetSide
+    } : null
+  });
+}
+function architectureClientPoint(clientX: number, clientY: number) {
+  const svg = $("#architecture-stage svg") as SVGSVGElement;
+  const matrix = svg?.getScreenCTM();
+  if (svg && matrix) {
+    const point = svg.createSVGPoint();
+    point.x = clientX; point.y = clientY;
+    const local = point.matrixTransform(matrix.inverse());
+    return { x: local.x, y: local.y };
+  }
+  return { x: clientX / architectureZoom, y: clientY / architectureZoom };
+}
+function architectureSideToward(element, point: { x: number; y: number }) {
+  const centerX = element.view.x + element.view.width / 2;
+  const centerY = element.view.y + element.view.height / 2;
+  const dx = point.x - centerX;
+  const dy = point.y - centerY;
+  if (element.kind === "interfaceConnector") return dx >= 0 ? "right" : "left";
+  return Math.abs(dx / element.view.width) >= Math.abs(dy / element.view.height) ? (dx >= 0 ? "right" : "left") : (dy >= 0 ? "bottom" : "top");
+}
+function architectureAnchorPoint(element, side: string) {
+  const { x, y, width, height } = element.view;
+  if (element.kind === "interfaceConnector") return { x: side === "right" ? x + width - 4 : x + 4, y: y + height / 2 };
+  if (side === "top") return { x: x + width / 2, y };
+  if (side === "right") return { x: x + width, y: y + height / 2 };
+  if (side === "bottom") return { x: x + width / 2, y: y + height };
+  return { x, y: y + height / 2 };
+}
+function architectureConnectionTarget(point: { x: number; y: number }, fixedElementId: string) {
+  const target = [...activeArchitectureDiagram().elements].reverse().find(element => element.id !== fixedElementId && point.x >= element.view.x && point.x <= element.view.x + element.view.width && point.y >= element.view.y && point.y <= element.view.y + element.view.height);
+  if (!target) return { id: "", side: "" };
+  const fixed = activeArchitectureDiagram().elements.find(element => element.id === fixedElementId);
+  if (target.kind === "interfaceConnector") {
+    const fixedCenterX = fixed ? fixed.view.x + fixed.view.width / 2 : point.x;
+    return { id: target.id, side: fixedCenterX >= target.view.x + target.view.width / 2 ? "right" : "left" };
+  }
+  const edgeDistances = [
+    [point.y - target.view.y, "top"],
+    [target.view.x + target.view.width - point.x, "right"],
+    [target.view.y + target.view.height - point.y, "bottom"],
+    [point.x - target.view.x, "left"]
+  ] as [number, string][];
+  edgeDistances.sort((a, b) => a[0] - b[0]);
+  const nearEdge = edgeDistances[0][0] <= Math.min(target.view.width, target.view.height) * 0.22;
+  const fixedCenter = fixed ? { x: fixed.view.x + fixed.view.width / 2, y: fixed.view.y + fixed.view.height / 2 } : point;
+  return { id: target.id, side: nearEdge ? edgeDistances[0][1] : architectureSideToward(target, fixedCenter) };
+}
+function scheduleArchitectureConnectionFrame(clientX: number, clientY: number) {
+  if (!architectureConnection) return;
+  architectureConnection.point = architectureClientPoint(clientX, clientY);
+  const target = architectureConnectionTarget(architectureConnection.point, architectureConnection.fixedElementId);
+  architectureConnection.targetId = target.id;
+  architectureConnection.targetSide = target.side;
+  if (!architectureConnection.frame) architectureConnection.frame = requestAnimationFrame(() => {
+    if (!architectureConnection) return;
+    architectureConnection.frame = 0;
+    renderArchitectureCanvas();
   });
 }
 function applyArchitectureDragFrame() {
@@ -1854,6 +1923,7 @@ function renderArchitecture() {
   $("#architecture-palette-group").innerHTML = UML_PALETTE_GROUPS.map(group => `<option value="${esc(group.name)}" ${group.name === architecturePaletteGroup ? "selected" : ""}>${esc(group.name)}</option>`).join("");
   $("#architecture-palette").innerHTML = UML_PALETTE_GROUPS.filter(group => group.name === architecturePaletteGroup).map(group => `<div class="palette-grid">${group.kinds.map(kind => `<button class="shape-pick" data-add-architecture="${esc(kind)}" title="Add ${esc(kind)}"><span>${esc(kind.replace(/([A-Z])/g, " $1").replace(/^./, char => char.toUpperCase()))}</span></button>`).join("")}</div>`).join("");
   renderArchitectureCanvas();
+  $("#architecture-connector-kind").innerHTML = UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}" ${kind === architectureConnectorKind ? "selected" : ""}>${esc(kind.replace(/([A-Z])/g, " $1"))}</option>`).join("");
   $("#architecture-zoom-value").textContent = `${Math.round(architectureZoom * 100)}%`;
   const validationClass = validation.status === "valid" ? "valid" : validation.status === "warning" ? "warning" : "error";
   $("#architecture-validation").className = validationClass;
@@ -1864,8 +1934,9 @@ function renderArchitecture() {
   $("#component-list").innerHTML = state.components.length ? state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
   $("#architecture-outline").innerHTML = diagram.elements.length ? diagram.elements.map(element => `<button class="${element.id === architectureSelectedId ? "active" : ""}" data-select-architecture="${esc(element.id)}">${esc(element.kind)} · ${esc(element.name)}</button>`).join("") : `<p class="dialog-copy">Add elements from the palette.</p>`;
   if (selectedRelationship) {
-    const elementOptions = diagram.elements.map(element => `<option value="${esc(element.id)}" ${element.id === selectedRelationship.target ? "selected" : ""}>${esc(element.name)}</option>`).join("");
-    $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc(selectedRelationship.label || "")}" /></label><label><span>Destination</span><select id="architecture-edge-target">${elementOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
+    const sourceOptions = diagram.elements.map(element => `<option value="${esc(element.id)}" ${element.id === selectedRelationship.source ? "selected" : ""}>${esc(element.name)}</option>`).join("");
+    const targetOptions = diagram.elements.map(element => `<option value="${esc(element.id)}" ${element.id === selectedRelationship.target ? "selected" : ""}>${esc(element.name)}</option>`).join("");
+    $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc(selectedRelationship.label || "")}" /></label><label><span>Connector type</span><select id="architecture-edge-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}" ${kind === selectedRelationship.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Source</span><select id="architecture-edge-source">${sourceOptions}</select></label><label><span>Destination</span><select id="architecture-edge-target">${targetOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
   } else if (selectedElement) {
     const targets = diagram.elements.filter(element => element.id !== selectedElement.id);
     $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap(group => group.kinds).map(kind => `<option value="${esc(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><label><span>Documentation</span><textarea id="architecture-element-docs">${esc(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map(element => `<option value="${esc(element.id)}">${esc(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}">${esc(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
@@ -2648,6 +2719,7 @@ $("#fmeda-form").addEventListener("submit", event => {
 
 // Native architecture workbench and PlantUML notation sync.
 $("#architecture-palette-group").addEventListener("change", event => { architecturePaletteGroup = (event.target as HTMLSelectElement).value; renderArchitecture(); });
+$("#architecture-connector-kind").addEventListener("change", event => { architectureConnectorKind = (event.target as HTMLSelectElement).value; });
 $("#architecture-palette").addEventListener("click", event => {
   const target = eventElement(event).closest<HTMLElement>("[data-add-architecture]");
   if (!target) return;
@@ -2660,12 +2732,46 @@ $("#architecture-palette").addEventListener("click", event => {
 $("#architecture-stage").addEventListener("pointerdown", event => {
   if ((event as PointerEvent).button !== 0) return;
   const stage = $("#architecture-stage") as HTMLElement;
+  const connectionHandle = eventElement(event).closest<SVGElement>(".connection-handle");
+  const endpointHandle = eventElement(event).closest<SVGElement>(".edge-endpoint-handle");
+  const svg = stage.querySelector("svg");
+  const viewBox = svg?.viewBox.baseVal;
+  const viewport = viewBox ? { minX: viewBox.x, minY: viewBox.y, width: viewBox.width, height: viewBox.height } : { minX: 0, minY: 0, width: 960, height: 640 };
+  if (connectionHandle?.dataset.elementId && connectionHandle.dataset.side) {
+    const element = activeArchitectureDiagram().elements.find(item => item.id === connectionHandle.dataset.elementId);
+    if (!element) return;
+    event.preventDefault(); event.stopPropagation();
+    architectureSelectedId = element.id;
+    architectureConnection = { pointerId: (event as PointerEvent).pointerId, relationshipId: "", endpoint: "target", fixedElementId: element.id, fixedSide: connectionHandle.dataset.side, point: architectureAnchorPoint(element, connectionHandle.dataset.side), targetId: "", targetSide: "", moved: false, frame: 0, viewport };
+    stage.classList.add("is-connecting");
+    try { stage.setPointerCapture?.((event as PointerEvent).pointerId); } catch {}
+    renderArchitectureCanvas();
+    return;
+  }
+  if (endpointHandle?.dataset.relationshipId && endpointHandle.dataset.endpoint) {
+    const relationship = activeArchitectureDiagram().relationships.find(item => item.id === endpointHandle.dataset.relationshipId);
+    if (!relationship) return;
+    const endpoint = endpointHandle.dataset.endpoint as "source" | "target";
+    const fixedElementId = endpoint === "source" ? relationship.target : relationship.source;
+    const draggedElementId = endpoint === "source" ? relationship.source : relationship.target;
+    const fixedElement = activeArchitectureDiagram().elements.find(item => item.id === fixedElementId);
+    const draggedElement = activeArchitectureDiagram().elements.find(item => item.id === draggedElementId);
+    if (!fixedElement || !draggedElement) return;
+    const fixedRouteKey = endpoint === "source" ? "targetSide" : "sourceSide";
+    const draggedRouteKey = endpoint === "source" ? "sourceSide" : "targetSide";
+    const fixedSide = relationship.route?.[fixedRouteKey] || architectureSideToward(fixedElement, { x: draggedElement.view.x + draggedElement.view.width / 2, y: draggedElement.view.y + draggedElement.view.height / 2 });
+    const draggedSide = relationship.route?.[draggedRouteKey] || architectureSideToward(draggedElement, { x: fixedElement.view.x + fixedElement.view.width / 2, y: fixedElement.view.y + fixedElement.view.height / 2 });
+    event.preventDefault(); event.stopPropagation();
+    architectureConnection = { pointerId: (event as PointerEvent).pointerId, relationshipId: relationship.id, endpoint, fixedElementId, fixedSide, point: architectureAnchorPoint(draggedElement, draggedSide), targetId: "", targetSide: "", moved: false, frame: 0, viewport };
+    stage.classList.add("is-connecting");
+    try { stage.setPointerCapture?.((event as PointerEvent).pointerId); } catch {}
+    renderArchitectureCanvas();
+    return;
+  }
   const node = eventElement(event).closest<HTMLElement>(".uml-node");
   if (!node?.dataset.id) return;
   const element = activeArchitectureDiagram().elements.find(item => item.id === node.dataset.id);
   if (!element) return;
-  const viewBox = stage.querySelector("svg")?.viewBox.baseVal;
-  const viewport = viewBox ? { minX: viewBox.x, minY: viewBox.y, width: viewBox.width, height: viewBox.height } : { minX: 0, minY: 0, width: 960, height: 640 };
   event.preventDefault();
   architectureSelectedId = element.id;
   architectureDrag = { id: element.id, pointerId: (event as PointerEvent).pointerId, startX: (event as PointerEvent).clientX, startY: (event as PointerEvent).clientY, latestX: (event as PointerEvent).clientX, latestY: (event as PointerEvent).clientY, x: element.view.x, y: element.view.y, moved: false, remembered: false, frame: 0, viewport };
@@ -2685,6 +2791,12 @@ $("#architecture-stage").addEventListener("click", event => {
   renderArchitecture();
 });
 window.addEventListener("pointermove", event => {
+  if (architectureConnection && event.pointerId === architectureConnection.pointerId) {
+    architectureConnection.moved = true;
+    scheduleArchitectureConnectionFrame(event.clientX, event.clientY);
+    event.preventDefault();
+    return;
+  }
   if (!architectureDrag || event.pointerId !== architectureDrag.pointerId) return;
   const dx = (event.clientX - architectureDrag.startX) / architectureZoom;
   const dy = (event.clientY - architectureDrag.startY) / architectureZoom;
@@ -2700,6 +2812,38 @@ window.addEventListener("pointermove", event => {
   event.preventDefault();
 });
 window.addEventListener("pointerup", event => {
+  if (architectureConnection && event.pointerId === architectureConnection.pointerId) {
+    const stage = $("#architecture-stage") as HTMLElement;
+    scheduleArchitectureConnectionFrame(event.clientX, event.clientY);
+    const connection = architectureConnection;
+    if (connection.frame) cancelAnimationFrame(connection.frame);
+    architectureConnection = null;
+    try { stage.releasePointerCapture?.(connection.pointerId); } catch {}
+    stage.classList.remove("is-connecting");
+    architectureSuppressClick = true;
+    if (connection.moved && connection.targetId) {
+      mutateArchitecture(diagram => {
+        if (connection.relationshipId) {
+          const relationship = diagram.relationships.find(item => item.id === connection.relationshipId);
+          if (!relationship) return;
+          relationship[connection.endpoint] = connection.targetId;
+          relationship.route ||= { points: [], labelOffset: { x: 0, y: -8 } };
+          relationship.route[connection.endpoint === "source" ? "sourceSide" : "targetSide"] = connection.targetSide;
+          architectureSelectedId = `edge:${relationship.id}`;
+        } else {
+          const relationship = createRelationship(architectureConnectorKind, connection.fixedElementId, connection.targetId, "");
+          relationship.route.sourceSide = connection.fixedSide;
+          relationship.route.targetSide = connection.targetSide;
+          diagram.relationships.push(relationship);
+          architectureSelectedId = `edge:${relationship.id}`;
+        }
+      });
+    } else {
+      renderArchitecture();
+    }
+    event.preventDefault();
+    return;
+  }
   if (!architectureDrag || event.pointerId !== architectureDrag.pointerId) return;
   const stage = $("#architecture-stage") as HTMLElement;
   const moved = architectureDrag.moved;

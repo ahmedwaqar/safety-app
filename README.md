@@ -187,10 +187,12 @@ Safety is treated as a continuous engineering lens rather than a single downstre
 Use **Architecture** as a native UML workbench inside the safety workspace:
 
 - Add UML elements from the palette and select them on the canvas or outline.
-- Drag shapes directly on the canvas with zoom-aware, grid-snapped movement.
+- Drag shapes directly on the canvas with smooth, zoom-aware movement.
 - Edit names, aliases, kind, documentation, and connector labels in the inspector.
 - Type freely in inspector property fields; edits are captured as drafts and committed without rebuilding the field on every keystroke.
-- Connect selected elements to other elements with relationship types such as dependency, association, realization, aggregation, composition, delegation, and interface connectors.
+- Drag from native connection ports to another shape, choose the relationship type from the canvas toolbar, and reconnect selected connector endpoints in place.
+- Connectors use rounded orthogonal routing and remain anchored as shapes move; UML interface connectors attach directly to their visible ball-and-socket stubs.
+- Use relationship types such as dependency, association, realization, aggregation, composition, delegation, and interface connectors; edit their type, label, source, and destination in the inspector.
 - Use layout modes such as layered left-to-right, hierarchical top-to-bottom, service flow, C4 nested, radial, matrix, and compact.
 - Use undo, redo, keyboard delete, and zoom controls while refining the model.
 - Review validation warnings for unsupported element kinds, missing names, missing relationship endpoints, and diagram-specific notation issues.
@@ -461,7 +463,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, native UML architecture inspection, smooth text-property editing, PlantUML component import, diagram rendering, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, native UML architecture inspection, smooth text-property editing, shape dragging, port-to-shape connector creation, rounded interface-connector attachment, PlantUML component import, diagram rendering, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
 
 Compile-check the browser and server entry points:
 

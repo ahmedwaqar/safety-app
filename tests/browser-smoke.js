@@ -896,6 +896,60 @@ try {
     assert(moved, "architecture shape drag moved the wrong visual target or shifted the canvas viewport");
   });
 
+  await test("native architecture canvas creates anchored connectors by dragging ports", async () => {
+    const connected = await evaluate(`(() => {
+      const diagram = activeArchitectureDiagram();
+      const source = diagram.elements[0];
+      const target = diagram.elements.find(item => item.id !== source?.id);
+      if (!source || !target) return false;
+      architectureSelectedId = source.id;
+      renderArchitecture();
+      const before = activeArchitectureDiagram().relationships.length;
+      const handle = document.querySelector("#architecture-stage .connection-handle[data-element-id='" + source.id + "'][data-side='right']");
+      const targetNode = document.querySelector("#architecture-stage .uml-node[data-id='" + target.id + "']");
+      if (!handle || !targetNode) return false;
+      const handleBox = handle.getBoundingClientRect();
+      const targetBox = targetNode.getBoundingClientRect();
+      const startX = handleBox.left + handleBox.width / 2;
+      const startY = handleBox.top + handleBox.height / 2;
+      const endX = targetBox.left + targetBox.width / 2;
+      const endY = targetBox.top + targetBox.height / 2;
+      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 11, clientX: startX, clientY: startY }));
+      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 11, clientX: endX, clientY: endY }));
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 11, clientX: endX, clientY: endY }));
+      const updated = activeArchitectureDiagram();
+      const relationship = updated.relationships[updated.relationships.length - 1];
+      return updated.relationships.length === before + 1 && relationship.source === source.id && relationship.target === target.id && relationship.route.sourceSide === "right" && Boolean(relationship.route.targetSide) && document.querySelector("#architecture-stage .uml-edge[data-id='" + relationship.id + "']");
+    })()`);
+    assert(connected, "dragging a native connection port did not create and render an anchored relationship");
+  });
+
+  await test("interface connectors use organic rounded routes and visible attachment points", async () => {
+    const attached = await evaluate(`(() => {
+      const diagram = activeArchitectureDiagram();
+      const source = diagram.elements.find(item => item.kind === "component");
+      if (!source) return false;
+      const connector = createElement("interfaceConnector", "Safety interface", source.view.x + 360, source.view.y + 160);
+      const relationship = createRelationship("interfaceConnector", source.id, connector.id, "safe stop");
+      relationship.route.sourceSide = "right";
+      relationship.route.targetSide = "left";
+      diagram.elements.push(connector);
+      diagram.modelElementIds.push(connector.id);
+      diagram.relationships.push(relationship);
+      architectureSelectedId = connector.id;
+      syncArchitectureContext(diagram);
+      renderArchitecture();
+      const path = document.querySelector("#architecture-stage .uml-edge[data-id='" + relationship.id + "'] .edge-path");
+      const handles = document.querySelectorAll("#architecture-stage .connection-handle[data-element-id='" + connector.id + "']");
+      if (!path || handles.length !== 2) return false;
+      const endpoint = path.getPointAtLength(path.getTotalLength());
+      const expectedX = connector.view.x + 4;
+      const expectedY = connector.view.y + connector.view.height / 2;
+      return Math.abs(endpoint.x - expectedX) < 0.2 && Math.abs(endpoint.y - expectedY) < 0.2 && path.getAttribute("d").includes("Q");
+    })()`);
+    assert(attached, "interface connector route did not meet the visible socket with a rounded orthogonal path");
+  });
+
   await test("fault tree analysis supports DSL gates, layers, architecture generation, and qualitative cuts", async () => {
     await click('[data-view="fault-tree"]');
     assert(await evaluate(`document.querySelector("#fault-tree-view").classList.contains("active")`), "fault tree view did not open");
