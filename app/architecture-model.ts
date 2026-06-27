@@ -56,6 +56,42 @@ export function architectureWorkspaceFromPlantUml(source = "@startuml\n@enduml",
   return { diagrams: [diagram], activeDiagramId: diagram.id };
 }
 
+export function normalizeLegacyInterfaceConnectors(diagram) {
+  if (!diagram?.elements?.some(element => element.kind === "interfaceConnector")) return false;
+  const removedElementIds = new Set<string>();
+  const removedRelationshipIds = new Set<string>();
+  const replacements = [];
+  const byId = new Map(diagram.elements.map(element => [element.id, element]));
+  for (const connector of diagram.elements.filter(element => element.kind === "interfaceConnector")) {
+    const incident = diagram.relationships.filter(rel => rel.source === connector.id || rel.target === connector.id);
+    if (incident.length !== 2) continue;
+    const neighbor = rel => rel.source === connector.id ? rel.target : rel.source;
+    const firstNeighbor = neighbor(incident[0]);
+    const secondNeighbor = neighbor(incident[1]);
+    if (firstNeighbor === secondNeighbor || !byId.has(firstNeighbor) || !byId.has(secondNeighbor)) continue;
+    const incoming = incident.find(rel => rel.target === connector.id);
+    const outgoing = incident.find(rel => rel.source === connector.id);
+    const sourceRelationship = incoming || incident[0];
+    const targetRelationship = outgoing || incident.find(rel => rel !== sourceRelationship)!;
+    const source = neighbor(sourceRelationship);
+    const target = neighbor(targetRelationship);
+    const sourceSide = sourceRelationship.source === source ? sourceRelationship.route?.sourceSide : sourceRelationship.route?.targetSide;
+    const targetSide = targetRelationship.target === target ? targetRelationship.route?.targetSide : targetRelationship.route?.sourceSide;
+    const replacement = createRelationship("interfaceConnector", source, target, connector.name || sourceRelationship.label || targetRelationship.label || "interface");
+    replacement.route.sourceSide = sourceSide || "";
+    replacement.route.targetSide = targetSide || "";
+    replacements.push(replacement);
+    removedElementIds.add(connector.id);
+    incident.forEach(rel => removedRelationshipIds.add(rel.id));
+  }
+  if (!replacements.length) return false;
+  diagram.elements = diagram.elements.filter(element => !removedElementIds.has(element.id));
+  diagram.modelElementIds = (diagram.modelElementIds || []).filter(id => !removedElementIds.has(id));
+  diagram.relationships = diagram.relationships.filter(rel => !removedRelationshipIds.has(rel.id)).concat(replacements);
+  diagram.revision = (diagram.revision || 0) + 1;
+  return true;
+}
+
 export function architectureComponentsFromDiagram(diagram) {
   const components: Array<{ id: string; name: string }> = [];
   const seen = new Set<string>();

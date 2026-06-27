@@ -43,7 +43,7 @@ var UML_ELEMENT_KINDS = [
   "constraint"
 ];
 var UML_PALETTE_GROUPS = [
-  { name: "Structural", kinds: ["class", "abstractClass", "enumeration", "dataType", "object", "package", "component", "subsystem", "port", "interfaceConnector", "deploymentNode", "artifact"] },
+  { name: "Structural", kinds: ["class", "abstractClass", "enumeration", "dataType", "object", "package", "component", "subsystem", "port", "deploymentNode", "artifact"] },
   { name: "Use Case", kinds: ["actor", "useCase", "boundary", "control", "entity"] },
   { name: "Sequence", kinds: ["lifeline", "activation", "frame", "message"] },
   { name: "Activity", kinds: ["start", "activity", "activityObject", "decision", "merge", "forkJoin", "swimlane", "interruptibleRegion", "signalSend", "signalReceive", "guard", "activityFrame", "end"] },
@@ -387,6 +387,34 @@ function pathMidpoint(points) {
   }
   return points[points.length - 1];
 }
+function pathMidpointGeometry(points) {
+  const segments = points.slice(1).map((point, index) => ({ start: points[index], end: point, length: Math.hypot(point.x - points[index].x, point.y - points[index].y) }));
+  const halfway = segments.reduce((sum, segment) => sum + segment.length, 0) / 2;
+  let travelled = 0;
+  for (const segment of segments) {
+    if (travelled + segment.length >= halfway) {
+      const ratio = (halfway - travelled) / (segment.length || 1);
+      return {
+        x: segment.start.x + (segment.end.x - segment.start.x) * ratio,
+        y: segment.start.y + (segment.end.y - segment.start.y) * ratio,
+        angle: Math.atan2(segment.end.y - segment.start.y, segment.end.x - segment.start.x) * 180 / Math.PI
+      };
+    }
+    travelled += segment.length;
+  }
+  const end = points[points.length - 1];
+  return { x: end.x, y: end.y, angle: 0 };
+}
+function renderInterfaceAssembly(points) {
+  const midpoint = pathMidpointGeometry(points);
+  return `<g class="interface-assembly" transform="translate(${midpoint.x} ${midpoint.y}) rotate(${midpoint.angle})" pointer-events="none">
+    <rect x="-32" y="-13" width="64" height="26" rx="5" fill="#fff"/>
+    <line x1="-30" y1="0" x2="-16" y2="0" stroke="#3c4658" stroke-width="2"/>
+    <circle cx="-8" cy="0" r="8" fill="#fff" stroke="#3c4658" stroke-width="2"/>
+    <path d="M 8 -10 A 10 10 0 0 1 8 10" fill="none" stroke="#3c4658" stroke-width="2"/>
+    <line x1="8" y1="0" x2="30" y2="0" stroke="#3c4658" stroke-width="2"/>
+  </g>`;
+}
 function relationshipGeometry(rel, byId) {
   const source = byId.get(rel.source);
   const target = byId.get(rel.target);
@@ -407,17 +435,22 @@ function renderRelationship(rel, byId) {
   const dash = ["realization", "include", "extend", "objectFlow"].includes(rel.kind) ? `stroke-dasharray="7 6"` : rel.kind === "dependency" ? `stroke-dasharray="2 6" stroke-linecap="round"` : "";
   const relClass = rel.kind === "dependency" ? "uml-dependency" : rel.kind === "interfaceConnector" ? "uml-interface-link" : "";
   const midpoint = pathMidpoint(points);
-  const labelX = midpoint.x + (rel.route?.labelOffset?.x || 0);
-  const labelY = midpoint.y + (rel.route?.labelOffset?.y || -8);
+  const interfaceMidpoint = rel.kind === "interfaceConnector" ? pathMidpointGeometry(points) : null;
+  const interfaceAngle = interfaceMidpoint ? interfaceMidpoint.angle * Math.PI / 180 : 0;
+  const interfaceLabelDistance = interfaceMidpoint && Math.abs(Math.sin(interfaceAngle)) > 0.7 ? 62 : 26;
+  const labelX = interfaceMidpoint ? interfaceMidpoint.x + Math.sin(interfaceAngle) * interfaceLabelDistance : midpoint.x + (rel.route?.labelOffset?.x || 0);
+  const labelY = interfaceMidpoint ? interfaceMidpoint.y - Math.cos(interfaceAngle) * interfaceLabelDistance : midpoint.y + (rel.route?.labelOffset?.y || -8);
   const cap = renderConnectorCap(rel.kind, points.at(-2) || a, b);
   const interrupt = rel.kind === "interruptFlow" ? renderInterruptZigZag(a, b) : "";
+  const interfaceAssembly = rel.kind === "interfaceConnector" ? renderInterfaceAssembly(points) : "";
   return `<g class="uml-edge ${relClass}" data-id="${esc(rel.id)}">
     <path class="edge-hit" d="${path}" fill="none" stroke="transparent" stroke-width="16"/>
     <path class="edge-path" d="${path}" fill="none" stroke="#3c4658" stroke-width="2" stroke-linejoin="round" ${dash}/>
+    ${interfaceAssembly}
     ${cap}
     ${interrupt}
-    <rect x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
-    <text x="${labelX}" y="${labelY}" text-anchor="middle" class="edge-label">${esc(rel.label || rel.kind)}</text>
+    <rect class="edge-label-bg" x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
+    <text x="${labelX}" y="${labelY}" text-anchor="middle" class="edge-label">${esc(rel.label || (rel.kind === "interfaceConnector" ? "interface" : rel.kind))}</text>
   </g>`;
 }
 function renderConnectorCap(kind, start, end) {
@@ -794,55 +827,6 @@ function renderSelection(el) {
     ${connectionPoints.map(([cx, cy, side]) => `<circle class="connection-handle" data-element-id="${esc(el.id)}" data-side="${side}" cx="${cx}" cy="${cy}" r="7"/>`).join("")}
   </g>`;
 }
-function parseNotation(text, type = "class") {
-  const elements = [];
-  const relationships = [];
-  const warnings = [];
-  const byName = new Map;
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  for (const line of lines) {
-    if (line.startsWith("@") || line.startsWith("'"))
-      continue;
-    const classMatch = line.match(/^(class|abstractclass|interface|interfaceconnector|enumeration|enum|datatype|object|activityobject|package|component|subsystem|node|artifact|actor|usecase|boundary|control|entity|lifeline|activation|frame|message|activity|activityframe|interruptibleregion|signalsend|signalreceive|guard|decision|merge|start|end|initialstate|finalstate|state|forkjoin|swimlane|note|constraint)\s+"?([^"{]+)"?/i);
-    if (classMatch) {
-      const kindMap = { usecase: "useCase", abstractclass: "abstractClass", interfaceconnector: "interfaceConnector", enum: "enumeration", datatype: "dataType", node: "deploymentNode", activityobject: "activityObject", activityframe: "activityFrame", interruptibleregion: "interruptibleRegion", signalsend: "signalSend", signalreceive: "signalReceive", initialstate: "initialState", finalstate: "finalState", forkjoin: "forkJoin" };
-      const kind = kindMap[classMatch[1].toLowerCase()] || classMatch[1].toLowerCase();
-      const el = createElement(kind, classMatch[2].trim(), 120 + elements.length * 230, 140 + elements.length % 2 * 170);
-      elements.push(el);
-      byName.set(el.name, el.id);
-      continue;
-    }
-    const relMatch = line.match(/^"?([^"<]+)"?\s+([.<|*o-]+)\s+"?([^":]+)"?(?:\s*:\s*(.+))?/);
-    if (relMatch) {
-      const sourceName = relMatch[1].trim();
-      const targetName = relMatch[3].trim();
-      for (const name of [sourceName, targetName]) {
-        if (!byName.has(name)) {
-          const el = createElement("class", name, 120 + elements.length * 230, 140 + elements.length % 2 * 170);
-          elements.push(el);
-          byName.set(name, el.id);
-        }
-      }
-      const token = relMatch[2];
-      const kind = token.includes("<|") ? "generalization" : token.includes("..") ? "dependency" : token.includes("*") ? "composition" : token.includes("o") ? "aggregation" : "association";
-      relationships.push(createRelationship(kind, byName.get(sourceName), byName.get(targetName), relMatch[4] || kind));
-      continue;
-    }
-    warnings.push({ line, message: "Unsupported notation was skipped" });
-  }
-  const diagram = {
-    id: id("dia"),
-    type,
-    name: "Imported UML Diagram",
-    modelElementIds: elements.map((e) => e.id),
-    elements,
-    relationships,
-    view: { viewport: { x: 0, y: 0, zoom: 1 }, style: { theme: "studio", grid: true }, nodes: {}, edges: {} },
-    validationStatus: "unchecked",
-    revision: 1
-  };
-  return { diagram, warnings: [...warnings, ...validateDiagram(diagram).warnings] };
-}
 
 // app/architecture-model.ts
 var plantUmlElementPattern = /^\s*(?:component|node|database|queue|cloud|rectangle|artifact|package|frame)\s+(?:"([^"]+)"|([^\s{]+))(?:\s+as\s+([A-Za-z0-9_.-]+))?/gim;
@@ -895,6 +879,45 @@ function architectureWorkspaceFromPlantUml(source = `@startuml
   const diagram = architectureDiagramFromPlantUml(source, name);
   return { diagrams: [diagram], activeDiagramId: diagram.id };
 }
+function normalizeLegacyInterfaceConnectors(diagram) {
+  if (!diagram?.elements?.some((element) => element.kind === "interfaceConnector"))
+    return false;
+  const removedElementIds = new Set;
+  const removedRelationshipIds = new Set;
+  const replacements = [];
+  const byId = new Map(diagram.elements.map((element) => [element.id, element]));
+  for (const connector of diagram.elements.filter((element) => element.kind === "interfaceConnector")) {
+    const incident = diagram.relationships.filter((rel) => rel.source === connector.id || rel.target === connector.id);
+    if (incident.length !== 2)
+      continue;
+    const neighbor = (rel) => rel.source === connector.id ? rel.target : rel.source;
+    const firstNeighbor = neighbor(incident[0]);
+    const secondNeighbor = neighbor(incident[1]);
+    if (firstNeighbor === secondNeighbor || !byId.has(firstNeighbor) || !byId.has(secondNeighbor))
+      continue;
+    const incoming = incident.find((rel) => rel.target === connector.id);
+    const outgoing = incident.find((rel) => rel.source === connector.id);
+    const sourceRelationship = incoming || incident[0];
+    const targetRelationship = outgoing || incident.find((rel) => rel !== sourceRelationship);
+    const source = neighbor(sourceRelationship);
+    const target = neighbor(targetRelationship);
+    const sourceSide = sourceRelationship.source === source ? sourceRelationship.route?.sourceSide : sourceRelationship.route?.targetSide;
+    const targetSide = targetRelationship.target === target ? targetRelationship.route?.targetSide : targetRelationship.route?.sourceSide;
+    const replacement = createRelationship("interfaceConnector", source, target, connector.name || sourceRelationship.label || targetRelationship.label || "interface");
+    replacement.route.sourceSide = sourceSide || "";
+    replacement.route.targetSide = targetSide || "";
+    replacements.push(replacement);
+    removedElementIds.add(connector.id);
+    incident.forEach((rel) => removedRelationshipIds.add(rel.id));
+  }
+  if (!replacements.length)
+    return false;
+  diagram.elements = diagram.elements.filter((element) => !removedElementIds.has(element.id));
+  diagram.modelElementIds = (diagram.modelElementIds || []).filter((id2) => !removedElementIds.has(id2));
+  diagram.relationships = diagram.relationships.filter((rel) => !removedRelationshipIds.has(rel.id)).concat(replacements);
+  diagram.revision = (diagram.revision || 0) + 1;
+  return true;
+}
 function architectureComponentsFromDiagram(diagram) {
   const components = [];
   const seen = new Set;
@@ -927,6 +950,224 @@ function plantUmlFromArchitectureDiagram(diagram) {
       lines.push(`${alias(source)} --> ${alias(target)}${rel.label ? ` : ${rel.label}` : ""}`);
   }
   lines.push("@enduml");
+  return lines.join(`
+`);
+}
+
+// app/architecture-dsl.ts
+var identifierPattern = "[A-Za-z][A-Za-z0-9_.-]*";
+var aliasPattern = "[A-Za-z][A-Za-z0-9_-]*";
+var sidePattern = "top|right|bottom|left";
+var elementAliases = { node: "deploymentNode", usecase: "useCase", abstractclass: "abstractClass", datatype: "dataType" };
+var relationshipAliases = { interface: "interfaceConnector" };
+
+class ArchitectureDslError extends Error {
+  line;
+  constructor(message, line) {
+    super(`Line ${line}: ${message}`);
+    this.name = "ArchitectureDslError";
+    this.line = line;
+  }
+}
+function quote(value = "") {
+  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n")}"`;
+}
+function unquote(value = "") {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value.slice(1, -1);
+  }
+}
+function normalizeElementKind(keyword) {
+  const direct = UML_ELEMENT_KINDS.find((kind) => kind.toLowerCase() === keyword.toLowerCase());
+  return direct || elementAliases[keyword.toLowerCase()];
+}
+function normalizeRelationshipKind(keyword) {
+  const direct = UML_RELATIONSHIP_KINDS.find((kind) => kind.toLowerCase() === keyword.toLowerCase());
+  return direct || relationshipAliases[keyword.toLowerCase()];
+}
+function sourceElementKind(kind) {
+  return kind === "deploymentNode" ? "node" : kind;
+}
+function sourceRelationshipKind(kind) {
+  return kind === "interfaceConnector" ? "interface" : kind;
+}
+function defaultPosition(index) {
+  return { x: 120 + index % 3 * 280, y: 120 + Math.floor(index / 3) * 180 };
+}
+function existingElementByAlias(diagram, alias) {
+  return diagram?.elements?.find((element) => String(element.taggedValues?.alias || "").toLowerCase() === alias.toLowerCase());
+}
+function parseElement(lines, start, existingDiagram, placementIndex) {
+  const raw = lines[start].trim();
+  const match = raw.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")(?:\\s+at\\s+(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?))?(?:\\s+size\\s+(\\d+(?:\\.\\d+)?)\\s*,\\s*(\\d+(?:\\.\\d+)?))?\\s*(\\{)?$`, "i"));
+  if (!match)
+    return null;
+  const kind = normalizeElementKind(match[1]);
+  if (!kind || kind === "interfaceConnector")
+    return null;
+  const alias = match[2];
+  const prior = existingElementByAlias(existingDiagram, alias);
+  const fallback = defaultPosition(placementIndex);
+  const x = match[4] === undefined ? prior?.view?.x ?? fallback.x : Number(match[4]);
+  const y = match[5] === undefined ? prior?.view?.y ?? fallback.y : Number(match[5]);
+  const element = createElement(kind, unquote(match[3]), x, y, match[6] === undefined ? prior?.view?.width : Number(match[6]), match[7] === undefined ? prior?.view?.height : Number(match[7]));
+  if (prior?.id)
+    element.id = prior.id;
+  element.taggedValues.alias = alias;
+  if (!match[8])
+    return { element, end: start };
+  element.properties.attributes = [];
+  element.properties.operations = [];
+  for (let index = start + 1;index < lines.length; index++) {
+    const line = lines[index].trim();
+    if (!line || line.startsWith("#"))
+      continue;
+    if (line === "}")
+      return { element, end: index };
+    const property = line.match(/^(stereotype|attribute|operation|documentation|body)\s+("(?:\\.|[^"\\])*")$/i);
+    const textScale = line.match(/^textScale\s+(\d+(?:\.\d+)?)$/i);
+    if (property) {
+      const value = unquote(property[2]);
+      const key = property[1].toLowerCase();
+      if (key === "stereotype")
+        element.stereotype = value;
+      else if (key === "attribute")
+        element.properties.attributes.push(value);
+      else if (key === "operation")
+        element.properties.operations.push(value);
+      else
+        element.properties[key] = value;
+      continue;
+    }
+    if (textScale) {
+      element.view.style.textScale = Number(textScale[1]);
+      continue;
+    }
+    throw new ArchitectureDslError("Unsupported element property", index + 1);
+  }
+  throw new ArchitectureDslError(`Element ${alias} is missing a closing brace`, start + 1);
+}
+function parseArchitectureDsl(source, existingDiagram = null) {
+  const lines = String(source || "").split(/\r?\n/);
+  const firstContent = lines.findIndex((line) => line.trim() && !line.trim().startsWith("#"));
+  if (firstContent < 0)
+    throw new ArchitectureDslError("Expected a UML diagram declaration", 1);
+  const header = lines[firstContent].trim().match(new RegExp(`^uml\\s+(${identifierPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s*\\{$`, "i"));
+  if (!header)
+    throw new ArchitectureDslError('Expected: uml <type> "Diagram name" {', firstContent + 1);
+  const diagram = {
+    id: existingDiagram?.id || crypto.randomUUID(),
+    type: header[1],
+    name: unquote(header[2]),
+    modelElementIds: [],
+    elements: [],
+    relationships: [],
+    view: structuredClone(existingDiagram?.view || { viewport: { x: 0, y: 0, zoom: 1 }, style: { theme: "praxis", grid: true, layoutMode: "left-right" }, nodes: {}, edges: {} }),
+    validationStatus: "unchecked",
+    revision: (existingDiagram?.revision || 0) + 1,
+    source: String(source || "")
+  };
+  const aliases = new Map;
+  const relationshipRows = [];
+  let closed = false;
+  for (let index = firstContent + 1;index < lines.length; index++) {
+    const line = lines[index].trim();
+    if (!line || line.startsWith("#"))
+      continue;
+    if (line === "}") {
+      closed = true;
+      break;
+    }
+    const parsedElement = parseElement(lines, index, existingDiagram, diagram.elements.length);
+    if (parsedElement) {
+      const alias = parsedElement.element.taggedValues.alias;
+      if (aliases.has(alias.toLowerCase()))
+        throw new ArchitectureDslError(`Duplicate element alias ${alias}`, index + 1);
+      aliases.set(alias.toLowerCase(), parsedElement.element.id);
+      diagram.elements.push(parsedElement.element);
+      index = parsedElement.end;
+      continue;
+    }
+    const relationship = line.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s+from\\s+(${aliasPattern})(?:\\.(${sidePattern}))?\\s+to\\s+(${aliasPattern})(?:\\.(${sidePattern}))?$`, "i"));
+    const kind = relationship ? normalizeRelationshipKind(relationship[1]) : "";
+    if (relationship && kind) {
+      relationshipRows.push({ line: index + 1, match: relationship, kind });
+      continue;
+    }
+    throw new ArchitectureDslError("Expected a UML entity or relationship declaration", index + 1);
+  }
+  if (!closed)
+    throw new ArchitectureDslError("Diagram is missing a closing brace", lines.length);
+  diagram.modelElementIds = diagram.elements.map((element) => element.id);
+  const existingRelationships = new Map((existingDiagram?.relationships || []).map((rel) => [String(rel.taggedValues?.alias || "").toLowerCase(), rel]));
+  for (const row of relationshipRows) {
+    const [, , alias, label, sourceAlias, sourceSide = "", targetAlias, targetSide = ""] = row.match;
+    const sourceId = aliases.get(sourceAlias.toLowerCase());
+    const targetId = aliases.get(targetAlias.toLowerCase());
+    if (!sourceId)
+      throw new ArchitectureDslError(`Unknown source element ${sourceAlias}`, row.line);
+    if (!targetId)
+      throw new ArchitectureDslError(`Unknown target element ${targetAlias}`, row.line);
+    const relationship = createRelationship(row.kind, sourceId, targetId, unquote(label));
+    const prior = existingRelationships.get(alias.toLowerCase());
+    if (prior?.id)
+      relationship.id = prior.id;
+    relationship.taggedValues = { ...prior?.taggedValues || {}, alias };
+    relationship.route.sourceSide = sourceSide.toLowerCase();
+    relationship.route.targetSide = targetSide.toLowerCase();
+    diagram.relationships.push(relationship);
+  }
+  return diagram;
+}
+function serializeArchitectureDsl(diagram) {
+  const aliasById = new Map;
+  const usedAliases = new Set;
+  const elementAlias = (element, index) => {
+    const base = String(element.taggedValues?.alias || `E${index + 1}`).replace(/[^A-Za-z0-9_-]/g, "_");
+    const root = /^[A-Za-z]/.test(base) ? base : `E_${base}`;
+    let alias = root;
+    for (let suffix = 2;usedAliases.has(alias.toLowerCase()); suffix++)
+      alias = `${root}_${suffix}`;
+    usedAliases.add(alias.toLowerCase());
+    aliasById.set(element.id, alias);
+    return alias;
+  };
+  const elementAliases2 = (diagram?.elements || []).map(elementAlias);
+  const lines = [`uml ${diagram?.type || "component"} ${quote(diagram?.name || "System architecture")} {`];
+  (diagram?.elements || []).forEach((element, index) => {
+    const alias = elementAliases2[index];
+    const view = element.view || { x: 0, y: 0, width: 180, height: 92 };
+    const properties = element.properties || {};
+    const propertyLines = [];
+    if (element.stereotype && element.stereotype !== element.kind)
+      propertyLines.push(`stereotype ${quote(element.stereotype)}`);
+    (properties.attributes || []).forEach((value) => propertyLines.push(`attribute ${quote(value)}`));
+    (properties.operations || []).forEach((value) => propertyLines.push(`operation ${quote(value)}`));
+    if (properties.documentation)
+      propertyLines.push(`documentation ${quote(properties.documentation)}`);
+    if (properties.body && properties.body !== properties.documentation)
+      propertyLines.push(`body ${quote(properties.body)}`);
+    if (Number(element.view?.style?.textScale || 1) !== 1)
+      propertyLines.push(`textScale ${Number(element.view.style.textScale)}`);
+    const declaration = `  ${sourceElementKind(element.kind)} ${alias} ${quote(element.name)} at ${Number(view.x)}, ${Number(view.y)} size ${Number(view.width)}, ${Number(view.height)}`;
+    if (!propertyLines.length)
+      lines.push(declaration);
+    else
+      lines.push(`${declaration} {`, ...propertyLines.map((line) => `    ${line}`), "  }");
+  });
+  (diagram?.relationships || []).forEach((relationship, index) => {
+    const alias = String(relationship.taggedValues?.alias || `R${index + 1}`).replace(/[^A-Za-z0-9_-]/g, "_");
+    const source = aliasById.get(relationship.source);
+    const target = aliasById.get(relationship.target);
+    if (!source || !target)
+      return;
+    const sourceEndpoint = `${source}${relationship.route?.sourceSide ? `.${relationship.route.sourceSide}` : ""}`;
+    const targetEndpoint = `${target}${relationship.route?.targetSide ? `.${relationship.route.targetSide}` : ""}`;
+    lines.push(`  ${sourceRelationshipKind(relationship.kind)} ${alias} ${quote(relationship.label || "")} from ${sourceEndpoint} to ${targetEndpoint}`);
+  });
+  lines.push("}");
   return lines.join(`
 `);
 }
@@ -1184,7 +1425,6 @@ function blankWorkspace() {
 }
 var workspaceRegistry;
 var state = load();
-var diagramUrl;
 var serverSyncReady = false;
 var activeNotepadCell = null;
 var notepadSaveTimer;
@@ -1202,6 +1442,7 @@ var architecturePaletteGroup = "Structural";
 var architectureConnectorKind = "dependency";
 var architectureInspectorEditing = false;
 var architectureInspectorRenderTimer;
+var architectureSourceTimer;
 var architectureDrag = null;
 var architectureConnection = null;
 var architectureSuppressClick = false;
@@ -1222,6 +1463,10 @@ function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   if (!workspace.architecture?.diagrams?.length)
     workspace.architecture = architectureWorkspaceFromPlantUml(workspace.plantuml || `@startuml
 @enduml`);
+  workspace.architecture.diagrams.forEach((diagram) => {
+    normalizeLegacyInterfaceConnectors(diagram);
+    diagram.source ||= serializeArchitectureDsl(diagram);
+  });
   workspace.architecture.activeDiagramId ||= workspace.architecture.diagrams[0]?.id;
   workspace.hazards.forEach((hazard) => {
     hazard.status ??= "Open";
@@ -1643,38 +1888,33 @@ var silBands = {
   low: { "SIL 1": [0.01, 0.1], "SIL 2": [0.001, 0.01], "SIL 3": [0.0001, 0.001], "SIL 4": [0.00001, 0.0001] }
 };
 var plantumlCompletions = [
-  ["@startuml", `@startuml
-$0
-@enduml`, "diagram wrapper"],
-  ["@enduml", "@enduml", "diagram wrapper"],
-  ["title", "title $0", "diagram title"],
-  ["component", 'component "$0" as ALIAS', "component"],
-  ["node", 'node "$0" as ALIAS', "node"],
-  ["database", 'database "$0" as ALIAS', "database"],
-  ["queue", 'queue "$0" as ALIAS', "queue"],
-  ["cloud", 'cloud "$0" as ALIAS', "cloud"],
-  ["rectangle", 'rectangle "$0" as ALIAS', "rectangle"],
-  ["artifact", 'artifact "$0" as ALIAS', "artifact"],
-  ["package", `package "$0" {
-}`, "package"],
-  ["frame", `frame "$0" {
-}`, "frame"],
-  ["actor", 'actor "$0" as ALIAS', "actor"],
-  ["interface", 'interface "$0" as ALIAS', "interface"],
-  ["note", `note right of ALIAS
-  $0
-end note`, "note"],
-  ["skinparam", "skinparam $0", "styling"],
-  ["left to right direction", "left to right direction", "layout"],
-  ["hide stereotype", "hide stereotype", "styling"],
-  ["legend", `legend
-  $0
-endlegend`, "legend"]
+  ["uml", `uml component "$0" {
+}`, "diagram declaration"],
+  ["component", 'component COMPONENT_ID "$0" at 120, 120 size 220, 104', "component entity"],
+  ["subsystem", 'subsystem SUBSYSTEM_ID "$0" at 120, 120 size 300, 190', "subsystem entity"],
+  ["class", `class CLASS_ID "$0" at 120, 120 size 210, 130 {
+  attribute "+ id: UUID"
+  operation "+ validate(): Result"
+}`, "class entity"],
+  ["node", 'node NODE_ID "$0" at 120, 120 size 230, 130', "deployment node"],
+  ["port", 'port PORT_ID "$0" at 120, 120 size 44, 44', "port entity"],
+  ["artifact", 'artifact ARTIFACT_ID "$0" at 120, 120 size 180, 110', "artifact entity"],
+  ["note", `note NOTE_ID "$0" at 120, 120 size 180, 110 {
+  body "Note text"
+}`, "annotation entity"],
+  ["interface", 'interface INTERFACE_ID "$0" from SOURCE.right to TARGET.left', "native interface connector"],
+  ["dependency", 'dependency DEPENDENCY_ID "$0" from SOURCE.right to TARGET.left', "dependency connector"],
+  ["association", 'association ASSOCIATION_ID "$0" from SOURCE.right to TARGET.left', "association connector"],
+  ["generalization", 'generalization GENERALIZATION_ID "$0" from SOURCE.top to TARGET.bottom', "generalization connector"],
+  ["stereotype", 'stereotype "$0"', "element stereotype"],
+  ["attribute", 'attribute "$0"', "class attribute"],
+  ["operation", 'operation "$0"', "class operation"],
+  ["documentation", 'documentation "$0"', "element documentation"]
 ].map(([label, insert, detail]) => ({ label, insert, detail }));
 var plantumlMatches = [];
 var plantumlCompletionIndex = 0;
 var plantumlCompletionRange;
-var plantumlEditorDraft = "";
+var architectureSourceDraft = "";
 function currentPlantumlToken(editor = $("#plantuml-source")) {
   const beforeCursor = editor.value.slice(0, editor.selectionStart);
   const match = beforeCursor.match(/(?:^|\s)([@A-Za-z][A-Za-z ]*)$/);
@@ -2194,6 +2434,7 @@ function activeArchitectureDiagram() {
   return state.architecture.diagrams.find((diagram) => diagram.id === state.architecture.activeDiagramId) || state.architecture.diagrams[0];
 }
 function setActiveArchitectureDiagram(diagram) {
+  normalizeLegacyInterfaceConnectors(diagram);
   const index = state.architecture.diagrams.findIndex((item) => item.id === diagram.id);
   if (index >= 0)
     state.architecture.diagrams[index] = diagram;
@@ -2201,12 +2442,43 @@ function setActiveArchitectureDiagram(diagram) {
     state.architecture.diagrams.push(diagram);
   state.architecture.activeDiagramId = diagram.id;
 }
-function syncArchitectureContext(diagram = activeArchitectureDiagram()) {
+function syncArchitectureContext(diagram = activeArchitectureDiagram(), { updateSource = true } = {}) {
   if (diagram.elements?.length) {
     state.components = architectureComponentsFromDiagram(diagram);
     state.plantuml = plantUmlFromArchitectureDiagram(diagram);
   } else {
-    state.components = componentsFromPlantUml(state.plantuml);
+    state.components = [];
+    state.plantuml = plantUmlFromArchitectureDiagram(diagram);
+  }
+  if (updateSource)
+    diagram.source = serializeArchitectureDsl(diagram);
+}
+function applyArchitectureSource(source = $("#plantuml-source").value, { remember = true } = {}) {
+  const status = $("#render-status");
+  try {
+    const current = activeArchitectureDiagram();
+    const parsed = parseArchitectureDsl(source, current);
+    if (remember)
+      rememberArchitecture();
+    parsed.source = source;
+    delete parsed.sourceDraft;
+    setActiveArchitectureDiagram(parsed);
+    if (architectureSelectedId && !parsed.elements.some((element) => element.id === architectureSelectedId) && !parsed.relationships.some((rel) => `edge:${rel.id}` === architectureSelectedId))
+      architectureSelectedId = "";
+    syncArchitectureContext(parsed, { updateSource: false });
+    persistState();
+    status.className = "render-status success";
+    status.textContent = `${parsed.elements.length} entities · ${parsed.relationships.length} connectors`;
+    renderArchitecture();
+    renderMetrics();
+    renderFaultTreeBuilder();
+    return true;
+  } catch (error) {
+    activeArchitectureDiagram().sourceDraft = source;
+    persistState();
+    status.className = "render-status error";
+    status.textContent = error.message || "Invalid UML source";
+    return false;
   }
 }
 function rememberArchitecture() {
@@ -3323,7 +3595,7 @@ function renderWorkflow() {
 }
 function renderArchitecture() {
   const diagram = activeArchitectureDiagram();
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: !diagram.source });
   const validation = validateDiagram(diagram);
   const selectedElement = diagram.elements.find((element) => element.id === architectureSelectedId);
   const selectedRelationship = diagram.relationships.find((rel) => `edge:${rel.id}` === architectureSelectedId);
@@ -3342,9 +3614,9 @@ function renderArchitecture() {
   $("#architecture-validation").textContent = validation.warnings.length ? `${validation.warnings.length} model warning${validation.warnings.length === 1 ? "" : "s"}` : "Valid UML architecture";
   const plantumlEditor = $("#plantuml-source");
   if (document.activeElement !== plantumlEditor)
-    plantumlEditor.value = state.plantuml;
+    plantumlEditor.value = diagram.sourceDraft || diagram.source || serializeArchitectureDsl(diagram);
   $("#component-count").textContent = state.components.length;
-  $("#component-list").innerHTML = state.components.length ? state.components.map((x) => `<div class="component-item"><strong>${esc2(x.name)}</strong><span>${esc2(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
+  $("#component-list").innerHTML = state.components.length ? state.components.map((x) => `<div class="component-item"><strong>${esc2(x.name)}</strong><span>${esc2(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Define component-like entities in UML source or add them from the palette.</p>`;
   $("#architecture-outline").innerHTML = diagram.elements.length ? diagram.elements.map((element) => `<button class="${element.id === architectureSelectedId ? "active" : ""}" data-select-architecture="${esc2(element.id)}">${esc2(element.kind)} · ${esc2(element.name)}</button>`).join("") : `<p class="dialog-copy">Add elements from the palette.</p>`;
   if (selectedRelationship) {
     const sourceOptions = diagram.elements.map((element) => `<option value="${esc2(element.id)}" ${element.id === selectedRelationship.source ? "selected" : ""}>${esc2(element.name)}</option>`).join("");
@@ -4708,38 +4980,17 @@ $("#architecture-zoom-out").addEventListener("click", () => {
 });
 $("#plantuml-source").addEventListener("input", () => {
   plantumlCompletionIndex = 0;
-  state.plantuml = $("#plantuml-source").value;
-  plantumlEditorDraft = state.plantuml;
-  const sourceComponents = componentsFromPlantUml(state.plantuml);
-  if (!sourceComponents.length) {
-    const parsed = parseNotation(state.plantuml, "component");
-    if (parsed.diagram.elements.length) {
-      setActiveArchitectureDiagram(parsed.diagram);
-      syncArchitectureContext(activeArchitectureDiagram());
-      renderArchitecture();
-    } else {
-      state.components = [];
-      $("#component-count").textContent = "0";
-      $("#component-list").innerHTML = `<p class="dialog-copy">Add component declarations or use the UML palette to define reusable architecture components.</p>`;
-    }
-  } else {
-    setActiveArchitectureDiagram(architectureDiagramFromPlantUml(state.plantuml, activeArchitectureDiagram().name || "System architecture"));
-    syncArchitectureContext(activeArchitectureDiagram());
-    renderArchitecture();
-  }
+  architectureSourceDraft = $("#plantuml-source").value;
+  activeArchitectureDiagram().sourceDraft = architectureSourceDraft;
   persistState();
+  const status = $("#render-status");
+  status.className = "render-status";
+  status.textContent = "Editing UML source...";
+  clearTimeout(architectureSourceTimer);
+  architectureSourceTimer = setTimeout(() => applyArchitectureSource(architectureSourceDraft), 260);
   renderPlantumlCompletions();
 });
 $("#plantuml-source").addEventListener("keydown", (event) => {
-  const editor = $("#plantuml-source");
-  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement !== editor && plantumlEditorDraft) {
-    editor.value = plantumlEditorDraft;
-    editor.setSelectionRange(editor.value.length, editor.value.length);
-  }
-  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement === editor && state.plantuml && editor.value !== state.plantuml) {
-    editor.value = state.plantuml;
-    editor.setSelectionRange(editor.value.length, editor.value.length);
-  }
   if ($("#plantuml-completions").hidden && (event.key === "Enter" || event.key === "Tab"))
     renderPlantumlCompletions();
   if ($("#plantuml-completions").hidden)
@@ -4757,14 +5008,6 @@ $("#plantuml-source").addEventListener("keydown", (event) => {
       plantumlCompletionIndex = 0;
     }
     insertPlantumlCompletion();
-    if (document.activeElement !== editor && plantumlEditorDraft) {
-      editor.value = plantumlEditorDraft;
-      const cursor = plantumlEditorDraft === 'component "" as ALIAS' ? 11 : editor.value.length;
-      editor.setSelectionRange(cursor, cursor);
-      state.plantuml = plantumlEditorDraft;
-      persistState();
-      closePlantumlCompletions();
-    }
   } else if (event.key === "Escape") {
     event.preventDefault();
     closePlantumlCompletions();
@@ -4777,7 +5020,11 @@ $("#plantuml-completions").addEventListener("mousedown", (event) => {
     insertPlantumlCompletion(Number(item.dataset.completionIndex));
   }
 });
-$("#plantuml-source").addEventListener("blur", () => setTimeout(closePlantumlCompletions));
+$("#plantuml-source").addEventListener("blur", () => {
+  clearTimeout(architectureSourceTimer);
+  applyArchitectureSource($("#plantuml-source").value);
+  setTimeout(closePlantumlCompletions);
+});
 $("#sync-fmeda-btn").addEventListener("click", () => {
   const byComponent = new Map;
   state.fmeda.rows.filter((row) => row.classification === "dangerous_undetected").forEach((row) => byComponent.set(row.component, (byComponent.get(row.component) || 0) + evaluateExpression(row.expression)));
@@ -4918,21 +5165,16 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
   }
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
-  const source = $("#plantuml-source").value || state.plantuml;
-  const imported = componentsFromPlantUml(source);
-  if (imported.length) {
-    state.plantuml = source;
-    state.components = imported;
-  }
+  if (!applyArchitectureSource($("#plantuml-source").value))
+    return alert("Fix the UML source before generating a fault tree.");
   if (!state.components.length)
-    return alert("No architecture components found. Add PlantUML component declarations in System architecture, then generate the starter tree.");
+    return alert("No architecture components found. Define component-like entities in UML source, then generate the starter tree.");
   state.faultTree.dsl = faultTreeFromArchitectureDsl();
   state.faultTree.activeLayer = "All";
   faultTreeEditorLayer = "All";
   state.faultTree.layerCount = Math.max(state.faultTree.layerCount || 3, 2);
   save();
-  $("#render-btn").click();
-  alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
+  alert(`${state.components.length} architecture components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", (event) => {
   commitFaultTreeEditorDraft();
@@ -4978,46 +5220,14 @@ $("#fault-tree-analysis").addEventListener("click", (event) => {
   if (target)
     focusFaultTreeLine(Number(target.dataset.faultTreeGoToLine));
 });
-$("#render-btn").addEventListener("click", async () => {
-  const button = $("#render-btn");
-  const status = $("#render-status");
-  const preview = $("#diagram-preview");
-  state.plantuml = plantUmlFromArchitectureDiagram(activeArchitectureDiagram());
-  $("#plantuml-source").value = state.plantuml;
-  state.components = architectureComponentsFromDiagram(activeArchitectureDiagram());
-  persistState();
-  button.disabled = true;
-  status.className = "render-status";
-  status.textContent = "Syncing...";
-  const pendingMessage = document.createElement("p");
-  pendingMessage.textContent = "Rendering synchronized PlantUML...";
-  preview.replaceChildren(pendingMessage);
-  try {
-    const response = await fetch("/api/plantuml/render", { method: "POST", headers: { "content-type": "text/plain" }, body: state.plantuml });
-    if (!response.ok)
-      throw new Error(await response.text());
-    if (diagramUrl)
-      URL.revokeObjectURL(diagramUrl);
-    diagramUrl = URL.createObjectURL(await response.blob());
-    const image = new Image;
-    image.alt = "Rendered PlantUML architecture diagram";
-    image.src = diagramUrl;
-    preview.replaceChildren(image);
-    status.className = "render-status success";
-    status.textContent = "Diagram rendered";
-  } catch (error) {
-    const message = document.createElement("p");
-    message.textContent = error.message || "PlantUML source synced; local SVG validation is unavailable.";
-    preview.replaceChildren(message);
-    status.className = "render-status error";
-    status.textContent = "PlantUML validation failed";
-  } finally {
-    button.disabled = false;
-    renderArchitecture();
-  }
+$("#render-btn").addEventListener("click", () => {
+  clearTimeout(architectureSourceTimer);
+  applyArchitectureSource($("#plantuml-source").value);
 });
 $("#export-btn").addEventListener("click", () => {
-  state.plantuml = $("#plantuml-source").value;
+  const source = $("#plantuml-source").value;
+  if (!applyArchitectureSource(source, { remember: false }))
+    activeArchitectureDiagram().sourceDraft = source;
   persistState();
   const project = projectEnvelope();
   const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";

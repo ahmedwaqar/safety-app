@@ -23,7 +23,7 @@ The software is provided **as is**, without warranty of any kind and without lia
 | Overview | Safety-case metrics, residual-risk summary, high-priority failure modes, analysis coverage, and architecture components in scope |
 | Engineering notes | Capture rich text, equations, tables, figures, artifact links, and stakeholder FMEA/HARA drafts that can be cleaned and imported |
 | Engineering workflow | Configure development phases and activities, insert safety checkpoints, define gate criteria, record evidence, assign owners, and launch linked analyses |
-| Architecture | Model UML components and interfaces natively with a palette, canvas, inspector, outline, validation, layout tools, smooth property editing, PlantUML synchronization, local SVG rendering, and reusable component aliases |
+| Architecture | Define diagrams in the Praxis UML DSL, render native shapes and connectors, refine layout on the canvas, and reuse stable component aliases throughout the safety workspace |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
 | Hazard catalogue | Maintain reusable hazards and view linked analysis references |
 | AMR SIL assessment | Estimate a target Safety Integrity Level for AMR safety functions with a transparent C/F/P/W risk graph |
@@ -100,11 +100,11 @@ bun run screenshots
 ## Requirements
 
 - [Bun](https://bun.sh/) for the local server and browser test suite
-- Java 17 or later for PlantUML rendering
+- Java 17 or later only for the legacy PlantUML compatibility endpoint
 - A modern browser
 - Google Chrome for the automated interaction suite
 
-The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](vendor/plantuml.jar). Rendering is local: PlantUML source does not leave the machine.
+The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](vendor/plantuml.jar) for compatibility workflows. Praxis UML DSL diagrams render natively in the browser and do not require Java.
 
 ## Beginner Training
 
@@ -143,12 +143,12 @@ Open:
 http://localhost:8080
 ```
 
-Opening `index.html` directly still provides the analysis workspace, but diagram rendering requires the local server.
+Opening `index.html` directly provides the complete analysis workspace and native UML rendering. The local server is needed for project-service synchronization and the legacy PlantUML endpoint.
 
 ## Suggested Workflow
 
 1. Open **Engineering workflow** to plan phases, activities, safety checkpoints, gates, and evidence.
-2. Open **Architecture** to model the system with the native UML palette, canvas, inspector, and layout tools. The PlantUML notation stays synchronized, and architecture components automatically become available as references throughout the analysis.
+2. Open **Architecture** to describe the model in Praxis UML source or add entities from the native palette. The source renders directly into the canvas, manual layout changes synchronize back to the DSL, and component aliases become available throughout the analysis.
 4. Add the relevant **Operational situations**.
 5. Maintain the reusable **Hazard catalogue**.
 6. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
@@ -186,20 +186,42 @@ Safety is treated as a continuous engineering lens rather than a single downstre
 
 Use **Architecture** as a native UML workbench inside the safety workspace:
 
+- Treat the Praxis UML DSL as the authoritative diagram definition; applying valid source replaces the native model while invalid drafts leave the last valid canvas intact.
 - Add UML elements from the palette and select them on the canvas or outline.
 - Drag shapes directly on the canvas with smooth, zoom-aware movement.
 - Edit names, aliases, kind, documentation, and connector labels in the inspector.
 - Type freely in inspector property fields; edits are captured as drafts and committed without rebuilding the field on every keystroke.
 - Drag from native connection ports to another shape, choose the relationship type from the canvas toolbar, and reconnect selected connector endpoints in place.
-- Connectors use rounded orthogonal routing and remain anchored as shapes move; UML interface connectors attach directly to their visible ball-and-socket stubs.
+- Connectors use rounded orthogonal routing and remain anchored as shapes move. UML interface connectors are native shape-to-shape edges with ball-and-socket notation rendered directly on the route, not intermediary shapes.
 - Use relationship types such as dependency, association, realization, aggregation, composition, delegation, and interface connectors; edit their type, label, source, and destination in the inspector.
 - Use layout modes such as layered left-to-right, hierarchical top-to-bottom, service flow, C4 nested, radial, matrix, and compact.
 - Use undo, redo, keyboard delete, and zoom controls while refining the model.
 - Review validation warnings for unsupported element kinds, missing names, missing relationship endpoints, and diagram-specific notation issues.
 
-The architecture model is stored in the active Praxis Studio workspace. It synchronizes to PlantUML notation so the source remains portable and can still be rendered locally with the attached PlantUML JAR. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events.
+The architecture model and its DSL source are stored in the active Praxis Studio workspace. Compatible legacy interface-connector shapes with two incident edges are migrated into one native connector. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events. A derived PlantUML representation remains in project data for backward compatibility, but it is not the editor's source of truth.
 
-You can still paste or edit PlantUML directly. The autocomplete menu supports common PlantUML keywords; select a snippet with `ArrowUp` / `ArrowDown` and insert it with `Enter` or `Tab`. The importer recognizes `component`, `node`, `database`, `queue`, `cloud`, `rectangle`, `artifact`, `package`, and `frame` declarations and maps them into the native architecture model.
+The DSL uses stable aliases and explicit constructs for entities and relationships:
+
+```text
+uml component "Collaborative robot cell" {
+  component PLC "Safety PLC" at 140, 120 size 220, 104
+  component CTRL "Robot controller" at 520, 240 size 220, 104
+
+  class COMMAND "Safe-stop command" at 280, 420 size 220, 130 {
+    stereotype "safety data"
+    attribute "+ demanded: Boolean"
+    operation "+ validate(): Result"
+    documentation "Command exchanged across the safety boundary"
+  }
+
+  interface SAFE_STOP "Safe stop interface" from PLC.right to CTRL.left
+  dependency COMMAND_FLOW "Validated command" from COMMAND.top to CTRL.bottom
+}
+```
+
+Entity declarations use `<kind> <alias> "<name>"`. Supported kinds come from the native UML palette, including `component`, `subsystem`, `class`, `node`, `artifact`, `port`, actors, activities, states, packages, notes, and constraints. Optional `at x, y` and `size width, height` clauses define layout. If `at` or `size` is omitted for an existing alias, the current canvas geometry is preserved; new entities are auto-placed. Manual dragging, inspector edits, and automatic layout write canonical geometry back into the source.
+
+Relationships use `<kind> <alias> "<label>" from <entity>.<side> to <entity>.<side>`. Sides are `top`, `right`, `bottom`, and `left`; they may be omitted for automatic anchoring. Relationship kinds include `association`, `dependency`, `generalization`, `realization`, `aggregation`, `composition`, `interface`, `delegation`, and the activity/use-case connector types. The autocomplete menu inserts complete domain constructs with `ArrowUp` / `ArrowDown` and `Enter` or `Tab`.
 
 ### Operational Situations And Hazards
 
@@ -463,7 +485,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, native UML architecture inspection, smooth text-property editing, shape dragging, port-to-shape connector creation, rounded interface-connector attachment, PlantUML component import, diagram rendering, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, Praxis UML DSL parsing and completion, source-defined native entities and connectors, invalid-draft isolation, manual-layout preservation and source synchronization, smooth property editing, shape dragging, port-to-shape connector creation, native interface-edge rendering and legacy interface migration, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
 
 Compile-check the browser and server entry points:
 
@@ -480,6 +502,7 @@ index.html               Web-app structure and dialogs
 styles.css               Responsive application styling
 app/
   uml-core.js            Native UML model, validation, layout, notation, and SVG renderer
+  architecture-dsl.ts    Praxis UML DSL parser and canonical source serializer
   architecture-model.ts  Architecture workspace, PlantUML conversion, and component-reference helpers
   praxis-studio.ts       Typed feature registry, browser state, workflows, and traceability source
   praxis-studio.browser.js

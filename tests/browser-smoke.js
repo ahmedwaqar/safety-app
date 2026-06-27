@@ -192,12 +192,13 @@ try {
     assert(await evaluate(`document.querySelector("#workspace-menu").hidden`), "Escape did not close the file menu");
   });
 
-  await test("save preserves current PlantUML editor changes", async () => {
+  await test("save preserves current UML DSL editor changes", async () => {
     await click('[data-view="architecture"]');
-    await fill("#plantuml-source", "@startuml\ntitle Explicit save test\n@enduml");
+    const existingSource = await evaluate(`document.querySelector("#plantuml-source").value`);
+    await fill("#plantuml-source", existingSource.replace(/\n}\s*$/, '\n  # Explicit save test\n}'));
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === sessionStorage.getItem("safeguard-active-workspace-v1")).data.plantuml.includes("Explicit save test")`), "save did not preserve PlantUML editor text");
+    assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === sessionStorage.getItem("safeguard-active-workspace-v1")).data.architecture.diagrams[0].source.includes("Explicit save test")`), "save did not preserve UML DSL editor text");
     assert(await evaluate(`window.__download`) === "cobot-safety-case.praxis.json", "save did not download the project file");
   });
 
@@ -845,11 +846,22 @@ try {
     assert(await evaluate(`document.querySelector("#quant-body").textContent.includes("8.00e-8")`), "FMEDA handoff did not update scanner λDU rate");
   });
 
-  await test("PlantUML architecture automatically defines component context", async () => {
+  await test("UML DSL defines native entities, connectors, and component context", async () => {
     await click('[data-view="architecture"]');
-    await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
-    assert(await count("#component-list .component-item") === 2, "PlantUML architecture did not update components automatically");
-    assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "PlantUML alias is missing");
+    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller" at 140, 120 size 220, 104\n  node TEST_ARM "Test arm" at 520, 240 size 230, 130\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+    await click("#render-btn");
+    assert(await count("#component-list .component-item") === 2, "UML DSL did not update component context");
+    assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "UML DSL alias is missing");
+    assert(await count("#architecture-stage .uml-node") === 2, "UML DSL entities did not render as native shapes");
+    assert(await count("#architecture-stage .interface-assembly") === 1, "UML DSL interface did not render as a native connector");
+    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_CTRL").view.x`) === 140, "UML DSL layout coordinates were not applied");
+  });
+
+  await test("UML DSL preserves manual layout when source omits coordinates", async () => {
+    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller"\n  node TEST_ARM "Test arm"\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+    await click("#render-btn");
+    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_CTRL").view.x`) === 140, "source reapply discarded an existing manual position");
+    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_ARM").view.x`) === 520, "source reapply discarded a second existing position");
   });
 
   await test("native architecture inspector supports smooth text editing", async () => {
@@ -891,7 +903,8 @@ try {
       const after = activeArchitectureDiagram().elements.find(item => item.id === id).view;
       const otherStayedPut = Math.abs(otherBefore.left - otherAfter.left) < 1 && Math.abs(otherBefore.top - otherAfter.top) < 1;
       const movedSmoothly = Math.abs(after.x - (before.x + 73)) < 0.2 && Math.abs(after.y - (before.y + 49)) < 0.2;
-      return Boolean(movedSmoothly && otherStayedPut && viewBoxBefore === viewBoxDuringDrag && document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']"));
+      const sourceUpdated = document.querySelector("#plantuml-source").value.includes("at " + after.x + ", " + after.y);
+      return Boolean(movedSmoothly && otherStayedPut && viewBoxBefore === viewBoxDuringDrag && sourceUpdated && document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']"));
     })()`);
     assert(moved, "architecture shape drag moved the wrong visual target or shifted the canvas viewport");
   });
@@ -924,30 +937,46 @@ try {
     assert(connected, "dragging a native connection port did not create and render an anchored relationship");
   });
 
-  await test("interface connectors use organic rounded routes and visible attachment points", async () => {
-    const attached = await evaluate(`(() => {
+  await test("interface connectors are native edges rather than intermediary shapes", async () => {
+    const nativeConnector = await evaluate(`(() => {
       const diagram = activeArchitectureDiagram();
       const source = diagram.elements.find(item => item.kind === "component");
-      if (!source) return false;
-      const connector = createElement("interfaceConnector", "Safety interface", source.view.x + 360, source.view.y + 160);
-      const relationship = createRelationship("interfaceConnector", source.id, connector.id, "safe stop");
+      const target = diagram.elements.find(item => item.id !== source?.id);
+      if (!source || !target) return false;
+      const relationship = createRelationship("interfaceConnector", source.id, target.id, "safe stop interface");
       relationship.route.sourceSide = "right";
       relationship.route.targetSide = "left";
-      diagram.elements.push(connector);
-      diagram.modelElementIds.push(connector.id);
       diagram.relationships.push(relationship);
-      architectureSelectedId = connector.id;
+      architectureSelectedId = "edge:" + relationship.id;
       syncArchitectureContext(diagram);
       renderArchitecture();
       const path = document.querySelector("#architecture-stage .uml-edge[data-id='" + relationship.id + "'] .edge-path");
-      const handles = document.querySelectorAll("#architecture-stage .connection-handle[data-element-id='" + connector.id + "']");
-      if (!path || handles.length !== 2) return false;
-      const endpoint = path.getPointAtLength(path.getTotalLength());
-      const expectedX = connector.view.x + 4;
-      const expectedY = connector.view.y + connector.view.height / 2;
-      return Math.abs(endpoint.x - expectedX) < 0.2 && Math.abs(endpoint.y - expectedY) < 0.2 && path.getAttribute("d").includes("Q");
+      const assembly = document.querySelector("#architecture-stage .uml-edge[data-id='" + relationship.id + "'] .interface-assembly");
+      const label = document.querySelector("#architecture-stage .uml-edge[data-id='" + relationship.id + "'] .edge-label-bg");
+      if (!path || !assembly || !label) return false;
+      const assemblyBox = assembly.getBoundingClientRect();
+      const labelBox = label.getBoundingClientRect();
+      const overlaps = assemblyBox.left < labelBox.right && assemblyBox.right > labelBox.left && assemblyBox.top < labelBox.bottom && assemblyBox.bottom > labelBox.top;
+      return !overlaps && !document.querySelector("#architecture-stage .uml-interface-connector") && !document.querySelector("#architecture-palette [data-add-architecture='interfaceConnector']") && [...document.querySelector("#architecture-connector-kind").options].some(option => option.value === "interfaceConnector");
     })()`);
-    assert(attached, "interface connector route did not meet the visible socket with a rounded orthogonal path");
+    assert(nativeConnector, "interface connector was not rendered as a native shape-to-shape edge");
+  });
+
+  await test("legacy interface connector shapes migrate to native edges", async () => {
+    const migrated = await evaluate(`(() => {
+      const source = createElement("component", "Legacy source", 100, 100);
+      const connector = createElement("interfaceConnector", "Legacy safety interface", 400, 120);
+      const target = createElement("component", "Legacy target", 700, 100);
+      const incoming = createRelationship("association", source.id, connector.id, "provider");
+      const outgoing = createRelationship("association", connector.id, target.id, "consumer");
+      incoming.route.sourceSide = "right";
+      outgoing.route.targetSide = "left";
+      const diagram = { elements: [source, connector, target], modelElementIds: [source.id, connector.id, target.id], relationships: [incoming, outgoing], revision: 1 };
+      const changed = normalizeLegacyInterfaceConnectors(diagram);
+      const relationship = diagram.relationships[0];
+      return changed && diagram.elements.length === 2 && !diagram.elements.some(item => item.kind === "interfaceConnector") && diagram.relationships.length === 1 && relationship.kind === "interfaceConnector" && relationship.source === source.id && relationship.target === target.id && relationship.label === "Legacy safety interface";
+    })()`);
+    assert(migrated, "legacy interface shape and edge pairs were not collapsed into one native connector");
   });
 
   await test("fault tree analysis supports DSL gates, layers, architecture generation, and qualitative cuts", async () => {
@@ -1143,22 +1172,27 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     await fill("#fault-tree-source", dsl);
   });
 
-  await test("PlantUML editor autocompletes keywords and snippets", async () => {
+  await test("UML DSL editor autocompletes domain constructs", async () => {
     await fill("#plantuml-source", "comp");
-    assert(!await evaluate(`document.querySelector("#plantuml-completions").hidden`), "PlantUML completion menu did not open");
+    assert(!await evaluate(`document.querySelector("#plantuml-completions").hidden`), "UML DSL completion menu did not open");
     assert(await evaluate(`document.querySelector("#plantuml-completions").textContent.includes("component")`), "component completion is missing");
     await evaluate(`document.querySelector("#plantuml-source").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))`);
-    assert(await evaluate(`document.querySelector("#plantuml-source").value`) === 'component "" as ALIAS', "PlantUML snippet was not inserted");
-    assert(await evaluate(`document.querySelector("#plantuml-source").selectionStart`) === 11, "PlantUML snippet cursor was not placed inside the component name");
-    assert(await evaluate(`document.querySelector("#plantuml-completions").hidden`), "PlantUML completion menu did not close after insertion");
-    await fill("#plantuml-source", '@startuml\ncomponent "Test controller" as TEST_CTRL\nnode "Test arm" as TEST_ARM\n@enduml');
+    assert(await evaluate(`document.querySelector("#plantuml-source").value`) === 'component COMPONENT_ID "" at 120, 120 size 220, 104', "UML DSL component snippet was not inserted");
+    assert(await evaluate(`document.querySelector("#plantuml-source").selectionStart === document.querySelector("#plantuml-source").value.indexOf('""') + 1`), "UML DSL snippet cursor was not placed inside the entity name");
+    assert(await evaluate(`document.querySelector("#plantuml-completions").hidden`), "UML DSL completion menu did not close after insertion");
   });
 
-  await test("PlantUML render button displays generated diagram", async () => {
+  await test("Apply source protects the canvas from invalid UML DSL", async () => {
+    const before = await count("#architecture-stage .uml-node");
+    await fill("#plantuml-source", 'uml component "Broken" {\n  component ONLY "Only component"\n  dependency BROKEN "Missing target" from ONLY.right to UNKNOWN.left\n}');
     await click("#render-btn");
-    await retry(async () => { assert(await count("#diagram-preview img") === 1, "rendered diagram image did not appear"); });
-    assert(await evaluate(`document.querySelector("#render-status").textContent`) === "Diagram rendered", "diagram render status did not report success");
-    assert(await evaluate(`document.querySelector("#diagram-preview img").alt`) === "Rendered PlantUML architecture diagram", "rendered diagram alt text is missing");
+    assert(await evaluate(`document.querySelector("#render-status").textContent.includes("Unknown target element UNKNOWN")`), "invalid UML DSL did not report the failing construct");
+    assert(await count("#architecture-stage .uml-node") === before, "invalid UML DSL replaced the last valid canvas");
+    assert(await evaluate(`document.querySelector("#plantuml-source").value.includes("UNKNOWN.left")`), "invalid UML DSL draft was not retained for correction");
+    assert(await evaluate(`activeArchitectureDiagram().sourceDraft.includes("UNKNOWN.left")`), "invalid UML DSL draft was not persisted separately from the valid model");
+    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller" at 140, 120 size 220, 104\n  node TEST_ARM "Test arm" at 520, 240 size 230, 130\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+    await click("#render-btn");
+    assert(await evaluate(`document.querySelector("#render-status").textContent`) === "2 entities · 1 connectors", "valid UML DSL did not report the applied native model");
   });
 
   await test("lifecycle assurance executes V&V and derives traceability", async () => {

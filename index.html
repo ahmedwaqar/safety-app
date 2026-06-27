@@ -95,7 +95,7 @@
         </div>
         <section class="card architecture-strip">
           <div class="card-header">
-            <div><p class="eyebrow">PlantUML architecture</p><h3>System components in scope</h3></div>
+            <div><p class="eyebrow">UML architecture</p><h3>System components in scope</h3></div>
             <button class="text-btn" data-go="architecture">Manage architecture →</button>
           </div>
           <div class="component-row" id="overview-components"></div>
@@ -437,7 +437,7 @@
               <button class="button secondary small" id="architecture-redo-btn">Redo</button>
               <select id="architecture-layout" title="Layout mode"><option value="left-right">Layered LR</option><option value="layered">Hierarchical TB</option><option value="service-flow">Service flow</option><option value="c4-nested">C4 nested</option><option value="radial">Radial hub</option><option value="matrix">Grid matrix</option><option value="compact">Compact</option></select>
               <button class="button secondary small" id="architecture-layout-btn">Layout</button>
-              <button class="button primary small" id="render-btn">Sync PlantUML</button>
+              <button class="button primary small" id="render-btn">Apply source</button>
             </div>
           </div>
           <div class="architecture-native-grid">
@@ -467,12 +467,11 @@
           </div>
         </section>
         <section class="diagram-card architecture-notation-card">
-          <div class="card-header"><div><p class="eyebrow">PlantUML notation</p><h3>Portable architecture source</h3></div><span class="render-status" id="render-status">Synced with model</span></div>
+          <div class="card-header"><div><p class="eyebrow">Praxis UML DSL</p><h3>Architecture source</h3></div><span class="render-status" id="render-status">Source defines canvas</span></div>
           <div class="plantuml-editor">
             <textarea id="plantuml-source" spellcheck="false" autocomplete="off" aria-autocomplete="list" aria-controls="plantuml-completions" aria-expanded="false"></textarea>
-            <div class="completion-menu" id="plantuml-completions" role="listbox" aria-label="PlantUML completions" hidden></div>
+            <div class="completion-menu" id="plantuml-completions" role="listbox" aria-label="UML DSL completions" hidden></div>
           </div>
-          <div class="diagram-preview" id="diagram-preview" hidden></div>
         </section>
       </section>
     </main>
@@ -720,7 +719,7 @@
       <form method="dialog">
         <div class="dialog-header"><div><p class="eyebrow">Input guidance</p><h2>Choosing appropriate values</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
         <div class="help-sections">
-          <section><h3>Start with architecture</h3><p>Import PlantUML components before creating component-linked FMEA, FMEDA, quantitative, or requirement records. Use stable aliases such as <code>SCAN</code> or <code>PLC</code>.</p></section>
+          <section><h3>Start with architecture</h3><p>Define components in the architecture UML source before creating component-linked FMEA, FMEDA, quantitative, or requirement records. Use stable aliases such as <code>SCAN</code> or <code>PLC</code>.</p></section>
           <section><h3>FMEA ratings</h3><p>Severity, occurrence, and detection use integer values from <code>1</code> to <code>10</code>. Document your organization-specific rating scale and apply it consistently.</p></section>
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
           <section><h3>Failure rates</h3><p>Enter finite non-negative rates in failures per hour. Fractions, diagnostic coverage, and beta factors must be between <code>0</code> and <code>1</code>. Proof-test intervals are positive hours.</p></section>

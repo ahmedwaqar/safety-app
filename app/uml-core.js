@@ -10,7 +10,7 @@ export const UML_ELEMENT_KINDS = [
 ];
 
 export const UML_PALETTE_GROUPS = [
-  { name: "Structural", kinds: ["class", "abstractClass", "enumeration", "dataType", "object", "package", "component", "subsystem", "port", "interfaceConnector", "deploymentNode", "artifact"] },
+  { name: "Structural", kinds: ["class", "abstractClass", "enumeration", "dataType", "object", "package", "component", "subsystem", "port", "deploymentNode", "artifact"] },
   { name: "Use Case", kinds: ["actor", "useCase", "boundary", "control", "entity"] },
   { name: "Sequence", kinds: ["lifeline", "activation", "frame", "message"] },
   { name: "Activity", kinds: ["start", "activity", "activityObject", "decision", "merge", "forkJoin", "swimlane", "interruptibleRegion", "signalSend", "signalReceive", "guard", "activityFrame", "end"] },
@@ -366,6 +366,36 @@ function pathMidpoint(points) {
   return points[points.length - 1];
 }
 
+function pathMidpointGeometry(points) {
+  const segments = points.slice(1).map((point, index) => ({ start: points[index], end: point, length: Math.hypot(point.x - points[index].x, point.y - points[index].y) }));
+  const halfway = segments.reduce((sum, segment) => sum + segment.length, 0) / 2;
+  let travelled = 0;
+  for (const segment of segments) {
+    if (travelled + segment.length >= halfway) {
+      const ratio = (halfway - travelled) / (segment.length || 1);
+      return {
+        x: segment.start.x + (segment.end.x - segment.start.x) * ratio,
+        y: segment.start.y + (segment.end.y - segment.start.y) * ratio,
+        angle: Math.atan2(segment.end.y - segment.start.y, segment.end.x - segment.start.x) * 180 / Math.PI
+      };
+    }
+    travelled += segment.length;
+  }
+  const end = points[points.length - 1];
+  return { x: end.x, y: end.y, angle: 0 };
+}
+
+function renderInterfaceAssembly(points) {
+  const midpoint = pathMidpointGeometry(points);
+  return `<g class="interface-assembly" transform="translate(${midpoint.x} ${midpoint.y}) rotate(${midpoint.angle})" pointer-events="none">
+    <rect x="-32" y="-13" width="64" height="26" rx="5" fill="#fff"/>
+    <line x1="-30" y1="0" x2="-16" y2="0" stroke="#3c4658" stroke-width="2"/>
+    <circle cx="-8" cy="0" r="8" fill="#fff" stroke="#3c4658" stroke-width="2"/>
+    <path d="M 8 -10 A 10 10 0 0 1 8 10" fill="none" stroke="#3c4658" stroke-width="2"/>
+    <line x1="8" y1="0" x2="30" y2="0" stroke="#3c4658" stroke-width="2"/>
+  </g>`;
+}
+
 function relationshipGeometry(rel, byId) {
   const source = byId.get(rel.source);
   const target = byId.get(rel.target);
@@ -385,17 +415,22 @@ function renderRelationship(rel, byId) {
   const dash = ["realization", "include", "extend", "objectFlow"].includes(rel.kind) ? `stroke-dasharray="7 6"` : rel.kind === "dependency" ? `stroke-dasharray="2 6" stroke-linecap="round"` : "";
   const relClass = rel.kind === "dependency" ? "uml-dependency" : rel.kind === "interfaceConnector" ? "uml-interface-link" : "";
   const midpoint = pathMidpoint(points);
-  const labelX = midpoint.x + (rel.route?.labelOffset?.x || 0);
-  const labelY = midpoint.y + (rel.route?.labelOffset?.y || -8);
+  const interfaceMidpoint = rel.kind === "interfaceConnector" ? pathMidpointGeometry(points) : null;
+  const interfaceAngle = interfaceMidpoint ? interfaceMidpoint.angle * Math.PI / 180 : 0;
+  const interfaceLabelDistance = interfaceMidpoint && Math.abs(Math.sin(interfaceAngle)) > 0.7 ? 62 : 26;
+  const labelX = interfaceMidpoint ? interfaceMidpoint.x + Math.sin(interfaceAngle) * interfaceLabelDistance : midpoint.x + (rel.route?.labelOffset?.x || 0);
+  const labelY = interfaceMidpoint ? interfaceMidpoint.y - Math.cos(interfaceAngle) * interfaceLabelDistance : midpoint.y + (rel.route?.labelOffset?.y || -8);
   const cap = renderConnectorCap(rel.kind, points.at(-2) || a, b);
   const interrupt = rel.kind === "interruptFlow" ? renderInterruptZigZag(a, b) : "";
+  const interfaceAssembly = rel.kind === "interfaceConnector" ? renderInterfaceAssembly(points) : "";
   return `<g class="uml-edge ${relClass}" data-id="${esc(rel.id)}">
     <path class="edge-hit" d="${path}" fill="none" stroke="transparent" stroke-width="16"/>
     <path class="edge-path" d="${path}" fill="none" stroke="#3c4658" stroke-width="2" stroke-linejoin="round" ${dash}/>
+    ${interfaceAssembly}
     ${cap}
     ${interrupt}
-    <rect x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
-    <text x="${labelX}" y="${labelY}" text-anchor="middle" class="edge-label">${esc(rel.label || rel.kind)}</text>
+    <rect class="edge-label-bg" x="${labelX - 48}" y="${labelY - 15}" width="96" height="22" rx="4" fill="#ffffff" opacity=".88"/>
+    <text x="${labelX}" y="${labelY}" text-anchor="middle" class="edge-label">${esc(rel.label || (rel.kind === "interfaceConnector" ? "interface" : rel.kind))}</text>
   </g>`;
 }
 

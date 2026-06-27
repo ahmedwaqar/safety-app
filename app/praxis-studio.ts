@@ -1,5 +1,6 @@
-import { architectureAlias, architectureComponentsFromDiagram, architectureDiagramFromPlantUml, architectureWorkspaceFromPlantUml, componentsFromPlantUml, plantUmlFromArchitectureDiagram } from "./architecture-model";
-import { UML_PALETTE_GROUPS, UML_RELATIONSHIP_KINDS, applyAutoLayout, createElement, createRelationship, parseNotation, renderSvg, validateDiagram } from "./uml-core.js";
+import { architectureAlias, architectureComponentsFromDiagram, architectureWorkspaceFromPlantUml, normalizeLegacyInterfaceConnectors, plantUmlFromArchitectureDiagram } from "./architecture-model";
+import { parseArchitectureDsl, serializeArchitectureDsl } from "./architecture-dsl";
+import { UML_PALETTE_GROUPS, UML_RELATIONSHIP_KINDS, applyAutoLayout, createElement, createRelationship, renderSvg, validateDiagram } from "./uml-core.js";
 
 // Application configuration and persisted project formats.
 
@@ -232,7 +233,6 @@ function blankWorkspace() {
 // changes through save() so storage and rendering stay outside feature logic.
 let workspaceRegistry;
 let state = load();
-let diagramUrl;
 let serverSyncReady = false;
 let activeNotepadCell: HTMLTableCellElement | null = null;
 let notepadSaveTimer: ReturnType<typeof setTimeout>;
@@ -250,6 +250,7 @@ let architecturePaletteGroup = "Structural";
 let architectureConnectorKind = "dependency";
 let architectureInspectorEditing = false;
 let architectureInspectorRenderTimer: ReturnType<typeof setTimeout>;
+let architectureSourceTimer: ReturnType<typeof setTimeout>;
 let architectureDrag: { id: string; pointerId: number; startX: number; startY: number; x: number; y: number; latestX: number; latestY: number; moved: boolean; remembered: boolean; frame: number; viewport: { minX: number; minY: number; width: number; height: number } } | null = null;
 let architectureConnection: { pointerId: number; relationshipId: string; endpoint: "source" | "target"; fixedElementId: string; fixedSide: string; point: { x: number; y: number }; targetId: string; targetSide: string; moved: boolean; frame: number; viewport: { minX: number; minY: number; width: number; height: number } } | null = null;
 let architectureSuppressClick = false;
@@ -278,6 +279,10 @@ function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   for (const [key, value] of Object.entries(defaults)) workspace[key] ??= structuredClone(value);
   for (const [key, value] of Object.entries(defaults.assurance)) workspace.assurance[key] ??= structuredClone(value);
   if (!workspace.architecture?.diagrams?.length) workspace.architecture = architectureWorkspaceFromPlantUml(workspace.plantuml || "@startuml\n@enduml");
+  workspace.architecture.diagrams.forEach(diagram => {
+    normalizeLegacyInterfaceConnectors(diagram);
+    diagram.source ||= serializeArchitectureDsl(diagram);
+  });
   workspace.architecture.activeDiagramId ||= workspace.architecture.diagrams[0]?.id;
   workspace.hazards.forEach(hazard => {
     hazard.status ??= "Open"; hazard.owner ??= ""; hazard.control ??= ""; hazard.residualRisk ??= ""; hazard.closureEvidence ??= "";
@@ -590,32 +595,29 @@ const silBands = {
   low: { "SIL 1": [1e-2, 1e-1], "SIL 2": [1e-3, 1e-2], "SIL 3": [1e-4, 1e-3], "SIL 4": [1e-5, 1e-4] }
 };
 
-// Architecture feature: PlantUML editor completion state and behavior.
+// Architecture DSL completion state and behavior.
 const plantumlCompletions = [
-  ["@startuml", "@startuml\n$0\n@enduml", "diagram wrapper"],
-  ["@enduml", "@enduml", "diagram wrapper"],
-  ["title", "title $0", "diagram title"],
-  ["component", 'component "$0" as ALIAS', "component"],
-  ["node", 'node "$0" as ALIAS', "node"],
-  ["database", 'database "$0" as ALIAS', "database"],
-  ["queue", 'queue "$0" as ALIAS', "queue"],
-  ["cloud", 'cloud "$0" as ALIAS', "cloud"],
-  ["rectangle", 'rectangle "$0" as ALIAS', "rectangle"],
-  ["artifact", 'artifact "$0" as ALIAS', "artifact"],
-  ["package", 'package "$0" {\n}', "package"],
-  ["frame", 'frame "$0" {\n}', "frame"],
-  ["actor", 'actor "$0" as ALIAS', "actor"],
-  ["interface", 'interface "$0" as ALIAS', "interface"],
-  ["note", "note right of ALIAS\n  $0\nend note", "note"],
-  ["skinparam", "skinparam $0", "styling"],
-  ["left to right direction", "left to right direction", "layout"],
-  ["hide stereotype", "hide stereotype", "styling"],
-  ["legend", "legend\n  $0\nendlegend", "legend"]
+  ["uml", 'uml component "$0" {\n}', "diagram declaration"],
+  ["component", 'component COMPONENT_ID "$0" at 120, 120 size 220, 104', "component entity"],
+  ["subsystem", 'subsystem SUBSYSTEM_ID "$0" at 120, 120 size 300, 190', "subsystem entity"],
+  ["class", 'class CLASS_ID "$0" at 120, 120 size 210, 130 {\n  attribute "+ id: UUID"\n  operation "+ validate(): Result"\n}', "class entity"],
+  ["node", 'node NODE_ID "$0" at 120, 120 size 230, 130', "deployment node"],
+  ["port", 'port PORT_ID "$0" at 120, 120 size 44, 44', "port entity"],
+  ["artifact", 'artifact ARTIFACT_ID "$0" at 120, 120 size 180, 110', "artifact entity"],
+  ["note", 'note NOTE_ID "$0" at 120, 120 size 180, 110 {\n  body "Note text"\n}', "annotation entity"],
+  ["interface", 'interface INTERFACE_ID "$0" from SOURCE.right to TARGET.left', "native interface connector"],
+  ["dependency", 'dependency DEPENDENCY_ID "$0" from SOURCE.right to TARGET.left', "dependency connector"],
+  ["association", 'association ASSOCIATION_ID "$0" from SOURCE.right to TARGET.left', "association connector"],
+  ["generalization", 'generalization GENERALIZATION_ID "$0" from SOURCE.top to TARGET.bottom', "generalization connector"],
+  ["stereotype", 'stereotype "$0"', "element stereotype"],
+  ["attribute", 'attribute "$0"', "class attribute"],
+  ["operation", 'operation "$0"', "class operation"],
+  ["documentation", 'documentation "$0"', "element documentation"]
 ].map(([label, insert, detail]) => ({ label, insert, detail }));
 let plantumlMatches = [];
 let plantumlCompletionIndex = 0;
 let plantumlCompletionRange;
-let plantumlEditorDraft = "";
+let architectureSourceDraft = "";
 
 function currentPlantumlToken(editor = $("#plantuml-source")) {
   const beforeCursor = editor.value.slice(0, editor.selectionStart);
@@ -986,16 +988,45 @@ function activeArchitectureDiagram() {
   return state.architecture.diagrams.find(diagram => diagram.id === state.architecture.activeDiagramId) || state.architecture.diagrams[0];
 }
 function setActiveArchitectureDiagram(diagram) {
+  normalizeLegacyInterfaceConnectors(diagram);
   const index = state.architecture.diagrams.findIndex(item => item.id === diagram.id);
   if (index >= 0) state.architecture.diagrams[index] = diagram; else state.architecture.diagrams.push(diagram);
   state.architecture.activeDiagramId = diagram.id;
 }
-function syncArchitectureContext(diagram = activeArchitectureDiagram()) {
+function syncArchitectureContext(diagram = activeArchitectureDiagram(), { updateSource = true } = {}) {
   if (diagram.elements?.length) {
     state.components = architectureComponentsFromDiagram(diagram);
     state.plantuml = plantUmlFromArchitectureDiagram(diagram);
   } else {
-    state.components = componentsFromPlantUml(state.plantuml);
+    state.components = [];
+    state.plantuml = plantUmlFromArchitectureDiagram(diagram);
+  }
+  if (updateSource) diagram.source = serializeArchitectureDsl(diagram);
+}
+function applyArchitectureSource(source = ($("#plantuml-source") as HTMLTextAreaElement).value, { remember = true } = {}) {
+  const status = $("#render-status");
+  try {
+    const current = activeArchitectureDiagram();
+    const parsed = parseArchitectureDsl(source, current);
+    if (remember) rememberArchitecture();
+    parsed.source = source;
+    delete (parsed as any).sourceDraft;
+    setActiveArchitectureDiagram(parsed);
+    if (architectureSelectedId && !parsed.elements.some(element => element.id === architectureSelectedId) && !parsed.relationships.some(rel => `edge:${rel.id}` === architectureSelectedId)) architectureSelectedId = "";
+    syncArchitectureContext(parsed, { updateSource: false });
+    persistState();
+    status.className = "render-status success";
+    status.textContent = `${parsed.elements.length} entities · ${parsed.relationships.length} connectors`;
+    renderArchitecture();
+    renderMetrics();
+    renderFaultTreeBuilder();
+    return true;
+  } catch (error) {
+    activeArchitectureDiagram().sourceDraft = source;
+    persistState();
+    status.className = "render-status error";
+    status.textContent = error.message || "Invalid UML source";
+    return false;
   }
 }
 function rememberArchitecture() {
@@ -1912,7 +1943,7 @@ function renderWorkflow() {
 // Architecture feature.
 function renderArchitecture() {
   const diagram = activeArchitectureDiagram();
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: !diagram.source });
   const validation = validateDiagram(diagram);
   const selectedElement = diagram.elements.find(element => element.id === architectureSelectedId);
   const selectedRelationship = diagram.relationships.find(rel => `edge:${rel.id}` === architectureSelectedId);
@@ -1929,9 +1960,9 @@ function renderArchitecture() {
   $("#architecture-validation").className = validationClass;
   $("#architecture-validation").textContent = validation.warnings.length ? `${validation.warnings.length} model warning${validation.warnings.length === 1 ? "" : "s"}` : "Valid UML architecture";
   const plantumlEditor = $("#plantuml-source") as HTMLTextAreaElement;
-  if (document.activeElement !== plantumlEditor) plantumlEditor.value = state.plantuml;
+  if (document.activeElement !== plantumlEditor) plantumlEditor.value = diagram.sourceDraft || diagram.source || serializeArchitectureDsl(diagram);
   $("#component-count").textContent = state.components.length;
-  $("#component-list").innerHTML = state.components.length ? state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
+  $("#component-list").innerHTML = state.components.length ? state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Define component-like entities in UML source or add them from the palette.</p>`;
   $("#architecture-outline").innerHTML = diagram.elements.length ? diagram.elements.map(element => `<button class="${element.id === architectureSelectedId ? "active" : ""}" data-select-architecture="${esc(element.id)}">${esc(element.kind)} · ${esc(element.name)}</button>`).join("") : `<p class="dialog-copy">Add elements from the palette.</p>`;
   if (selectedRelationship) {
     const sourceOptions = diagram.elements.map(element => `<option value="${esc(element.id)}" ${element.id === selectedRelationship.source ? "selected" : ""}>${esc(element.name)}</option>`).join("");
@@ -2717,7 +2748,7 @@ $("#fmeda-form").addEventListener("submit", event => {
   $("#fmeda-dialog").close(); save();
 });
 
-// Native architecture workbench and PlantUML notation sync.
+// Native architecture workbench and source-first UML DSL synchronization.
 $("#architecture-palette-group").addEventListener("change", event => { architecturePaletteGroup = (event.target as HTMLSelectElement).value; renderArchitecture(); });
 $("#architecture-connector-kind").addEventListener("change", event => { architectureConnectorKind = (event.target as HTMLSelectElement).value; });
 $("#architecture-palette").addEventListener("click", event => {
@@ -2907,38 +2938,17 @@ $("#architecture-zoom-in").addEventListener("click", () => { architectureZoom = 
 $("#architecture-zoom-out").addEventListener("click", () => { architectureZoom = Math.max(0.5, Math.round((architectureZoom - 0.1) * 10) / 10); renderArchitecture(); });
 $("#plantuml-source").addEventListener("input", () => {
   plantumlCompletionIndex = 0;
-  state.plantuml = ($("#plantuml-source") as HTMLTextAreaElement).value;
-  plantumlEditorDraft = state.plantuml;
-  const sourceComponents = componentsFromPlantUml(state.plantuml);
-  if (!sourceComponents.length) {
-    const parsed = parseNotation(state.plantuml, "component");
-    if (parsed.diagram.elements.length) {
-      setActiveArchitectureDiagram(parsed.diagram);
-      syncArchitectureContext(activeArchitectureDiagram());
-      renderArchitecture();
-    } else {
-      state.components = [];
-      $("#component-count").textContent = "0";
-      $("#component-list").innerHTML = `<p class="dialog-copy">Add component declarations or use the UML palette to define reusable architecture components.</p>`;
-    }
-  } else {
-    setActiveArchitectureDiagram(architectureDiagramFromPlantUml(state.plantuml, activeArchitectureDiagram().name || "System architecture"));
-    syncArchitectureContext(activeArchitectureDiagram());
-    renderArchitecture();
-  }
+  architectureSourceDraft = ($("#plantuml-source") as HTMLTextAreaElement).value;
+  activeArchitectureDiagram().sourceDraft = architectureSourceDraft;
   persistState();
+  const status = $("#render-status");
+  status.className = "render-status";
+  status.textContent = "Editing UML source...";
+  clearTimeout(architectureSourceTimer);
+  architectureSourceTimer = setTimeout(() => applyArchitectureSource(architectureSourceDraft), 260);
   renderPlantumlCompletions();
 });
 $("#plantuml-source").addEventListener("keydown", event => {
-  const editor = $("#plantuml-source") as HTMLTextAreaElement;
-  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement !== editor && plantumlEditorDraft) {
-    editor.value = plantumlEditorDraft;
-    editor.setSelectionRange(editor.value.length, editor.value.length);
-  }
-  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement === editor && state.plantuml && editor.value !== state.plantuml) {
-    editor.value = state.plantuml;
-    editor.setSelectionRange(editor.value.length, editor.value.length);
-  }
   if ($("#plantuml-completions").hidden && (event.key === "Enter" || event.key === "Tab")) renderPlantumlCompletions();
   if ($("#plantuml-completions").hidden) return;
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -2954,14 +2964,6 @@ $("#plantuml-source").addEventListener("keydown", event => {
       plantumlCompletionIndex = 0;
     }
     insertPlantumlCompletion();
-    if (document.activeElement !== editor && plantumlEditorDraft) {
-      editor.value = plantumlEditorDraft;
-      const cursor = plantumlEditorDraft === 'component "" as ALIAS' ? 11 : editor.value.length;
-      editor.setSelectionRange(cursor, cursor);
-      state.plantuml = plantumlEditorDraft;
-      persistState();
-      closePlantumlCompletions();
-    }
   } else if (event.key === "Escape") {
     event.preventDefault(); closePlantumlCompletions();
   }
@@ -2970,7 +2972,11 @@ $("#plantuml-completions").addEventListener("mousedown", event => {
   const item = eventElement(event).closest<HTMLElement>("[data-completion-index]");
   if (item) { event.preventDefault(); insertPlantumlCompletion(Number(item.dataset.completionIndex)); }
 });
-$("#plantuml-source").addEventListener("blur", () => setTimeout(closePlantumlCompletions));
+$("#plantuml-source").addEventListener("blur", () => {
+  clearTimeout(architectureSourceTimer);
+  applyArchitectureSource(($("#plantuml-source") as HTMLTextAreaElement).value);
+  setTimeout(closePlantumlCompletions);
+});
 $("#sync-fmeda-btn").addEventListener("click", () => {
   const byComponent = new Map();
   state.fmeda.rows.filter(row => row.classification === "dangerous_undetected").forEach(row => byComponent.set(row.component, (byComponent.get(row.component) || 0) + evaluateExpression(row.expression)));
@@ -3104,20 +3110,14 @@ $("#fault-tree-save-btn").addEventListener("click", () => {
   }
 });
 $("#fault-tree-generate-btn").addEventListener("click", () => {
-  const source = ($("#plantuml-source") as HTMLTextAreaElement).value || state.plantuml;
-  const imported = componentsFromPlantUml(source);
-  if (imported.length) {
-    state.plantuml = source;
-    state.components = imported;
-  }
-  if (!state.components.length) return alert("No architecture components found. Add PlantUML component declarations in System architecture, then generate the starter tree.");
+  if (!applyArchitectureSource(($("#plantuml-source") as HTMLTextAreaElement).value)) return alert("Fix the UML source before generating a fault tree.");
+  if (!state.components.length) return alert("No architecture components found. Define component-like entities in UML source, then generate the starter tree.");
   state.faultTree.dsl = faultTreeFromArchitectureDsl();
   state.faultTree.activeLayer = "All";
   faultTreeEditorLayer = "All";
   state.faultTree.layerCount = Math.max(state.faultTree.layerCount || 3, 2);
   save();
-  $("#render-btn").click();
-  alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
+  alert(`${state.components.length} architecture components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", event => {
   commitFaultTreeEditorDraft();
@@ -3152,36 +3152,16 @@ $("#fault-tree-analysis").addEventListener("click", event => {
   if (target) focusFaultTreeLine(Number(target.dataset.faultTreeGoToLine));
 });
 
-$("#render-btn").addEventListener("click", async () => {
-  const button = $("#render-btn"); const status = $("#render-status"); const preview = $("#diagram-preview");
-  state.plantuml = plantUmlFromArchitectureDiagram(activeArchitectureDiagram());
-  ($("#plantuml-source") as HTMLTextAreaElement).value = state.plantuml;
-  state.components = architectureComponentsFromDiagram(activeArchitectureDiagram());
-  persistState();
-  button.disabled = true; status.className = "render-status"; status.textContent = "Syncing...";
-  const pendingMessage = document.createElement("p"); pendingMessage.textContent = "Rendering synchronized PlantUML...";
-  preview.replaceChildren(pendingMessage);
-  try {
-    const response = await fetch("/api/plantuml/render", { method: "POST", headers: { "content-type": "text/plain" }, body: state.plantuml });
-    if (!response.ok) throw new Error(await response.text());
-    if (diagramUrl) URL.revokeObjectURL(diagramUrl);
-    diagramUrl = URL.createObjectURL(await response.blob());
-    const image = new Image(); image.alt = "Rendered PlantUML architecture diagram"; image.src = diagramUrl;
-    preview.replaceChildren(image);
-    status.className = "render-status success"; status.textContent = "Diagram rendered";
-  } catch (error) {
-    const message = document.createElement("p"); message.textContent = error.message || "PlantUML source synced; local SVG validation is unavailable.";
-    preview.replaceChildren(message);
-    status.className = "render-status error"; status.textContent = "PlantUML validation failed";
-  } finally {
-    button.disabled = false;
-    renderArchitecture();
-  }
+$("#render-btn").addEventListener("click", () => {
+  clearTimeout(architectureSourceTimer);
+  applyArchitectureSource(($("#plantuml-source") as HTMLTextAreaElement).value);
 });
 
 // Portable project export.
 $("#export-btn").addEventListener("click", () => {
-  state.plantuml = $("#plantuml-source").value; persistState();
+  const source = ($("#plantuml-source") as HTMLTextAreaElement).value;
+  if (!applyArchitectureSource(source, { remember: false })) activeArchitectureDiagram().sourceDraft = source;
+  persistState();
   const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
   const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.praxis.json` });
