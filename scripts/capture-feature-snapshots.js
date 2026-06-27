@@ -30,6 +30,7 @@ const snapshots = [
   ["amr-sil-assessment", "sil"],
   ["quantitative-safety", "quantitative"],
   ["fmeda-worksheet", "fmeda"],
+  ["fault-tree-analysis", "fault-tree"],
   ["iso-26262-hara", "hara"],
   ["fmea-worksheet", "fmea"],
   ["safety-requirements", "requirements"],
@@ -167,12 +168,6 @@ try {
 
   for (const [name, view] of snapshots) {
     await evaluate(`document.querySelector('[data-view="${view}"]').click()`);
-    if (view === "architecture") {
-      await evaluate("document.querySelector('#render-btn').click()");
-      await retry(async () => {
-        if (!await evaluate("document.querySelector('#diagram-preview img')?.complete === true")) throw new Error("Diagram is rendering");
-      });
-    }
     await capture(name);
   }
 

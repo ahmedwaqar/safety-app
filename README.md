@@ -23,13 +23,13 @@ The software is provided **as is**, without warranty of any kind and without lia
 | Overview | Safety-case metrics, residual-risk summary, high-priority failure modes, analysis coverage, and architecture components in scope |
 | Engineering notes | Capture rich text, equations, tables, figures, artifact links, and stakeholder FMEA/HARA drafts that can be cleaned and imported |
 | Engineering workflow | Configure development phases and activities, insert safety checkpoints, define gate criteria, record evidence, assign owners, and launch linked analyses |
-| Architecture | Paste PlantUML source, render an SVG diagram locally, and import component aliases as reusable references |
+| Architecture | Model UML components and interfaces natively with a palette, canvas, inspector, outline, validation, layout tools, smooth property editing, PlantUML synchronization, local SVG rendering, and reusable component aliases |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
 | Hazard catalogue | Maintain reusable hazards and view linked analysis references |
 | AMR SIL assessment | Estimate a target Safety Integrity Level for AMR safety functions with a transparent C/F/P/W risk graph |
 | Quantitative safety | Connect reliability inputs to architecture components, calculate residual dangerous failure rates, estimate PFH or PFDavg, and review redundancy needs |
 | FMEDA worksheet | Classify architecture-linked hardware failure modes, evaluate symbolic failure-rate expressions, and roll up λS, λDD, λDU, DC, and SFF |
-| Fault tree analysis | Model top events with a DSL, render nested/layered fault trees, generate starting trees from architecture, and derive qualitative minimal cut sets |
+| Fault tree analysis | Model top events with a DSL, render nested/layered fault trees with connector paths and zoom controls, generate starting trees from architecture, filter editor layers, and derive qualitative minimal cut sets |
 | ISO 26262 HARA | Create hazardous events, classify severity (`S0`-`S3`), exposure (`E0`-`E4`), and controllability (`C0`-`C3`), then derive ASIL automatically |
 | Safety goals | Define top-level safety objectives with ASIL, safe state, FTTI, and hazardous-event traceability |
 | FMEA worksheet | Record component failure modes, effects, linked hazards and situations, recommended actions, and automatic RPN scoring |
@@ -52,7 +52,7 @@ Select any figure to open the full-resolution snapshot.
   <tr><th>Engineering workflow</th><th>Architecture</th></tr>
   <tr>
     <td><a href="docs/images/features/engineering-workflow.png"><img src="docs/images/features/engineering-workflow.png" alt="Engineering workflow workspace"></a></td>
-    <td><a href="docs/images/features/architecture.png"><img src="docs/images/features/architecture.png" alt="Architecture editor and rendered PlantUML diagram"></a></td>
+    <td><a href="docs/images/features/architecture.png"><img src="docs/images/features/architecture.png" alt="Native UML architecture workbench"></a></td>
   </tr>
   <tr><th>Operational situations</th><th>Hazard catalogue</th></tr>
   <tr>
@@ -64,25 +64,30 @@ Select any figure to open the full-resolution snapshot.
     <td><a href="docs/images/features/amr-sil-assessment.png"><img src="docs/images/features/amr-sil-assessment.png" alt="AMR SIL assessment workspace"></a></td>
     <td><a href="docs/images/features/quantitative-safety.png"><img src="docs/images/features/quantitative-safety.png" alt="Quantitative safety calculation workspace"></a></td>
   </tr>
-  <tr><th>FMEDA worksheet</th><th>ISO 26262 HARA and safety goals</th></tr>
+  <tr><th>FMEDA worksheet</th><th>Fault tree analysis</th></tr>
   <tr>
     <td><a href="docs/images/features/fmeda-worksheet.png"><img src="docs/images/features/fmeda-worksheet.png" alt="FMEDA worksheet"></a></td>
+    <td><a href="docs/images/features/fault-tree-analysis.png"><img src="docs/images/features/fault-tree-analysis.png" alt="Fault tree analysis workspace"></a></td>
+  </tr>
+  <tr><th>ISO 26262 HARA and safety goals</th><th>FMEA worksheet</th></tr>
+  <tr>
     <td><a href="docs/images/features/iso-26262-hara.png"><img src="docs/images/features/iso-26262-hara.png" alt="ISO 26262 HARA and safety goals workspace"></a></td>
-  </tr>
-  <tr><th>FMEA worksheet</th><th>Custom FMEA templates</th></tr>
-  <tr>
     <td><a href="docs/images/features/fmea-worksheet.png"><img src="docs/images/features/fmea-worksheet.png" alt="FMEA worksheet"></a></td>
+  </tr>
+  <tr><th>Custom FMEA templates</th><th>Safety requirements</th></tr>
+  <tr>
     <td><a href="docs/images/features/custom-fmea-template.png"><img src="docs/images/features/custom-fmea-template.png" alt="Custom FMEA template dialog"></a></td>
-  </tr>
-  <tr><th>Safety requirements</th><th>Lifecycle assurance</th></tr>
-  <tr>
     <td><a href="docs/images/features/safety-requirements.png"><img src="docs/images/features/safety-requirements.png" alt="Safety requirements workspace"></a></td>
-    <td><a href="docs/images/features/lifecycle-assurance.png"><img src="docs/images/features/lifecycle-assurance.png" alt="Lifecycle assurance workspace"></a></td>
   </tr>
-  <tr><th>Workspace data</th><th>Input guidance</th></tr>
+  <tr><th>Lifecycle assurance</th><th>Workspace data</th></tr>
   <tr>
+    <td><a href="docs/images/features/lifecycle-assurance.png"><img src="docs/images/features/lifecycle-assurance.png" alt="Lifecycle assurance workspace"></a></td>
     <td><a href="docs/images/features/workspace-data.png"><img src="docs/images/features/workspace-data.png" alt="Workspace file menu"></a></td>
+  </tr>
+  <tr><th>Input guidance</th><th></th></tr>
+  <tr>
     <td><a href="docs/images/features/input-guidance.png"><img src="docs/images/features/input-guidance.png" alt="Input guidance dialog"></a></td>
+    <td></td>
   </tr>
 </table>
 
@@ -143,7 +148,7 @@ Opening `index.html` directly still provides the analysis workspace, but diagram
 ## Suggested Workflow
 
 1. Open **Engineering workflow** to plan phases, activities, safety checkpoints, gates, and evidence.
-2. Open **Architecture**, paste or update the PlantUML model, and select **Render diagram**. Component declarations automatically become available as references throughout the analysis.
+2. Open **Architecture** to model the system with the native UML palette, canvas, inspector, and layout tools. The PlantUML notation stays synchronized, and architecture components automatically become available as references throughout the analysis.
 4. Add the relevant **Operational situations**.
 5. Maintain the reusable **Hazard catalogue**.
 6. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
@@ -179,13 +184,20 @@ Safety is treated as a continuous engineering lens rather than a single downstre
 
 ### Architecture
 
-Paste PlantUML into the editor and select:
+Use **Architecture** as a native UML workbench inside the safety workspace:
 
-- Use the autocomplete menu while typing common PlantUML keywords. Select a snippet with `ArrowUp` / `ArrowDown` and insert it with `Enter` or `Tab`.
-- **Render diagram** to generate an SVG preview with the attached JAR.
-- Component declarations automatically define references for FMEA rows, requirements, and fault-tree basic events as you edit the architecture.
+- Add UML elements from the palette and select them on the canvas or outline.
+- Drag shapes directly on the canvas with zoom-aware, grid-snapped movement.
+- Edit names, aliases, kind, documentation, and connector labels in the inspector.
+- Type freely in inspector property fields; edits are captured as drafts and committed without rebuilding the field on every keystroke.
+- Connect selected elements to other elements with relationship types such as dependency, association, realization, aggregation, composition, delegation, and interface connectors.
+- Use layout modes such as layered left-to-right, hierarchical top-to-bottom, service flow, C4 nested, radial, matrix, and compact.
+- Use undo, redo, keyboard delete, and zoom controls while refining the model.
+- Review validation warnings for unsupported element kinds, missing names, missing relationship endpoints, and diagram-specific notation issues.
 
-The importer recognizes `component`, `node`, `database`, `queue`, `cloud`, `rectangle`, `artifact`, `package`, and `frame` declarations.
+The architecture model is stored in the active Praxis Studio workspace. It synchronizes to PlantUML notation so the source remains portable and can still be rendered locally with the attached PlantUML JAR. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events.
+
+You can still paste or edit PlantUML directly. The autocomplete menu supports common PlantUML keywords; select a snippet with `ArrowUp` / `ArrowDown` and insert it with `Enter` or `Tab`. The importer recognizes `component`, `node`, `database`, `queue`, `cloud`, `rectangle`, `artifact`, `package`, and `frame` declarations and maps them into the native architecture model.
 
 ### Operational Situations And Hazards
 
@@ -449,7 +461,7 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, qualitative cut sets, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, PlantUML component import, diagram rendering, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, native UML architecture inspection, smooth text-property editing, PlantUML component import, diagram rendering, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
 
 Compile-check the browser and server entry points:
 
@@ -465,6 +477,8 @@ bun build server.js --target=bun --outfile=/tmp/praxis-server-check.js
 index.html               Web-app structure and dialogs
 styles.css               Responsive application styling
 app/
+  uml-core.js            Native UML model, validation, layout, notation, and SVG renderer
+  architecture-model.ts  Architecture workspace, PlantUML conversion, and component-reference helpers
   praxis-studio.ts       Typed feature registry, browser state, workflows, and traceability source
   praxis-studio.browser.js
                          Generated browser artifact for direct index.html use

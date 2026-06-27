@@ -852,9 +852,54 @@ try {
     assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "PlantUML alias is missing");
   });
 
+  await test("native architecture inspector supports smooth text editing", async () => {
+    await retry(async () => { assert(await count("#architecture-stage .uml-node") > 0, "architecture canvas did not render UML nodes"); });
+    await evaluate(`document.querySelector("#architecture-stage .uml-node").dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    assert(await count("#architecture-element-name") === 1, "architecture element inspector did not open");
+    assert(await evaluate(`(() => {
+      const field = document.querySelector("#architecture-element-name");
+      field.focus();
+      for (const value of ["T", "Te", "Test controller commercial edit"]) {
+        field.value = value;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        if (document.activeElement !== field || field.value !== value) return false;
+      }
+      return true;
+    })()`), "architecture inspector rebuilt or lost focus during text entry");
+    await evaluate(`document.querySelector("#architecture-element-name").dispatchEvent(new Event("change", { bubbles: true }))`);
+    assert(await evaluate(`document.querySelector("#architecture-outline").textContent.includes("Test controller commercial edit")`), "architecture inspector edit did not commit to the model outline");
+  });
+
+  await test("native architecture canvas drags shapes with pointer interaction", async () => {
+    const moved = await evaluate(`(() => {
+      const diagram = activeArchitectureDiagram();
+      const ordered = [...diagram.elements].sort((a, b) => a.view.y - b.view.y);
+      const id = ordered[0]?.id;
+      const otherId = ordered.find(item => item.id !== id)?.id;
+      const node = document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']");
+      const other = document.querySelector("#architecture-stage .uml-node[data-id='" + otherId + "']");
+      const element = diagram.elements.find(item => item.id === id);
+      if (!node || !other || !element) return false;
+      const before = { x: element.view.x, y: element.view.y };
+      const otherBefore = other.getBoundingClientRect();
+      const viewBoxBefore = document.querySelector("#architecture-stage svg").getAttribute("viewBox");
+      node.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, pointerId: 7, clientX: 240, clientY: 240 }));
+      window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 7, clientX: 313, clientY: 289 }));
+      const otherAfter = document.querySelector("#architecture-stage .uml-node[data-id='" + otherId + "']").getBoundingClientRect();
+      const viewBoxDuringDrag = document.querySelector("#architecture-stage svg").getAttribute("viewBox");
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 7, clientX: 313, clientY: 289 }));
+      const after = activeArchitectureDiagram().elements.find(item => item.id === id).view;
+      const otherStayedPut = Math.abs(otherBefore.left - otherAfter.left) < 1 && Math.abs(otherBefore.top - otherAfter.top) < 1;
+      const movedSmoothly = Math.abs(after.x - (before.x + 73)) < 0.2 && Math.abs(after.y - (before.y + 49)) < 0.2;
+      return Boolean(movedSmoothly && otherStayedPut && viewBoxBefore === viewBoxDuringDrag && document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']"));
+    })()`);
+    assert(moved, "architecture shape drag moved the wrong visual target or shifted the canvas viewport");
+  });
+
   await test("fault tree analysis supports DSL gates, layers, architecture generation, and qualitative cuts", async () => {
     await click('[data-view="fault-tree"]');
     assert(await evaluate(`document.querySelector("#fault-tree-view").classList.contains("active")`), "fault tree view did not open");
+    assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "All", "fault tree should open in the All layers view");
     await click("#fault-tree-generate-btn");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("TEST_CTRL_INCORRECT_OUTPUT") && document.querySelector("#fault-tree-source").value.includes("TEST_ARM_FAIL_TO_ACTUATE")`), "architecture-generated fault tree did not derive component-specific malfunctioning behaviours");
     assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes('fault_tree "Architecture-derived malfunctioning behaviour starter"')`), "architecture-generated fault tree did not use the starter model");
@@ -998,9 +1043,12 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     assert(await evaluate(`document.querySelector("#fault-tree-layer").textContent.includes("Layer 4")`), "configured layer count did not update the layer view");
     await fill("#fault-tree-layer", "Layer 2");
     assert(await evaluate(`document.querySelector("#fault-tree-layer").value`) === "Layer 2", "fault tree layer selection was not retained");
-    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Sensor one dangerous failure")`), "fault tree layer did not render matching basic events");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("basic S1") && !document.querySelector("#fault-tree-source").value.includes("basic A")`), "editor layer filter did not show only Layer 2 DSL elements");
+    await fill("#fault-tree-source", await evaluate(`document.querySelector("#fault-tree-source").value.replace("Sensor one dangerous failure", "Layer-filtered sensor edit")`));
+    assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Layer-filtered sensor edit")`), "fault tree layer did not render matching basic events");
     assert(!await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Channel A dangerous failure")`), "numbered layer filter rendered an entity from another layer");
     await fill("#fault-tree-layer", "All");
+    assert(await evaluate(`document.querySelector("#fault-tree-source").value.includes("Layer-filtered sensor edit") && document.querySelector("#fault-tree-source").value.includes("basic A")`), "layer-filtered DSL edits were not merged back into the full tree");
     assert(await evaluate(`document.querySelector("#fault-tree-canvas").textContent.includes("Channel A dangerous failure")`), "All layers view did not restore every layer entity");
     await evaluate(`(() => {
       const ids = Array.from({ length: 120 }, (_, index) => "E" + String(index + 1).padStart(3, "0"));

@@ -1,3 +1,6 @@
+import { architectureAlias, architectureComponentsFromDiagram, architectureDiagramFromPlantUml, architectureWorkspaceFromPlantUml, componentsFromPlantUml, plantUmlFromArchitectureDiagram } from "./architecture-model";
+import { UML_PALETTE_GROUPS, UML_RELATIONSHIP_KINDS, applyAutoLayout, createElement, createRelationship, parseNotation, renderSvg, validateDiagram } from "./uml-core.js";
+
 // Application configuration and persisted project formats.
 
 // Note: fault-tree-help.ts imported inline (defined in same bundle)
@@ -52,6 +55,23 @@ CTRL --> ARM : motion command
 ARM --> TOOL : mechanical interface
 HMI --> CTRL : task selection
 @enduml`,
+  architecture: architectureWorkspaceFromPlantUml(`@startuml
+title Collaborative robot cell
+component "Robot controller" as CTRL
+component "Cobot arm" as ARM
+component "Safety PLC" as PLC
+component "Area scanner" as SCAN
+component "Emergency stop" as ESTOP
+component "End effector" as TOOL
+component "Operator HMI" as HMI
+
+PLC --> CTRL : safe stop
+SCAN --> PLC : protective field
+ESTOP --> PLC : emergency stop
+CTRL --> ARM : motion command
+ARM --> TOOL : mechanical interface
+HMI --> CTRL : task selection
+@enduml`, "Collaborative robot cell"),
   components: [
     { id: "CTRL", name: "Robot controller" }, { id: "ARM", name: "Cobot arm" },
     { id: "PLC", name: "Safety PLC" }, { id: "SCAN", name: "Area scanner" },
@@ -201,7 +221,7 @@ HMI --> CTRL : task selection
 };
 function blankWorkspace() {
   return {
-    plantuml: "@startuml\n@enduml", components: [], hazards: [], situations: [], requirements: [], safetyGoals: [], hara: [], silAssessments: [],
+    plantuml: "@startuml\n@enduml", architecture: architectureWorkspaceFromPlantUml("@startuml\n@enduml"), components: [], hazards: [], situations: [], requirements: [], safetyGoals: [], hara: [], silAssessments: [],
     quantitative: { safetyFunction: "", targetSil: "SIL 1", mode: "continuous", architecture: "1oo1", components: [] },
     fmeda: { constants: [], rows: [] }, faultTree: { dsl: defaultFaultTreeDsl(), activeLayer: "All", layerCount: 3 }, notepad: { html: "", brainstormType: "fmea", brainstormRows: [] }, workflow: engineeringWorkflowTemplate(), customColumns: [], fmea: [],
     assurance: { tests: [], evidence: [], deviations: [], changes: [], baselines: [], reviews: [], interfaces: [], ram: [], claims: [], audit: [] }
@@ -221,6 +241,16 @@ let notepadDirty = false;
 let faultTreeZoom = 1;
 let faultTreeSearch = "";
 let faultTreeCutSetLimit = 25;
+let faultTreeEditorLayer = "All";
+let architectureSelectedId = "";
+let architectureZoom = 1;
+let architectureHistory = [];
+let architectureFuture = [];
+let architecturePaletteGroup = "Structural";
+let architectureInspectorEditing = false;
+let architectureInspectorRenderTimer: ReturnType<typeof setTimeout>;
+let architectureDrag: { id: string; pointerId: number; startX: number; startY: number; x: number; y: number; latestX: number; latestY: number; moved: boolean; remembered: boolean; frame: number; viewport: { minX: number; minY: number; width: number; height: number } } | null = null;
+let architectureSuppressClick = false;
 
 // Shared DOM and presentation helpers.
 const $ = <T extends Element = any>(selector: string, parent: ParentNode = document): T => parent.querySelector(selector) as T;
@@ -234,7 +264,7 @@ type FmedaTotals = Record<"safe" | "dangerous_detected" | "dangerous_undetected"
 };
 type FaultTreeNode = { id: string; kind: "top" | "gate" | "basic"; gate?: string; label: string; children: string[]; component?: string; layer: string; line: number };
 type FaultTreeModel = { top: string; nodes: Map<string, FaultTreeNode>; layers: string[]; warnings: string[] };
-const eventElement = (event: Event): Element => event.target as Element;
+const eventElement = (event: Event): Element => event.target instanceof Element ? event.target : document.documentElement;
 const formValues = (form: HTMLFormElement): Record<string, string> => Object.fromEntries([...new FormData(form)].map(([key, value]) => [key, String(value)]));
 const itemBy = (group, id) => state[group].find(item => item.id === id);
 const rpn = row => Number(row.severity) * Number(row.occurrence) * Number(row.detection);
@@ -245,11 +275,14 @@ const asilClass = asil => `asil-${asil.replace("ASIL ", "").toLowerCase()}`;
 function migrateWorkspace(workspace, defaults = blankWorkspace()) {
   for (const [key, value] of Object.entries(defaults)) workspace[key] ??= structuredClone(value);
   for (const [key, value] of Object.entries(defaults.assurance)) workspace.assurance[key] ??= structuredClone(value);
+  if (!workspace.architecture?.diagrams?.length) workspace.architecture = architectureWorkspaceFromPlantUml(workspace.plantuml || "@startuml\n@enduml");
+  workspace.architecture.activeDiagramId ||= workspace.architecture.diagrams[0]?.id;
   workspace.hazards.forEach(hazard => {
     hazard.status ??= "Open"; hazard.owner ??= ""; hazard.control ??= ""; hazard.residualRisk ??= ""; hazard.closureEvidence ??= "";
   });
   workspace.workflow.activities.forEach(activity => activity.predecessor ??= "");
-  workspace.faultTree.activeLayer ??= "All";
+  // Layer selection is a transient review filter; every project opens at the complete tree.
+  workspace.faultTree.activeLayer = "All";
   workspace.faultTree.layerCount = Number.isInteger(workspace.faultTree.layerCount) && workspace.faultTree.layerCount >= 1 && workspace.faultTree.layerCount <= 12 ? workspace.faultTree.layerCount : 3;
   workspace.faultTree.dsl ??= defaultFaultTreeDsl();
   workspace.notepad.brainstormRows.forEach(row => row.id ??= crypto.randomUUID());
@@ -284,6 +317,7 @@ function validateWorkspaceData(data) {
   if (data.quantitative !== undefined && (!data.quantitative || typeof data.quantitative !== "object" || !Array.isArray(data.quantitative.components))) throw new Error('Workspace field "quantitative.components" must be an array.');
   if (data.fmeda !== undefined && (!data.fmeda || typeof data.fmeda !== "object" || !Array.isArray(data.fmeda.constants) || !Array.isArray(data.fmeda.rows))) throw new Error('Workspace FMEDA fields must be arrays.');
   if (data.faultTree !== undefined && (!data.faultTree || typeof data.faultTree !== "object" || typeof data.faultTree.dsl !== "string")) throw new Error("Workspace fault tree DSL must be text.");
+  if (data.architecture !== undefined && (!data.architecture || typeof data.architecture !== "object" || !Array.isArray(data.architecture.diagrams))) throw new Error("Workspace architecture diagrams must be an array.");
   if (data.notepad !== undefined && (!data.notepad || typeof data.notepad !== "object" || !Array.isArray(data.notepad.brainstormRows))) throw new Error("Workspace notepad brainstorming rows must be an array.");
   if (data.workflow !== undefined && (!data.workflow || typeof data.workflow !== "object" || !Array.isArray(data.workflow.phases) || !Array.isArray(data.workflow.activities))) throw new Error("Workspace workflow phases and activities must be arrays.");
   if (data.assurance !== undefined && (!data.assurance || typeof data.assurance !== "object" || ["tests", "evidence", "deviations", "changes", "baselines", "reviews", "interfaces", "ram", "claims", "audit"].some(key => !Array.isArray(data.assurance[key])))) throw new Error("Workspace lifecycle assurance fields must be arrays.");
@@ -434,7 +468,7 @@ function switchWorkspace(id, historyMode: string | false = "push") {
   refreshWorkspaceRegistry();
   if (!workspaceRegistry.workspaces.some(workspace => workspace.id === id)) return;
   openWorkspaceInTab(id);
-  setActiveWorkspaceId(id, historyMode); state = migrateWorkspace(structuredClone(activeWorkspace().data)); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
+  setActiveWorkspaceId(id, historyMode); state = migrateWorkspace(structuredClone(activeWorkspace().data)); faultTreeEditorLayer = "All"; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll();
 }
 function createWorkspace(name, data = blankWorkspace()) {
   refreshWorkspaceRegistry();
@@ -579,6 +613,7 @@ const plantumlCompletions = [
 let plantumlMatches = [];
 let plantumlCompletionIndex = 0;
 let plantumlCompletionRange;
+let plantumlEditorDraft = "";
 
 function currentPlantumlToken(editor = $("#plantuml-source")) {
   const beforeCursor = editor.value.slice(0, editor.selectionStart);
@@ -883,6 +918,32 @@ function parseLegacyFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
 function parseFaultTreeDsl(dsl = state.faultTree.dsl): FaultTreeModel {
   return /^\s*fault_tree\b/i.test(dsl) ? parseStructuredFaultTreeDsl(dsl) : parseLegacyFaultTreeDsl(dsl);
 }
+const faultTreeBlockPattern = /^\s*(?:gate|basic)\s+[A-Za-z][A-Za-z0-9_.-]*\s*\{[\s\S]*?^\s*\}/gim;
+function faultTreeBlocksForLayer(dsl: string, layer: string) {
+  return [...String(dsl || "").matchAll(faultTreeBlockPattern)].map(match => match[0]).filter(block => new RegExp(`^\\s*layer\\s*:\\s*${layer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(block));
+}
+function filteredFaultTreeDsl(dsl: string, layer: string) {
+  if (layer === "All" || !/^\s*fault_tree\b/i.test(dsl)) return dsl;
+  const root = String(dsl).match(/^\s*fault_tree\s+"([^"]+)"\s*\{([\s\S]*)\}\s*$/);
+  if (!root) return dsl;
+  const top = root[2].match(/^\s*top\s*:\s*[^\r\n]+$/im)?.[0]?.trim() || "top: TOP";
+  const blocks = faultTreeBlocksForLayer(dsl, layer);
+  return `fault_tree "${root[1]}" {\n  # Filtered editor view: ${layer}. Changes merge into the full tree.\n  ${top}\n\n${blocks.map(block => block.trim()).join("\n\n")}\n}`;
+}
+function mergeFaultTreeLayerDraft(canonical: string, draft: string, layer: string) {
+  if (layer === "All" || !/^\s*fault_tree\b/i.test(canonical)) return draft;
+  const root = String(canonical).match(/^(\s*fault_tree\s+"[^"]+"\s*\{)([\s\S]*)(\}\s*)$/);
+  if (!root) return canonical;
+  const ranges = [...root[2].matchAll(faultTreeBlockPattern)].filter(match => new RegExp(`^\\s*layer\\s*:\\s*${layer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(match[0])).map(match => [match.index!, match.index! + match[0].length] as [number, number]);
+  let body = root[2];
+  ranges.reverse().forEach(([start, end]) => { body = `${body.slice(0, start)}${body.slice(end)}`; });
+  const replacement = faultTreeBlocksForLayer(draft, layer).map(block => block.trim()).join("\n\n");
+  const separator = body.trimEnd() ? "\n\n" : "\n";
+  return `${root[1]}${body.trimEnd()}${replacement ? `${separator}${replacement}\n` : "\n"}${root[3]}`;
+}
+function commitFaultTreeEditorDraft(value = ($("#fault-tree-source") as HTMLTextAreaElement).value) {
+  state.faultTree.dsl = mergeFaultTreeLayerDraft(state.faultTree.dsl, value, faultTreeEditorLayer);
+}
 function combineCutSets(left: string[][], right: string[][]) {
   const combined: string[][] = [];
   left.forEach(a => right.forEach(b => combined.push([...new Set([...a, ...b])].sort())));
@@ -917,14 +978,113 @@ function faultTreeCutSets(model: FaultTreeModel, id = model.top): { sets: string
   }
   return { sets: minimizeCutSets(sets), nonCoherent };
 }
-function componentsFromPlantUml(source: string) {
-  const components: Array<{ id: string; name: string }> = []; const seen = new Set<string>();
-  const pattern = /^\s*(?:component|node|database|queue|cloud|rectangle|artifact|package|frame)\s+(?:"([^"]+)"|([^\s{]+))(?:\s+as\s+([A-Za-z0-9_.-]+))?/gim;
-  for (const match of String(source || "").matchAll(pattern)) {
-    const name = match[1] || match[2]; const id = match[3] || name.replace(/\W+/g, "_").toUpperCase();
-    if (!seen.has(id.toLowerCase())) { components.push({ id, name }); seen.add(id.toLowerCase()); }
+function activeArchitectureDiagram() {
+  state.architecture ??= architectureWorkspaceFromPlantUml(state.plantuml || "@startuml\n@enduml");
+  if (!state.architecture.diagrams?.length) state.architecture = architectureWorkspaceFromPlantUml(state.plantuml || "@startuml\n@enduml");
+  return state.architecture.diagrams.find(diagram => diagram.id === state.architecture.activeDiagramId) || state.architecture.diagrams[0];
+}
+function setActiveArchitectureDiagram(diagram) {
+  const index = state.architecture.diagrams.findIndex(item => item.id === diagram.id);
+  if (index >= 0) state.architecture.diagrams[index] = diagram; else state.architecture.diagrams.push(diagram);
+  state.architecture.activeDiagramId = diagram.id;
+}
+function syncArchitectureContext(diagram = activeArchitectureDiagram()) {
+  if (diagram.elements?.length) {
+    state.components = architectureComponentsFromDiagram(diagram);
+    state.plantuml = plantUmlFromArchitectureDiagram(diagram);
+  } else {
+    state.components = componentsFromPlantUml(state.plantuml);
   }
-  return components;
+}
+function rememberArchitecture() {
+  architectureHistory.push(structuredClone(activeArchitectureDiagram()));
+  architectureFuture = [];
+  if (architectureHistory.length > 40) architectureHistory.shift();
+}
+function mutateArchitecture(mutator) {
+  rememberArchitecture();
+  const diagram = structuredClone(activeArchitectureDiagram());
+  mutator(diagram);
+  diagram.revision = (diagram.revision || 0) + 1;
+  setActiveArchitectureDiagram(diagram);
+  syncArchitectureContext(diagram);
+  persistState();
+  renderArchitecture();
+  renderMetrics();
+  renderFaultTreeBuilder();
+}
+function updateArchitectureInspectorDraft(target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
+  const diagram = activeArchitectureDiagram();
+  const selected = diagram.elements.find(element => element.id === architectureSelectedId);
+  const rel = diagram.relationships.find(item => `edge:${item.id}` === architectureSelectedId);
+  if (selected && target.id === "architecture-element-name") selected.name = target.value;
+  if (selected && target.id === "architecture-element-kind") selected.kind = target.value;
+  if (selected && target.id === "architecture-element-alias") { selected.taggedValues ||= {}; selected.taggedValues.alias = architectureAlias(target.value); }
+  if (selected && target.id === "architecture-element-docs") { selected.properties ||= {}; selected.properties.documentation = target.value; selected.properties.body = target.value; }
+  if (rel && target.id === "architecture-edge-label") rel.label = target.value;
+  if (rel && target.id === "architecture-edge-target") rel.target = target.value;
+  if (!selected && !rel) return false;
+  diagram.revision = (diagram.revision || 0) + 1;
+  syncArchitectureContext(diagram);
+  persistState();
+  return true;
+}
+function scheduleArchitectureInspectorRefresh(delay = 260) {
+  clearTimeout(architectureInspectorRenderTimer);
+  architectureInspectorRenderTimer = setTimeout(() => {
+    architectureInspectorEditing = false;
+    renderArchitecture();
+    renderMetrics();
+    renderFaultTreeBuilder();
+  }, delay);
+}
+function renderArchitectureCanvas() {
+  const diagram = activeArchitectureDiagram();
+  const stage = $("#architecture-stage") as HTMLElement;
+  stage.style.transform = `scale(${architectureZoom})`;
+  stage.innerHTML = renderSvg(diagram, {
+    selectedId: architectureSelectedId.startsWith("edge:") ? "" : architectureSelectedId,
+    selectedRelationshipId: architectureSelectedId.startsWith("edge:") ? architectureSelectedId.slice(5) : "",
+    viewport: architectureDrag?.viewport
+  });
+}
+function applyArchitectureDragFrame() {
+  if (!architectureDrag) return;
+  architectureDrag.frame = 0;
+  const element = activeArchitectureDiagram().elements.find(item => item.id === architectureDrag?.id);
+  if (!element) return;
+  const dx = (architectureDrag.latestX - architectureDrag.startX) / architectureZoom;
+  const dy = (architectureDrag.latestY - architectureDrag.startY) / architectureZoom;
+  element.view.x = Math.round((architectureDrag.x + dx) * 10) / 10;
+  element.view.y = Math.round((architectureDrag.y + dy) * 10) / 10;
+  renderArchitectureCanvas();
+}
+function commitArchitectureDrag() {
+  if (!architectureDrag?.moved) return;
+  if (architectureDrag.frame) {
+    cancelAnimationFrame(architectureDrag.frame);
+    applyArchitectureDragFrame();
+  }
+  const diagram = activeArchitectureDiagram();
+  diagram.revision = (diagram.revision || 0) + 1;
+  syncArchitectureContext(diagram);
+  persistState();
+  renderArchitecture();
+  renderMetrics();
+  renderFaultTreeBuilder();
+}
+function deleteArchitectureSelection() {
+  if (!architectureSelectedId) return;
+  mutateArchitecture(diagram => {
+    const relId = architectureSelectedId.startsWith("edge:") ? architectureSelectedId.slice(5) : "";
+    if (relId) diagram.relationships = diagram.relationships.filter(rel => rel.id !== relId);
+    else {
+      diagram.elements = diagram.elements.filter(element => element.id !== architectureSelectedId);
+      diagram.modelElementIds = diagram.modelElementIds.filter(id => id !== architectureSelectedId);
+      diagram.relationships = diagram.relationships.filter(rel => rel.source !== architectureSelectedId && rel.target !== architectureSelectedId);
+    }
+    architectureSelectedId = "";
+  });
 }
 function starterFailureModes(component: { id: string; name: string }) {
   const text = `${component.id} ${component.name}`.toLowerCase();
@@ -1466,6 +1626,15 @@ function renderFaultTreeLineNumbers(errorLine?: number) {
 }
 function focusFaultTreeLine(line: number) {
   if (!Number.isInteger(line) || line < 1) return;
+  // Parser diagnostics use canonical-source line numbers. Restore that source before
+  // navigating so the highlighted line is always the actual failing statement.
+  if (faultTreeEditorLayer !== "All") {
+    commitFaultTreeEditorDraft();
+    state.faultTree.activeLayer = "All";
+    faultTreeEditorLayer = "All";
+    persistState();
+    renderFaultTree();
+  }
   const editor = $("#fault-tree-source") as HTMLTextAreaElement;
   const lines = editor.value.split(/\r?\n/);
   const start = lines.slice(0, line - 1).reduce((offset, text) => offset + text.length + 1, 0);
@@ -1477,7 +1646,8 @@ function focusFaultTreeLine(line: number) {
 }
 function renderFaultTree() {
   const editor = $("#fault-tree-source") as HTMLTextAreaElement;
-  if (document.activeElement !== editor) editor.value = state.faultTree.dsl;
+  const editorDsl = faultTreeEditorLayer === "All" ? state.faultTree.dsl : filteredFaultTreeDsl(state.faultTree.dsl, faultTreeEditorLayer);
+  if (document.activeElement !== editor) editor.value = editorDsl;
   const status = $("#fault-tree-status");
   const canvas = $("#fault-tree-canvas");
   const analysis = $("#fault-tree-analysis");
@@ -1496,7 +1666,9 @@ function renderFaultTree() {
       if (t === "XOR") return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><path d="M2 4 Q12 12 2 20" fill="none" stroke="currentColor" stroke-width="1"/><path d="M0 4 Q12 12 0 20 Q18 12 36 12 Q18 12 0 4 Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
       return `<svg width="36" height="24" viewBox="0 0 36 24" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="4" width="30" height="16" rx="3" fill="none" stroke="currentColor"/></svg>`;
     }
-    const model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
+    // The canvas and analysis always use the complete model. A layer is an editor/review
+    // filter, not a separate incomplete fault tree.
+    const model = parseFaultTreeDsl(state.faultTree.dsl);
     const cut = faultTreeCutSets(model);
     const searchInput = $("#fault-tree-search") as HTMLInputElement;
     searchInput.value = faultTreeSearch;
@@ -1551,7 +1723,7 @@ function renderFaultTree() {
     else {
       const width = Math.max(760, cursor + 120); const height = Math.max(250, 190 + maxDepth * 176);
       const zoomedWidth = Math.ceil(width * faultTreeZoom); const zoomedHeight = Math.ceil(height * faultTreeZoom);
-      canvas.innerHTML = `<div class="fault-tree-viewport" style="width:${zoomedWidth}px;height:${zoomedHeight}px"><div class="fault-tree-layout" style="width:${width}px;height:${height}px;transform:scale(${faultTreeZoom})"><svg class="fault-tree-connectors" width="${width}" height="${height}" aria-hidden="true">${branches.map(drawConnectors).join("")}</svg>${branches.map(drawNode).join("")}</div></div>`;
+      canvas.innerHTML = `<div class="fault-tree-viewport" style="width:${zoomedWidth}px;height:${zoomedHeight}px"><div class="fault-tree-layout" style="width:${width}px;height:${height}px;transform:scale(${faultTreeZoom})"><svg class="fault-tree-connectors" id="fault-tree-connectors" width="${width}" height="${height}" aria-hidden="true">${branches.map(drawConnectors).join("")}</svg>${branches.map(drawNode).join("")}</div></div>`;
     }
     $("#fault-tree-zoom-value").textContent = `${Math.round(faultTreeZoom * 100)}%`;
     const selectedCuts = query ? cut.sets.filter(set => set.some(id => matchesNode(model.nodes.get(id)!))) : cut.sets;
@@ -1670,10 +1842,36 @@ function renderWorkflow() {
 
 // Architecture feature.
 function renderArchitecture() {
-  $("#plantuml-source").value = state.plantuml;
-  state.components = componentsFromPlantUml(state.plantuml);
+  const diagram = activeArchitectureDiagram();
+  syncArchitectureContext(diagram);
+  const validation = validateDiagram(diagram);
+  const selectedElement = diagram.elements.find(element => element.id === architectureSelectedId);
+  const selectedRelationship = diagram.relationships.find(rel => `edge:${rel.id}` === architectureSelectedId);
+  $("#architecture-diagram-title").textContent = diagram.name || "System architecture";
+  $("#architecture-diagram-meta").textContent = `${diagram.type} diagram · ${diagram.elements.length} elements · ${diagram.relationships.length} relationships`;
+  const layoutSelect = $("#architecture-layout") as HTMLSelectElement;
+  if (diagram.view?.style?.layoutMode && [...layoutSelect.options].some(option => option.value === diagram.view.style.layoutMode)) layoutSelect.value = diagram.view.style.layoutMode;
+  $("#architecture-palette-group").innerHTML = UML_PALETTE_GROUPS.map(group => `<option value="${esc(group.name)}" ${group.name === architecturePaletteGroup ? "selected" : ""}>${esc(group.name)}</option>`).join("");
+  $("#architecture-palette").innerHTML = UML_PALETTE_GROUPS.filter(group => group.name === architecturePaletteGroup).map(group => `<div class="palette-grid">${group.kinds.map(kind => `<button class="shape-pick" data-add-architecture="${esc(kind)}" title="Add ${esc(kind)}"><span>${esc(kind.replace(/([A-Z])/g, " $1").replace(/^./, char => char.toUpperCase()))}</span></button>`).join("")}</div>`).join("");
+  renderArchitectureCanvas();
+  $("#architecture-zoom-value").textContent = `${Math.round(architectureZoom * 100)}%`;
+  const validationClass = validation.status === "valid" ? "valid" : validation.status === "warning" ? "warning" : "error";
+  $("#architecture-validation").className = validationClass;
+  $("#architecture-validation").textContent = validation.warnings.length ? `${validation.warnings.length} model warning${validation.warnings.length === 1 ? "" : "s"}` : "Valid UML architecture";
+  const plantumlEditor = $("#plantuml-source") as HTMLTextAreaElement;
+  if (document.activeElement !== plantumlEditor) plantumlEditor.value = state.plantuml;
   $("#component-count").textContent = state.components.length;
   $("#component-list").innerHTML = state.components.length ? state.components.map(x => `<div class="component-item"><strong>${esc(x.name)}</strong><span>${esc(x.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
+  $("#architecture-outline").innerHTML = diagram.elements.length ? diagram.elements.map(element => `<button class="${element.id === architectureSelectedId ? "active" : ""}" data-select-architecture="${esc(element.id)}">${esc(element.kind)} · ${esc(element.name)}</button>`).join("") : `<p class="dialog-copy">Add elements from the palette.</p>`;
+  if (selectedRelationship) {
+    const elementOptions = diagram.elements.map(element => `<option value="${esc(element.id)}" ${element.id === selectedRelationship.target ? "selected" : ""}>${esc(element.name)}</option>`).join("");
+    $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc(selectedRelationship.label || "")}" /></label><label><span>Destination</span><select id="architecture-edge-target">${elementOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
+  } else if (selectedElement) {
+    const targets = diagram.elements.filter(element => element.id !== selectedElement.id);
+    $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap(group => group.kinds).map(kind => `<option value="${esc(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><label><span>Documentation</span><textarea id="architecture-element-docs">${esc(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map(element => `<option value="${esc(element.id)}">${esc(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}">${esc(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
+  } else {
+    $("#architecture-inspector").innerHTML = `<p class="dialog-copy">Select an element or connector to edit its notation, alias, and relationships.</p>`;
+  }
 }
 // Builder UI: populate builder selects and handle insertion of DSL snippets
 function renderFaultTreeBuilder() {
@@ -1861,12 +2059,12 @@ function renderFaultTreeBuilder() {
       } else {
         editor.value = `${editor.value}\n${snippet}`;
       }
-      state.faultTree.dsl = editor.value;
+      commitFaultTreeEditorDraft(editor.value);
       editor.focus();
       persistState();
       // update model caches and builder lists so new id becomes available immediately
       try{
-        model = parseFaultTreeDsl(editor.value || state.faultTree.dsl);
+        model = parseFaultTreeDsl(state.faultTree.dsl);
         existingIds.add(output);
         updateInputsOptions();
       }catch(e){}
@@ -2022,7 +2220,14 @@ $("#workspace-menu-btn").addEventListener("click", () => {
 });
 $("#workspace-menu").addEventListener("click", event => { if (eventElement(event).closest("button")) closeWorkspaceMenu(); });
 document.addEventListener("click", event => { if (!eventElement(event).closest(".workspace-menu-wrap")) closeWorkspaceMenu(); });
-document.addEventListener("keydown", event => { if (event.key === "Escape") closeWorkspaceMenu(); });
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") closeWorkspaceMenu();
+  const editable = eventElement(event).closest("input, textarea, select, [contenteditable='true']");
+  if ((event.key === "Delete" || event.key === "Backspace") && activeView() === "architecture" && architectureSelectedId && !editable) {
+    event.preventDefault();
+    deleteArchitectureSelection();
+  }
+});
 $("#new-workspace-btn").addEventListener("click", createNewWorkspace);
 $("#delete-workspace-btn").addEventListener("click", deleteActiveWorkspace);
 $("#open-workspace-tab-btn").addEventListener("click", openActiveWorkspaceInNewTab);
@@ -2441,24 +2646,178 @@ $("#fmeda-form").addEventListener("submit", event => {
   $("#fmeda-dialog").close(); save();
 });
 
-// Architecture editor completion, import, and local rendering.
+// Native architecture workbench and PlantUML notation sync.
+$("#architecture-palette-group").addEventListener("change", event => { architecturePaletteGroup = (event.target as HTMLSelectElement).value; renderArchitecture(); });
+$("#architecture-palette").addEventListener("click", event => {
+  const target = eventElement(event).closest<HTMLElement>("[data-add-architecture]");
+  if (!target) return;
+  mutateArchitecture(diagram => {
+    const element = createElement(target.dataset.addArchitecture, `New ${target.dataset.addArchitecture}`, 140 + diagram.elements.length * 26, 130 + diagram.elements.length * 22);
+    element.taggedValues.alias = architectureAlias(element.name);
+    diagram.elements.push(element); diagram.modelElementIds.push(element.id); architectureSelectedId = element.id;
+  });
+});
+$("#architecture-stage").addEventListener("pointerdown", event => {
+  if ((event as PointerEvent).button !== 0) return;
+  const stage = $("#architecture-stage") as HTMLElement;
+  const node = eventElement(event).closest<HTMLElement>(".uml-node");
+  if (!node?.dataset.id) return;
+  const element = activeArchitectureDiagram().elements.find(item => item.id === node.dataset.id);
+  if (!element) return;
+  const viewBox = stage.querySelector("svg")?.viewBox.baseVal;
+  const viewport = viewBox ? { minX: viewBox.x, minY: viewBox.y, width: viewBox.width, height: viewBox.height } : { minX: 0, minY: 0, width: 960, height: 640 };
+  event.preventDefault();
+  architectureSelectedId = element.id;
+  architectureDrag = { id: element.id, pointerId: (event as PointerEvent).pointerId, startX: (event as PointerEvent).clientX, startY: (event as PointerEvent).clientY, latestX: (event as PointerEvent).clientX, latestY: (event as PointerEvent).clientY, x: element.view.x, y: element.view.y, moved: false, remembered: false, frame: 0, viewport };
+  stage.classList.add("is-dragging");
+  try { stage.setPointerCapture?.((event as PointerEvent).pointerId); } catch {}
+  renderArchitecture();
+});
+$("#architecture-stage").addEventListener("click", event => {
+  if (architectureSuppressClick) {
+    architectureSuppressClick = false;
+    event.preventDefault();
+    return;
+  }
+  const edge = eventElement(event).closest<HTMLElement>(".uml-edge");
+  const node = eventElement(event).closest<HTMLElement>(".uml-node");
+  architectureSelectedId = edge?.dataset.id ? `edge:${edge.dataset.id}` : node?.dataset.id || "";
+  renderArchitecture();
+});
+window.addEventListener("pointermove", event => {
+  if (!architectureDrag || event.pointerId !== architectureDrag.pointerId) return;
+  const dx = (event.clientX - architectureDrag.startX) / architectureZoom;
+  const dy = (event.clientY - architectureDrag.startY) / architectureZoom;
+  if (!architectureDrag.moved && Math.hypot(dx, dy) < 3) return;
+  if (!architectureDrag.remembered) {
+    rememberArchitecture();
+    architectureDrag.remembered = true;
+  }
+  architectureDrag.moved = true;
+  architectureDrag.latestX = event.clientX;
+  architectureDrag.latestY = event.clientY;
+  if (!architectureDrag.frame) architectureDrag.frame = requestAnimationFrame(applyArchitectureDragFrame);
+  event.preventDefault();
+});
+window.addEventListener("pointerup", event => {
+  if (!architectureDrag || event.pointerId !== architectureDrag.pointerId) return;
+  const stage = $("#architecture-stage") as HTMLElement;
+  const moved = architectureDrag.moved;
+  commitArchitectureDrag();
+  try { stage.releasePointerCapture?.(architectureDrag.pointerId); } catch {}
+  architectureDrag = null;
+  stage.classList.remove("is-dragging");
+  if (moved) {
+    architectureSuppressClick = true;
+    event.preventDefault();
+  }
+});
+$("#architecture-outline").addEventListener("click", event => {
+  const target = eventElement(event).closest<HTMLElement>("[data-select-architecture]");
+  if (target) { architectureSelectedId = target.dataset.selectArchitecture || ""; renderArchitecture(); }
+});
+$("#architecture-inspector").addEventListener("input", event => {
+  const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  if (!target.id) return;
+  if (!architectureInspectorEditing) { rememberArchitecture(); architectureInspectorEditing = true; }
+  updateArchitectureInspectorDraft(target);
+});
+$("#architecture-inspector").addEventListener("change", event => {
+  const target = event.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  if (!target.id) return;
+  if (!architectureInspectorEditing) rememberArchitecture();
+  if (updateArchitectureInspectorDraft(target)) {
+    architectureInspectorEditing = false;
+    renderArchitecture();
+    renderMetrics();
+    renderFaultTreeBuilder();
+  }
+});
+$("#architecture-inspector").addEventListener("focusout", event => {
+  if (!architectureInspectorEditing) return;
+  if ($("#architecture-inspector").contains((event as FocusEvent).relatedTarget as Node)) return;
+  scheduleArchitectureInspectorRefresh(0);
+});
+$("#architecture-inspector").addEventListener("click", event => {
+  if (eventElement(event).closest("#architecture-connect-btn")) {
+    const selected = activeArchitectureDiagram().elements.find(element => element.id === architectureSelectedId);
+    const target = ($("#architecture-connect-target") as HTMLSelectElement)?.value;
+    if (selected && target) mutateArchitecture(diagram => diagram.relationships.push(createRelationship(($("#architecture-connect-kind") as HTMLSelectElement).value || "dependency", selected.id, target, "interface")));
+  }
+  if (eventElement(event).closest("#architecture-delete-selection")) {
+    deleteArchitectureSelection();
+  }
+});
+$("#architecture-layout-btn").addEventListener("click", () => mutateArchitecture(diagram => Object.assign(diagram, applyAutoLayout(diagram, ($("#architecture-layout") as HTMLSelectElement).value))));
+$("#architecture-undo-btn").addEventListener("click", () => {
+  const previous = architectureHistory.pop(); if (!previous) return;
+  architectureFuture.push(structuredClone(activeArchitectureDiagram()));
+  setActiveArchitectureDiagram(previous); syncArchitectureContext(previous); persistState(); renderArchitecture();
+});
+$("#architecture-redo-btn").addEventListener("click", () => {
+  const next = architectureFuture.pop(); if (!next) return;
+  architectureHistory.push(structuredClone(activeArchitectureDiagram()));
+  setActiveArchitectureDiagram(next); syncArchitectureContext(next); persistState(); renderArchitecture();
+});
+$("#architecture-zoom-in").addEventListener("click", () => { architectureZoom = Math.min(1.8, Math.round((architectureZoom + 0.1) * 10) / 10); renderArchitecture(); });
+$("#architecture-zoom-out").addEventListener("click", () => { architectureZoom = Math.max(0.5, Math.round((architectureZoom - 0.1) * 10) / 10); renderArchitecture(); });
 $("#plantuml-source").addEventListener("input", () => {
   plantumlCompletionIndex = 0;
   state.plantuml = ($("#plantuml-source") as HTMLTextAreaElement).value;
-  state.components = componentsFromPlantUml(state.plantuml);
-  $("#component-count").textContent = String(state.components.length);
-  $("#component-list").innerHTML = state.components.length ? state.components.map(component => `<div class="component-item"><strong>${esc(component.name)}</strong><span>${esc(component.id)}</span></div>`).join("") : `<p class="dialog-copy">Add PlantUML component declarations to define reusable architecture components.</p>`;
+  plantumlEditorDraft = state.plantuml;
+  const sourceComponents = componentsFromPlantUml(state.plantuml);
+  if (!sourceComponents.length) {
+    const parsed = parseNotation(state.plantuml, "component");
+    if (parsed.diagram.elements.length) {
+      setActiveArchitectureDiagram(parsed.diagram);
+      syncArchitectureContext(activeArchitectureDiagram());
+      renderArchitecture();
+    } else {
+      state.components = [];
+      $("#component-count").textContent = "0";
+      $("#component-list").innerHTML = `<p class="dialog-copy">Add component declarations or use the UML palette to define reusable architecture components.</p>`;
+    }
+  } else {
+    setActiveArchitectureDiagram(architectureDiagramFromPlantUml(state.plantuml, activeArchitectureDiagram().name || "System architecture"));
+    syncArchitectureContext(activeArchitectureDiagram());
+    renderArchitecture();
+  }
   persistState();
   renderPlantumlCompletions();
 });
 $("#plantuml-source").addEventListener("keydown", event => {
+  const editor = $("#plantuml-source") as HTMLTextAreaElement;
+  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement !== editor && plantumlEditorDraft) {
+    editor.value = plantumlEditorDraft;
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+  }
+  if ((event.key === "Enter" || event.key === "Tab") && document.activeElement === editor && state.plantuml && editor.value !== state.plantuml) {
+    editor.value = state.plantuml;
+    editor.setSelectionRange(editor.value.length, editor.value.length);
+  }
+  if ($("#plantuml-completions").hidden && (event.key === "Enter" || event.key === "Tab")) renderPlantumlCompletions();
   if ($("#plantuml-completions").hidden) return;
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     event.preventDefault();
     plantumlCompletionIndex = (plantumlCompletionIndex + (event.key === "ArrowDown" ? 1 : -1) + plantumlMatches.length) % plantumlMatches.length;
     renderPlantumlCompletions();
   } else if (event.key === "Enter" || event.key === "Tab") {
-    event.preventDefault(); insertPlantumlCompletion();
+    event.preventDefault();
+    const token = currentPlantumlToken($("#plantuml-source"));
+    if (!plantumlMatches[plantumlCompletionIndex] && token) {
+      plantumlCompletionRange = token;
+      plantumlMatches = plantumlCompletions.filter(item => item.label.startsWith(token.text.toLowerCase())).slice(0, 7);
+      plantumlCompletionIndex = 0;
+    }
+    insertPlantumlCompletion();
+    if (document.activeElement !== editor && plantumlEditorDraft) {
+      editor.value = plantumlEditorDraft;
+      const cursor = plantumlEditorDraft === 'component "" as ALIAS' ? 11 : editor.value.length;
+      editor.setSelectionRange(cursor, cursor);
+      state.plantuml = plantumlEditorDraft;
+      persistState();
+      closePlantumlCompletions();
+    }
   } else if (event.key === "Escape") {
     event.preventDefault(); closePlantumlCompletions();
   }
@@ -2481,7 +2840,7 @@ $("#sync-fmeda-btn").addEventListener("click", () => {
 
 // Fault tree DSL editor and architecture handoff.
 $("#fault-tree-source").addEventListener("input", event => {
-  state.faultTree.dsl = (event.target as HTMLTextAreaElement).value;
+  commitFaultTreeEditorDraft((event.target as HTMLTextAreaElement).value);
   persistState();
   renderFaultTree();
   renderFaultTreeCompletions();
@@ -2590,7 +2949,7 @@ $("#fault-tree-export-btn").addEventListener("click", () => {
 });
 $("#fault-tree-save-btn").addEventListener("click", () => {
   try {
-    state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
+    commitFaultTreeEditorDraft();
     parseFaultTreeDsl(state.faultTree.dsl);
     save();
   } catch (error) {
@@ -2610,15 +2969,18 @@ $("#fault-tree-generate-btn").addEventListener("click", () => {
   if (!state.components.length) return alert("No architecture components found. Add PlantUML component declarations in System architecture, then generate the starter tree.");
   state.faultTree.dsl = faultTreeFromArchitectureDsl();
   state.faultTree.activeLayer = "All";
+  faultTreeEditorLayer = "All";
   state.faultTree.layerCount = Math.max(state.faultTree.layerCount || 3, 2);
   save();
   $("#render-btn").click();
   alert(`Architecture rendering started and ${state.components.length} components were expanded into starter malfunctioning behaviours. Refine the top event and remove inapplicable events before using the analysis.`);
 });
 $("#fault-tree-layer").addEventListener("change", event => {
-  state.faultTree.dsl = ($("#fault-tree-source") as HTMLTextAreaElement).value;
+  commitFaultTreeEditorDraft();
   state.faultTree.activeLayer = (event.target as HTMLSelectElement).value;
+  faultTreeEditorLayer = state.faultTree.activeLayer;
   persistState();
+  ($("#fault-tree-source") as HTMLTextAreaElement).value = faultTreeEditorLayer === "All" ? state.faultTree.dsl : filteredFaultTreeDsl(state.faultTree.dsl, faultTreeEditorLayer);
   renderFaultTree();
 });
 $("#fault-tree-layer-count").addEventListener("change", event => {
@@ -2626,6 +2988,7 @@ $("#fault-tree-layer-count").addEventListener("change", event => {
   if (!Number.isInteger(value) || value < 1 || value > 12) return alert("Layer count must be an integer between 1 and 12.");
   state.faultTree.layerCount = value;
   if (!configuredFaultTreeLayers().includes(state.faultTree.activeLayer)) state.faultTree.activeLayer = "All";
+  faultTreeEditorLayer = state.faultTree.activeLayer;
   save();
 });
 function adjustFaultTreeZoom(change: number) {
@@ -2647,10 +3010,13 @@ $("#fault-tree-analysis").addEventListener("click", event => {
 
 $("#render-btn").addEventListener("click", async () => {
   const button = $("#render-btn"); const status = $("#render-status"); const preview = $("#diagram-preview");
-  state.plantuml = $("#plantuml-source").value;
-  state.components = componentsFromPlantUml(state.plantuml);
+  state.plantuml = plantUmlFromArchitectureDiagram(activeArchitectureDiagram());
+  ($("#plantuml-source") as HTMLTextAreaElement).value = state.plantuml;
+  state.components = architectureComponentsFromDiagram(activeArchitectureDiagram());
   persistState();
-  button.disabled = true; status.className = "render-status"; status.textContent = "Rendering...";
+  button.disabled = true; status.className = "render-status"; status.textContent = "Syncing...";
+  const pendingMessage = document.createElement("p"); pendingMessage.textContent = "Rendering synchronized PlantUML...";
+  preview.replaceChildren(pendingMessage);
   try {
     const response = await fetch("/api/plantuml/render", { method: "POST", headers: { "content-type": "text/plain" }, body: state.plantuml });
     if (!response.ok) throw new Error(await response.text());
@@ -2660,11 +3026,12 @@ $("#render-btn").addEventListener("click", async () => {
     preview.replaceChildren(image);
     status.className = "render-status success"; status.textContent = "Diagram rendered";
   } catch (error) {
-    const message = document.createElement("p"); message.textContent = error.message || "Unable to render diagram. Start the app with bun server.js.";
+    const message = document.createElement("p"); message.textContent = error.message || "PlantUML source synced; local SVG validation is unavailable.";
     preview.replaceChildren(message);
-    status.className = "render-status error"; status.textContent = "Render failed";
+    status.className = "render-status error"; status.textContent = "PlantUML validation failed";
   } finally {
     button.disabled = false;
+    renderArchitecture();
   }
 });
 

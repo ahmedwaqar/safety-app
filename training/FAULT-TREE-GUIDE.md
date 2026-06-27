@@ -55,9 +55,9 @@ fault_tree "AEB: collision with detected pedestrian" {
 
 Every property occupies its own line. IDs may contain letters, digits, `_`, `.`, and `-`, but must start with a letter. `component` is an architecture reference; it does not prove allocation or independence.
 
-Set the layer count in the editor, then assign each node to `Layer 1`, `Layer 2`, and so on. The layer selector provides focused review of that layer, while the full view retains the complete top-down tree.
+Set the layer count in the editor, then assign each node to `Layer 1`, `Layer 2`, and so on. The Editor layer selector provides a focused source view for that layer, while **All layers** retains the complete top-down tree.
 
-Layer views are a non-destructive review aid over one canonical DSL model: start in **All layers**, enter gates and basic events with their layer assignments, then filter the rendered diagram. Switching the filter never replaces or discards the source. For genuinely separate subsystem trees, use a named intermediate event and a controlled interface/transfer convention rather than maintaining unrelated copies of the same top-event logic.
+Layer views are a non-destructive review aid over one canonical DSL model: start in **All layers**, enter gates and basic events with their layer assignments, then choose an **Editor layer** to show only the gate and basic-event blocks tagged with that layer. Edits in that focused source view merge back into the canonical tree; switching views never replaces or discards other layers. The diagram and qualitative result continue to evaluate the complete tree. For genuinely separate subsystem trees, use a named intermediate event and a controlled interface/transfer convention rather than maintaining unrelated copies of the same top-event logic.
 
 ## Architecture starter generator
 
