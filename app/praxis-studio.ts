@@ -597,22 +597,20 @@ const silBands = {
 
 // Architecture DSL completion state and behavior.
 const plantumlCompletions = [
-  ["uml", 'uml component "$0" {\n}', "diagram declaration"],
-  ["component", 'component COMPONENT_ID "$0" at 120, 120 size 220, 104', "component entity"],
-  ["subsystem", 'subsystem SUBSYSTEM_ID "$0" at 120, 120 size 300, 190', "subsystem entity"],
-  ["class", 'class CLASS_ID "$0" at 120, 120 size 210, 130 {\n  attribute "+ id: UUID"\n  operation "+ validate(): Result"\n}', "class entity"],
-  ["node", 'node NODE_ID "$0" at 120, 120 size 230, 130', "deployment node"],
-  ["port", 'port PORT_ID "$0" at 120, 120 size 44, 44', "port entity"],
-  ["artifact", 'artifact ARTIFACT_ID "$0" at 120, 120 size 180, 110', "artifact entity"],
-  ["note", 'note NOTE_ID "$0" at 120, 120 size 180, 110 {\n  body "Note text"\n}', "annotation entity"],
-  ["interface", 'interface INTERFACE_ID "$0" from SOURCE.right to TARGET.left', "native interface connector"],
-  ["dependency", 'dependency DEPENDENCY_ID "$0" from SOURCE.right to TARGET.left', "dependency connector"],
-  ["association", 'association ASSOCIATION_ID "$0" from SOURCE.right to TARGET.left', "association connector"],
-  ["generalization", 'generalization GENERALIZATION_ID "$0" from SOURCE.top to TARGET.bottom', "generalization connector"],
-  ["stereotype", 'stereotype "$0"', "element stereotype"],
-  ["attribute", 'attribute "$0"', "class attribute"],
-  ["operation", 'operation "$0"', "class operation"],
-  ["documentation", 'documentation "$0"', "element documentation"]
+  ["diagram", 'diagram "$0" {\n}', "diagram declaration"],
+  ["component", 'component "$0" as COMPONENT', "component entity"],
+  ["subsystem", 'subsystem "$0" as SUBSYSTEM', "subsystem entity"],
+  ["class", 'class "$0" as CLASS {\n  + id: UUID\n  + validate(): Result\n}', "class entity"],
+  ["node", 'node "$0" as NODE', "deployment node"],
+  ["port", 'port "$0" as PORT', "port entity"],
+  ["artifact", 'artifact "$0" as ARTIFACT', "artifact entity"],
+  ["note", 'note "$0" as NOTE {\n  body "Note text"\n}', "annotation entity"],
+  ["interface", 'interface SOURCE -> TARGET : "$0"', "native interface connector"],
+  ["dependency", 'SOURCE ..> TARGET : "$0"', "dependency connector"],
+  ["association", 'SOURCE -- TARGET : "$0"', "association connector"],
+  ["generalization", 'SOURCE --|> TARGET : "$0"', "generalization connector"],
+  ["stereotype", '<<$0>>', "element stereotype"],
+  ["documentation", 'doc "$0"', "element documentation"]
 ].map(([label, insert, detail]) => ({ label, insert, detail }));
 let plantumlMatches = [];
 let plantumlCompletionIndex = 0;
@@ -1007,7 +1005,21 @@ function applyArchitectureSource(source = ($("#plantuml-source") as HTMLTextArea
   const status = $("#render-status");
   try {
     const current = activeArchitectureDiagram();
-    const parsed = parseArchitectureDsl(source, current);
+    const priorByAlias = new Map<string, any>(current.elements.map(element => [String(element.taggedValues?.alias || "").toLowerCase(), element]));
+    let parsed = parseArchitectureDsl(source, current);
+    const hasNewEntities = parsed.elements.some(element => !priorByAlias.has(String(element.taggedValues?.alias || "").toLowerCase()));
+    if (hasNewEntities) {
+      const laidOut = applyAutoLayout(parsed, current.view?.style?.layoutMode || "left-right");
+      laidOut.elements.forEach(element => {
+        const prior = priorByAlias.get(String(element.taggedValues?.alias || "").toLowerCase());
+        if (prior?.view) element.view = structuredClone(prior.view);
+      });
+      laidOut.relationships.forEach(relationship => {
+        const prior = parsed.relationships.find(item => item.id === relationship.id);
+        if (prior?.route) relationship.route = structuredClone(prior.route);
+      });
+      parsed = laidOut;
+    }
     if (remember) rememberArchitecture();
     parsed.source = source;
     delete (parsed as any).sourceDraft;
@@ -1034,13 +1046,13 @@ function rememberArchitecture() {
   architectureFuture = [];
   if (architectureHistory.length > 40) architectureHistory.shift();
 }
-function mutateArchitecture(mutator) {
+function mutateArchitecture(mutator, { updateSource = true } = {}) {
   rememberArchitecture();
   const diagram = structuredClone(activeArchitectureDiagram());
   mutator(diagram);
   diagram.revision = (diagram.revision || 0) + 1;
   setActiveArchitectureDiagram(diagram);
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource });
   persistState();
   renderArchitecture();
   renderMetrics();
@@ -1050,9 +1062,15 @@ function updateArchitectureInspectorDraft(target: HTMLInputElement | HTMLTextAre
   const diagram = activeArchitectureDiagram();
   const selected = diagram.elements.find(element => element.id === architectureSelectedId);
   const rel = diagram.relationships.find(item => `edge:${item.id}` === architectureSelectedId);
+  const numericValue = target instanceof HTMLInputElement ? target.valueAsNumber : Number.NaN;
+  const geometryField = ["architecture-element-x", "architecture-element-y", "architecture-element-width", "architecture-element-height"].includes(target.id);
   if (selected && target.id === "architecture-element-name") selected.name = target.value;
   if (selected && target.id === "architecture-element-kind") selected.kind = target.value;
   if (selected && target.id === "architecture-element-alias") { selected.taggedValues ||= {}; selected.taggedValues.alias = architectureAlias(target.value); }
+  if (selected && target.id === "architecture-element-x" && Number.isFinite(numericValue)) selected.view.x = numericValue;
+  if (selected && target.id === "architecture-element-y" && Number.isFinite(numericValue)) selected.view.y = numericValue;
+  if (selected && target.id === "architecture-element-width" && numericValue >= 20) selected.view.width = numericValue;
+  if (selected && target.id === "architecture-element-height" && numericValue >= 20) selected.view.height = numericValue;
   if (selected && target.id === "architecture-element-docs") { selected.properties ||= {}; selected.properties.documentation = target.value; selected.properties.body = target.value; }
   if (rel && target.id === "architecture-edge-label") rel.label = target.value;
   if (rel && target.id === "architecture-edge-kind") rel.kind = target.value;
@@ -1060,7 +1078,7 @@ function updateArchitectureInspectorDraft(target: HTMLInputElement | HTMLTextAre
   if (rel && target.id === "architecture-edge-target") { rel.target = target.value; rel.route.targetSide = ""; }
   if (!selected && !rel) return false;
   diagram.revision = (diagram.revision || 0) + 1;
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: !geometryField });
   persistState();
   return true;
 }
@@ -1167,7 +1185,7 @@ function commitArchitectureDrag() {
   }
   const diagram = activeArchitectureDiagram();
   diagram.revision = (diagram.revision || 0) + 1;
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: false });
   persistState();
   renderArchitecture();
   renderMetrics();
@@ -1970,7 +1988,7 @@ function renderArchitecture() {
     $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc(selectedRelationship.label || "")}" /></label><label><span>Connector type</span><select id="architecture-edge-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}" ${kind === selectedRelationship.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Source</span><select id="architecture-edge-source">${sourceOptions}</select></label><label><span>Destination</span><select id="architecture-edge-target">${targetOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
   } else if (selectedElement) {
     const targets = diagram.elements.filter(element => element.id !== selectedElement.id);
-    $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap(group => group.kinds).map(kind => `<option value="${esc(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><label><span>Documentation</span><textarea id="architecture-element-docs">${esc(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map(element => `<option value="${esc(element.id)}">${esc(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}">${esc(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
+    $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap(group => group.kinds).map(kind => `<option value="${esc(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><div class="architecture-geometry-fields"><label><span>X</span><input id="architecture-element-x" type="number" value="${selectedElement.view.x}" /></label><label><span>Y</span><input id="architecture-element-y" type="number" value="${selectedElement.view.y}" /></label><label><span>Width</span><input id="architecture-element-width" type="number" min="20" value="${selectedElement.view.width}" /></label><label><span>Height</span><input id="architecture-element-height" type="number" min="20" value="${selectedElement.view.height}" /></label></div><label><span>Documentation</span><textarea id="architecture-element-docs">${esc(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map(element => `<option value="${esc(element.id)}">${esc(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map(kind => `<option value="${esc(kind)}">${esc(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
   } else {
     $("#architecture-inspector").innerHTML = `<p class="dialog-copy">Select an element or connector to edit its notation, alias, and relationships.</p>`;
   }
@@ -2923,7 +2941,7 @@ $("#architecture-inspector").addEventListener("click", event => {
     deleteArchitectureSelection();
   }
 });
-$("#architecture-layout-btn").addEventListener("click", () => mutateArchitecture(diagram => Object.assign(diagram, applyAutoLayout(diagram, ($("#architecture-layout") as HTMLSelectElement).value))));
+$("#architecture-layout-btn").addEventListener("click", () => mutateArchitecture(diagram => Object.assign(diagram, applyAutoLayout(diagram, ($("#architecture-layout") as HTMLSelectElement).value)), { updateSource: false }));
 $("#architecture-undo-btn").addEventListener("click", () => {
   const previous = architectureHistory.pop(); if (!previous) return;
   architectureFuture.push(structuredClone(activeArchitectureDiagram()));

@@ -113,7 +113,7 @@ For an industry-style learning path, use the [`Robotic Cell Engineering Practicu
 The shorter [`AMR Robot Safety Training`](training/README.md) remains available as an introductory course. Training assets include:
 
 - Five beginner modules
-- A runnable warehouse-AMR PlantUML example
+- Runnable warehouse-AMR Praxis UML DSL and legacy PlantUML examples
 - A detailed palletizing-cell project covering Engineering notes, workflow, architecture, hazards, safety functions, FMEA, FMEDA, requirements, validation, and change impact
 - Working SIL, FMEA, and safety-requirement examples
 - Student tasks and a capstone assessment
@@ -186,6 +186,8 @@ Safety is treated as a continuous engineering lens rather than a single downstre
 
 Use **Architecture** as a native UML workbench inside the safety workspace:
 
+See the dedicated [`Praxis UML DSL guide`](training/UML-DSL-GUIDE.md) for the complete syntax, modelling workflow, examples, and troubleshooting reference.
+
 - Treat the Praxis UML DSL as the authoritative diagram definition; applying valid source replaces the native model while invalid drafts leave the last valid canvas intact.
 - Add UML elements from the palette and select them on the canvas or outline.
 - Drag shapes directly on the canvas with smooth, zoom-aware movement.
@@ -200,28 +202,28 @@ Use **Architecture** as a native UML workbench inside the safety workspace:
 
 The architecture model and its DSL source are stored in the active Praxis Studio workspace. Compatible legacy interface-connector shapes with two incident edges are migrated into one native connector. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events. A derived PlantUML representation remains in project data for backward compatibility, but it is not the editor's source of truth.
 
-The DSL uses stable aliases and explicit constructs for entities and relationships:
+The DSL uses concise PlantUML-style names, aliases, and arrows:
 
 ```text
-uml component "Collaborative robot cell" {
-  component PLC "Safety PLC" at 140, 120 size 220, 104
-  component CTRL "Robot controller" at 520, 240 size 220, 104
+diagram "Collaborative robot cell" {
+  component "Safety PLC" as PLC
+  component "Robot controller" as CTRL
 
-  class COMMAND "Safe-stop command" at 280, 420 size 220, 130 {
-    stereotype "safety data"
-    attribute "+ demanded: Boolean"
-    operation "+ validate(): Result"
-    documentation "Command exchanged across the safety boundary"
+  class "Safe-stop command" as COMMAND {
+    <<safety data>>
+    + demanded: Boolean
+    + validate(): Result
+    doc "Command exchanged across the safety boundary"
   }
 
-  interface SAFE_STOP "Safe stop interface" from PLC.right to CTRL.left
-  dependency COMMAND_FLOW "Validated command" from COMMAND.top to CTRL.bottom
+  interface PLC -> CTRL : "Safe stop interface"
+  COMMAND ..> CTRL : "Validated command"
 }
 ```
 
-Entity declarations use `<kind> <alias> "<name>"`. Supported kinds come from the native UML palette, including `component`, `subsystem`, `class`, `node`, `artifact`, `port`, actors, activities, states, packages, notes, and constraints. Optional `at x, y` and `size width, height` clauses define layout. If `at` or `size` is omitted for an existing alias, the current canvas geometry is preserved; new entities are auto-placed. Manual dragging, inspector edits, and automatic layout write canonical geometry back into the source.
+Entity declarations use `<kind> "<name>" as <alias>`. Supported kinds come from the native UML palette, including `component`, `subsystem`, `class`, `node`, `artifact`, `port`, actors, activities, states, packages, notes, and constraints.
 
-Relationships use `<kind> <alias> "<label>" from <entity>.<side> to <entity>.<side>`. Sides are `top`, `right`, `bottom`, and `left`; they may be omitted for automatic anchoring. Relationship kinds include `association`, `dependency`, `generalization`, `realization`, `aggregation`, `composition`, `interface`, `delegation`, and the activity/use-case connector types. The autocomplete menu inserts complete domain constructs with `ArrowUp` / `ArrowDown` and `Enter` or `Tab`.
+Relationships use familiar arrows such as `A -- B`, `A ..> B`, and `A --|> B`; prefix special kinds such as `interface A -> B`. The DSL contains no coordinates or sizes. New shapes are positioned automatically, while mouse dragging and X/Y/width/height inspector fields update separate editor view state keyed by stable alias. The autocomplete menu inserts complete domain constructs with `ArrowUp` / `ArrowDown` and `Enter` or `Tab`.
 
 ### Operational Situations And Hazards
 

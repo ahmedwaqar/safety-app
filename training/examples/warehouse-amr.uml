@@ -1,0 +1,16 @@
+diagram "Warehouse AMR safety training example" {
+  component "Fleet manager" as FLEET
+  component "AMR motion controller" as CTRL
+  component "Safety controller" as SAFE
+  component "Safety scanner" as SCAN
+  component "Drive and brake system" as DRIVE
+  component "Payload interface" as LOAD
+  component "Charging interface" as CHARGE
+
+  FLEET ..> CTRL : "Route command"
+  interface SCAN -> SAFE : "Protective-field status"
+  interface SAFE -> CTRL : "Safe-motion enable"
+  CTRL ..> DRIVE : "Speed and direction"
+  DRIVE -- LOAD : "Vehicle movement"
+  CHARGE ..> CTRL : "Charging state"
+}

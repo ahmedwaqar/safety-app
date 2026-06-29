@@ -960,6 +960,16 @@ var aliasPattern = "[A-Za-z][A-Za-z0-9_-]*";
 var sidePattern = "top|right|bottom|left";
 var elementAliases = { node: "deploymentNode", usecase: "useCase", abstractclass: "abstractClass", datatype: "dataType" };
 var relationshipAliases = { interface: "interfaceConnector" };
+var relationshipOperators = {
+  "--": "association",
+  "->": "dependency",
+  "-->": "dependency",
+  "..>": "dependency",
+  "--|>": "generalization",
+  "..|>": "realization",
+  "o--": "aggregation",
+  "*--": "composition"
+};
 
 class ArchitectureDslError extends Error {
   line;
@@ -993,6 +1003,10 @@ function sourceElementKind(kind) {
 function sourceRelationshipKind(kind) {
   return kind === "interfaceConnector" ? "interface" : kind;
 }
+function isComment(line) {
+  const text = line.trim();
+  return text.startsWith("#") || text.startsWith("'");
+}
 function defaultPosition(index) {
   return { x: 120 + index % 3 * 280, y: 120 + Math.floor(index / 3) * 180 };
 }
@@ -1001,36 +1015,44 @@ function existingElementByAlias(diagram, alias) {
 }
 function parseElement(lines, start, existingDiagram, placementIndex) {
   const raw = lines[start].trim();
-  const match = raw.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")(?:\\s+at\\s+(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?))?(?:\\s+size\\s+(\\d+(?:\\.\\d+)?)\\s*,\\s*(\\d+(?:\\.\\d+)?))?\\s*(\\{)?$`, "i"));
+  const simple = raw.match(new RegExp(`^(${identifierPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s+as\\s+(${aliasPattern})\\s*(\\{)?$`, "i"));
+  const legacy = raw.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")(?:\\s+at\\s+(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?))?(?:\\s+size\\s+(\\d+(?:\\.\\d+)?)\\s*,\\s*(\\d+(?:\\.\\d+)?))?\\s*(\\{)?$`, "i"));
+  const match = simple || legacy;
   if (!match)
     return null;
   const kind = normalizeElementKind(match[1]);
   if (!kind || kind === "interfaceConnector")
     return null;
-  const alias = match[2];
+  const alias = simple ? match[3] : match[2];
+  const name = simple ? match[2] : match[3];
+  const hasBlock = simple ? match[4] : match[8];
   const prior = existingElementByAlias(existingDiagram, alias);
   const fallback = defaultPosition(placementIndex);
-  const x = match[4] === undefined ? prior?.view?.x ?? fallback.x : Number(match[4]);
-  const y = match[5] === undefined ? prior?.view?.y ?? fallback.y : Number(match[5]);
-  const element = createElement(kind, unquote(match[3]), x, y, match[6] === undefined ? prior?.view?.width : Number(match[6]), match[7] === undefined ? prior?.view?.height : Number(match[7]));
+  const x = legacy?.[4] === undefined ? prior?.view?.x ?? fallback.x : Number(legacy[4]);
+  const y = legacy?.[5] === undefined ? prior?.view?.y ?? fallback.y : Number(legacy[5]);
+  const element = createElement(kind, unquote(name), x, y, legacy?.[6] === undefined ? prior?.view?.width : Number(legacy[6]), legacy?.[7] === undefined ? prior?.view?.height : Number(legacy[7]));
   if (prior?.id)
     element.id = prior.id;
+  if (prior?.view)
+    element.view = structuredClone(prior.view);
   element.taggedValues.alias = alias;
-  if (!match[8])
+  if (!hasBlock)
     return { element, end: start };
   element.properties.attributes = [];
   element.properties.operations = [];
   for (let index = start + 1;index < lines.length; index++) {
     const line = lines[index].trim();
-    if (!line || line.startsWith("#"))
+    if (!line || isComment(line))
       continue;
     if (line === "}")
       return { element, end: index };
-    const property = line.match(/^(stereotype|attribute|operation|documentation|body)\s+("(?:\\.|[^"\\])*")$/i);
+    const property = line.match(/^(stereotype|attribute|operation|documentation|doc|body)\s+("(?:\\.|[^"\\])*")$/i);
     const textScale = line.match(/^textScale\s+(\d+(?:\.\d+)?)$/i);
+    const stereotype = line.match(/^<<(.+)>>$/);
+    const member = line.match(/^([+\-#~]?\s*[A-Za-z_][^{}]*)$/);
     if (property) {
       const value = unquote(property[2]);
-      const key = property[1].toLowerCase();
+      const key = property[1].toLowerCase() === "doc" ? "documentation" : property[1].toLowerCase();
       if (key === "stereotype")
         element.stereotype = value;
       else if (key === "attribute")
@@ -1041,6 +1063,14 @@ function parseElement(lines, start, existingDiagram, placementIndex) {
         element.properties[key] = value;
       continue;
     }
+    if (stereotype) {
+      element.stereotype = stereotype[1].trim();
+      continue;
+    }
+    if (member) {
+      (member[1].includes("(") ? element.properties.operations : element.properties.attributes).push(member[1]);
+      continue;
+    }
     if (textScale) {
       element.view.style.textScale = Number(textScale[1]);
       continue;
@@ -1049,17 +1079,62 @@ function parseElement(lines, start, existingDiagram, placementIndex) {
   }
   throw new ArchitectureDslError(`Element ${alias} is missing a closing brace`, start + 1);
 }
+function parseEndpoint(value) {
+  const match = value.match(new RegExp(`^(${aliasPattern})(?:\\.(${sidePattern}))?$`, "i"));
+  return match ? { alias: match[1], side: (match[2] || "").toLowerCase() } : null;
+}
+function parseRelationship(line, lineNumber) {
+  const legacy = line.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s+from\\s+(${aliasPattern})(?:\\.(${sidePattern}))?\\s+to\\s+(${aliasPattern})(?:\\.(${sidePattern}))?$`, "i"));
+  if (legacy) {
+    const kind = normalizeRelationshipKind(legacy[1]);
+    if (!kind)
+      return null;
+    return { line: lineNumber, kind, authoredAlias: legacy[2], label: unquote(legacy[3]), sourceAlias: legacy[4], sourceSide: (legacy[5] || "").toLowerCase(), targetAlias: legacy[6], targetSide: (legacy[7] || "").toLowerCase() };
+  }
+  let rest = line;
+  let explicitKind = "";
+  const firstWord = line.match(new RegExp(`^(${identifierPattern})\\s+(.+)$`));
+  const candidateKind = firstWord ? normalizeRelationshipKind(firstWord[1]) : "";
+  if (candidateKind) {
+    explicitKind = candidateKind;
+    rest = firstWord[2];
+  }
+  const match = rest.match(new RegExp(`^(${aliasPattern}(?:\\.(?:${sidePattern}))?)\\s+(--\\|>|\\.\\.\\|>|-->|\\.\\.>|o--|\\*--|--|->)\\s+(${aliasPattern}(?:\\.(?:${sidePattern}))?)(?:\\s*:\\s*(.+))?$`, "i"));
+  if (!match)
+    return null;
+  const source = parseEndpoint(match[1]);
+  const target = parseEndpoint(match[3]);
+  if (!source || !target)
+    return null;
+  const rawLabel = (match[4] || "").trim();
+  const label = rawLabel.startsWith('"') ? unquote(rawLabel) : rawLabel;
+  return { line: lineNumber, kind: explicitKind || relationshipOperators[match[2]], authoredAlias: "", label, sourceAlias: source.alias, sourceSide: source.side, targetAlias: target.alias, targetSide: target.side };
+}
+function inferDiagramType(elements) {
+  const kinds = new Set(elements.map((element) => element.kind));
+  if (["activity", "activityObject", "activityFrame", "decision", "merge", "forkJoin", "swimlane", "interruptibleRegion", "signalSend", "signalReceive", "guard", "start", "end"].some((kind) => kinds.has(kind)))
+    return "activity";
+  if (["state", "initialState", "finalState"].some((kind) => kinds.has(kind)))
+    return "state";
+  if (["actor", "useCase", "boundary", "control", "entity"].some((kind) => kinds.has(kind)))
+    return "useCase";
+  if (["class", "abstractClass", "enumeration", "dataType", "object"].some((kind) => kinds.has(kind)))
+    return "class";
+  if (["deploymentNode", "artifact"].some((kind) => kinds.has(kind)))
+    return "deployment";
+  return "component";
+}
 function parseArchitectureDsl(source, existingDiagram = null) {
   const lines = String(source || "").split(/\r?\n/);
-  const firstContent = lines.findIndex((line) => line.trim() && !line.trim().startsWith("#"));
+  const firstContent = lines.findIndex((line) => line.trim() && !isComment(line));
   if (firstContent < 0)
     throw new ArchitectureDslError("Expected a UML diagram declaration", 1);
-  const header = lines[firstContent].trim().match(new RegExp(`^uml\\s+(${identifierPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s*\\{$`, "i"));
+  const header = lines[firstContent].trim().match(new RegExp(`^(?:uml|diagram)(?:\\s+(${identifierPattern}))?\\s+("(?:\\\\.|[^"\\\\])*")\\s*\\{$`, "i"));
   if (!header)
-    throw new ArchitectureDslError('Expected: uml <type> "Diagram name" {', firstContent + 1);
+    throw new ArchitectureDslError('Expected: diagram "Diagram name" {', firstContent + 1);
   const diagram = {
     id: existingDiagram?.id || crypto.randomUUID(),
-    type: header[1],
+    type: header[1] || existingDiagram?.type || "component",
     name: unquote(header[2]),
     modelElementIds: [],
     elements: [],
@@ -1074,7 +1149,7 @@ function parseArchitectureDsl(source, existingDiagram = null) {
   let closed = false;
   for (let index = firstContent + 1;index < lines.length; index++) {
     const line = lines[index].trim();
-    if (!line || line.startsWith("#"))
+    if (!line || isComment(line))
       continue;
     if (line === "}") {
       closed = true;
@@ -1090,33 +1165,36 @@ function parseArchitectureDsl(source, existingDiagram = null) {
       index = parsedElement.end;
       continue;
     }
-    const relationship = line.match(new RegExp(`^(${identifierPattern})\\s+(${aliasPattern})\\s+("(?:\\\\.|[^"\\\\])*")\\s+from\\s+(${aliasPattern})(?:\\.(${sidePattern}))?\\s+to\\s+(${aliasPattern})(?:\\.(${sidePattern}))?$`, "i"));
-    const kind = relationship ? normalizeRelationshipKind(relationship[1]) : "";
-    if (relationship && kind) {
-      relationshipRows.push({ line: index + 1, match: relationship, kind });
+    const relationship = parseRelationship(line, index + 1);
+    if (relationship) {
+      relationshipRows.push(relationship);
       continue;
     }
     throw new ArchitectureDslError("Expected a UML entity or relationship declaration", index + 1);
   }
   if (!closed)
     throw new ArchitectureDslError("Diagram is missing a closing brace", lines.length);
+  if (!header[1])
+    diagram.type = inferDiagramType(diagram.elements);
   diagram.modelElementIds = diagram.elements.map((element) => element.id);
-  const existingRelationships = new Map((existingDiagram?.relationships || []).map((rel) => [String(rel.taggedValues?.alias || "").toLowerCase(), rel]));
+  const existingRelationships = existingDiagram?.relationships || [];
   for (const row of relationshipRows) {
-    const [, , alias, label, sourceAlias, sourceSide = "", targetAlias, targetSide = ""] = row.match;
-    const sourceId = aliases.get(sourceAlias.toLowerCase());
-    const targetId = aliases.get(targetAlias.toLowerCase());
+    const sourceId = aliases.get(row.sourceAlias.toLowerCase());
+    const targetId = aliases.get(row.targetAlias.toLowerCase());
     if (!sourceId)
-      throw new ArchitectureDslError(`Unknown source element ${sourceAlias}`, row.line);
+      throw new ArchitectureDslError(`Unknown source element ${row.sourceAlias}`, row.line);
     if (!targetId)
-      throw new ArchitectureDslError(`Unknown target element ${targetAlias}`, row.line);
-    const relationship = createRelationship(row.kind, sourceId, targetId, unquote(label));
-    const prior = existingRelationships.get(alias.toLowerCase());
+      throw new ArchitectureDslError(`Unknown target element ${row.targetAlias}`, row.line);
+    const relationship = createRelationship(row.kind, sourceId, targetId, row.label);
+    const prior = existingRelationships.find((rel) => row.authoredAlias ? String(rel.taggedValues?.alias || "").toLowerCase() === row.authoredAlias.toLowerCase() : rel.kind === row.kind && rel.source === sourceId && rel.target === targetId);
     if (prior?.id)
       relationship.id = prior.id;
-    relationship.taggedValues = { ...prior?.taggedValues || {}, alias };
-    relationship.route.sourceSide = sourceSide.toLowerCase();
-    relationship.route.targetSide = targetSide.toLowerCase();
+    relationship.taggedValues = { ...prior?.taggedValues || {}, alias: row.authoredAlias || prior?.taggedValues?.alias || `R${diagram.relationships.length + 1}` };
+    relationship.route = structuredClone(prior?.route || relationship.route);
+    if (row.sourceSide)
+      relationship.route.sourceSide = row.sourceSide;
+    if (row.targetSide)
+      relationship.route.targetSide = row.targetSide;
     diagram.relationships.push(relationship);
   }
   return diagram;
@@ -1135,37 +1213,33 @@ function serializeArchitectureDsl(diagram) {
     return alias;
   };
   const elementAliases2 = (diagram?.elements || []).map(elementAlias);
-  const lines = [`uml ${diagram?.type || "component"} ${quote(diagram?.name || "System architecture")} {`];
+  const lines = [`diagram ${quote(diagram?.name || "System architecture")} {`];
   (diagram?.elements || []).forEach((element, index) => {
     const alias = elementAliases2[index];
-    const view = element.view || { x: 0, y: 0, width: 180, height: 92 };
     const properties = element.properties || {};
     const propertyLines = [];
     if (element.stereotype && element.stereotype !== element.kind)
-      propertyLines.push(`stereotype ${quote(element.stereotype)}`);
-    (properties.attributes || []).forEach((value) => propertyLines.push(`attribute ${quote(value)}`));
-    (properties.operations || []).forEach((value) => propertyLines.push(`operation ${quote(value)}`));
+      propertyLines.push(`<<${element.stereotype}>>`);
+    (properties.attributes || []).forEach((value) => propertyLines.push(value));
+    (properties.operations || []).forEach((value) => propertyLines.push(value));
     if (properties.documentation)
-      propertyLines.push(`documentation ${quote(properties.documentation)}`);
+      propertyLines.push(`doc ${quote(properties.documentation)}`);
     if (properties.body && properties.body !== properties.documentation)
       propertyLines.push(`body ${quote(properties.body)}`);
-    if (Number(element.view?.style?.textScale || 1) !== 1)
-      propertyLines.push(`textScale ${Number(element.view.style.textScale)}`);
-    const declaration = `  ${sourceElementKind(element.kind)} ${alias} ${quote(element.name)} at ${Number(view.x)}, ${Number(view.y)} size ${Number(view.width)}, ${Number(view.height)}`;
+    const declaration = `  ${sourceElementKind(element.kind)} ${quote(element.name)} as ${alias}`;
     if (!propertyLines.length)
       lines.push(declaration);
     else
       lines.push(`${declaration} {`, ...propertyLines.map((line) => `    ${line}`), "  }");
   });
-  (diagram?.relationships || []).forEach((relationship, index) => {
-    const alias = String(relationship.taggedValues?.alias || `R${index + 1}`).replace(/[^A-Za-z0-9_-]/g, "_");
+  (diagram?.relationships || []).forEach((relationship) => {
     const source = aliasById.get(relationship.source);
     const target = aliasById.get(relationship.target);
     if (!source || !target)
       return;
-    const sourceEndpoint = `${source}${relationship.route?.sourceSide ? `.${relationship.route.sourceSide}` : ""}`;
-    const targetEndpoint = `${target}${relationship.route?.targetSide ? `.${relationship.route.targetSide}` : ""}`;
-    lines.push(`  ${sourceRelationshipKind(relationship.kind)} ${alias} ${quote(relationship.label || "")} from ${sourceEndpoint} to ${targetEndpoint}`);
+    const operator = { association: "--", dependency: "..>", generalization: "--|>", realization: "..|>", aggregation: "o--", composition: "*--" }[relationship.kind] || "->";
+    const prefix = ["association", "dependency", "generalization", "realization", "aggregation", "composition"].includes(relationship.kind) ? "" : `${sourceRelationshipKind(relationship.kind)} `;
+    lines.push(`  ${prefix}${source} ${operator} ${target}${relationship.label ? ` : ${quote(relationship.label)}` : ""}`);
   });
   lines.push("}");
   return lines.join(`
@@ -1888,28 +1962,26 @@ var silBands = {
   low: { "SIL 1": [0.01, 0.1], "SIL 2": [0.001, 0.01], "SIL 3": [0.0001, 0.001], "SIL 4": [0.00001, 0.0001] }
 };
 var plantumlCompletions = [
-  ["uml", `uml component "$0" {
+  ["diagram", `diagram "$0" {
 }`, "diagram declaration"],
-  ["component", 'component COMPONENT_ID "$0" at 120, 120 size 220, 104', "component entity"],
-  ["subsystem", 'subsystem SUBSYSTEM_ID "$0" at 120, 120 size 300, 190', "subsystem entity"],
-  ["class", `class CLASS_ID "$0" at 120, 120 size 210, 130 {
-  attribute "+ id: UUID"
-  operation "+ validate(): Result"
+  ["component", 'component "$0" as COMPONENT', "component entity"],
+  ["subsystem", 'subsystem "$0" as SUBSYSTEM', "subsystem entity"],
+  ["class", `class "$0" as CLASS {
+  + id: UUID
+  + validate(): Result
 }`, "class entity"],
-  ["node", 'node NODE_ID "$0" at 120, 120 size 230, 130', "deployment node"],
-  ["port", 'port PORT_ID "$0" at 120, 120 size 44, 44', "port entity"],
-  ["artifact", 'artifact ARTIFACT_ID "$0" at 120, 120 size 180, 110', "artifact entity"],
-  ["note", `note NOTE_ID "$0" at 120, 120 size 180, 110 {
+  ["node", 'node "$0" as NODE', "deployment node"],
+  ["port", 'port "$0" as PORT', "port entity"],
+  ["artifact", 'artifact "$0" as ARTIFACT', "artifact entity"],
+  ["note", `note "$0" as NOTE {
   body "Note text"
 }`, "annotation entity"],
-  ["interface", 'interface INTERFACE_ID "$0" from SOURCE.right to TARGET.left', "native interface connector"],
-  ["dependency", 'dependency DEPENDENCY_ID "$0" from SOURCE.right to TARGET.left', "dependency connector"],
-  ["association", 'association ASSOCIATION_ID "$0" from SOURCE.right to TARGET.left', "association connector"],
-  ["generalization", 'generalization GENERALIZATION_ID "$0" from SOURCE.top to TARGET.bottom', "generalization connector"],
-  ["stereotype", 'stereotype "$0"', "element stereotype"],
-  ["attribute", 'attribute "$0"', "class attribute"],
-  ["operation", 'operation "$0"', "class operation"],
-  ["documentation", 'documentation "$0"', "element documentation"]
+  ["interface", 'interface SOURCE -> TARGET : "$0"', "native interface connector"],
+  ["dependency", 'SOURCE ..> TARGET : "$0"', "dependency connector"],
+  ["association", 'SOURCE -- TARGET : "$0"', "association connector"],
+  ["generalization", 'SOURCE --|> TARGET : "$0"', "generalization connector"],
+  ["stereotype", "<<$0>>", "element stereotype"],
+  ["documentation", 'doc "$0"', "element documentation"]
 ].map(([label, insert, detail]) => ({ label, insert, detail }));
 var plantumlMatches = [];
 var plantumlCompletionIndex = 0;
@@ -2457,7 +2529,23 @@ function applyArchitectureSource(source = $("#plantuml-source").value, { remembe
   const status = $("#render-status");
   try {
     const current = activeArchitectureDiagram();
-    const parsed = parseArchitectureDsl(source, current);
+    const priorByAlias = new Map(current.elements.map((element) => [String(element.taggedValues?.alias || "").toLowerCase(), element]));
+    let parsed = parseArchitectureDsl(source, current);
+    const hasNewEntities = parsed.elements.some((element) => !priorByAlias.has(String(element.taggedValues?.alias || "").toLowerCase()));
+    if (hasNewEntities) {
+      const laidOut = applyAutoLayout(parsed, current.view?.style?.layoutMode || "left-right");
+      laidOut.elements.forEach((element) => {
+        const prior = priorByAlias.get(String(element.taggedValues?.alias || "").toLowerCase());
+        if (prior?.view)
+          element.view = structuredClone(prior.view);
+      });
+      laidOut.relationships.forEach((relationship) => {
+        const prior = parsed.relationships.find((item) => item.id === relationship.id);
+        if (prior?.route)
+          relationship.route = structuredClone(prior.route);
+      });
+      parsed = laidOut;
+    }
     if (remember)
       rememberArchitecture();
     parsed.source = source;
@@ -2487,13 +2575,13 @@ function rememberArchitecture() {
   if (architectureHistory.length > 40)
     architectureHistory.shift();
 }
-function mutateArchitecture(mutator) {
+function mutateArchitecture(mutator, { updateSource = true } = {}) {
   rememberArchitecture();
   const diagram = structuredClone(activeArchitectureDiagram());
   mutator(diagram);
   diagram.revision = (diagram.revision || 0) + 1;
   setActiveArchitectureDiagram(diagram);
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource });
   persistState();
   renderArchitecture();
   renderMetrics();
@@ -2503,6 +2591,8 @@ function updateArchitectureInspectorDraft(target) {
   const diagram = activeArchitectureDiagram();
   const selected = diagram.elements.find((element) => element.id === architectureSelectedId);
   const rel = diagram.relationships.find((item) => `edge:${item.id}` === architectureSelectedId);
+  const numericValue = target instanceof HTMLInputElement ? target.valueAsNumber : Number.NaN;
+  const geometryField = ["architecture-element-x", "architecture-element-y", "architecture-element-width", "architecture-element-height"].includes(target.id);
   if (selected && target.id === "architecture-element-name")
     selected.name = target.value;
   if (selected && target.id === "architecture-element-kind")
@@ -2511,6 +2601,14 @@ function updateArchitectureInspectorDraft(target) {
     selected.taggedValues ||= {};
     selected.taggedValues.alias = architectureAlias(target.value);
   }
+  if (selected && target.id === "architecture-element-x" && Number.isFinite(numericValue))
+    selected.view.x = numericValue;
+  if (selected && target.id === "architecture-element-y" && Number.isFinite(numericValue))
+    selected.view.y = numericValue;
+  if (selected && target.id === "architecture-element-width" && numericValue >= 20)
+    selected.view.width = numericValue;
+  if (selected && target.id === "architecture-element-height" && numericValue >= 20)
+    selected.view.height = numericValue;
   if (selected && target.id === "architecture-element-docs") {
     selected.properties ||= {};
     selected.properties.documentation = target.value;
@@ -2531,7 +2629,7 @@ function updateArchitectureInspectorDraft(target) {
   if (!selected && !rel)
     return false;
   diagram.revision = (diagram.revision || 0) + 1;
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: !geometryField });
   persistState();
   return true;
 }
@@ -2651,7 +2749,7 @@ function commitArchitectureDrag() {
   }
   const diagram = activeArchitectureDiagram();
   diagram.revision = (diagram.revision || 0) + 1;
-  syncArchitectureContext(diagram);
+  syncArchitectureContext(diagram, { updateSource: false });
   persistState();
   renderArchitecture();
   renderMetrics();
@@ -3624,7 +3722,7 @@ function renderArchitecture() {
     $("#architecture-inspector").innerHTML = `<label><span>Connector label</span><input id="architecture-edge-label" value="${esc2(selectedRelationship.label || "")}" /></label><label><span>Connector type</span><select id="architecture-edge-kind">${UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}" ${kind === selectedRelationship.kind ? "selected" : ""}>${esc2(kind)}</option>`).join("")}</select></label><label><span>Source</span><select id="architecture-edge-source">${sourceOptions}</select></label><label><span>Destination</span><select id="architecture-edge-target">${targetOptions}</select></label><button class="button secondary small" id="architecture-delete-selection">Delete connector</button>`;
   } else if (selectedElement) {
     const targets = diagram.elements.filter((element) => element.id !== selectedElement.id);
-    $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc2(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap((group) => group.kinds).map((kind) => `<option value="${esc2(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc2(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc2(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><label><span>Documentation</span><textarea id="architecture-element-docs">${esc2(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map((element) => `<option value="${esc2(element.id)}">${esc2(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}">${esc2(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
+    $("#architecture-inspector").innerHTML = `<label><span>Name</span><input id="architecture-element-name" value="${esc2(selectedElement.name)}" /></label><label><span>Kind</span><select id="architecture-element-kind">${UML_PALETTE_GROUPS.flatMap((group) => group.kinds).map((kind) => `<option value="${esc2(kind)}" ${kind === selectedElement.kind ? "selected" : ""}>${esc2(kind)}</option>`).join("")}</select></label><label><span>Alias</span><input id="architecture-element-alias" value="${esc2(selectedElement.taggedValues?.alias || architectureAlias(selectedElement.name))}" /></label><div class="architecture-geometry-fields"><label><span>X</span><input id="architecture-element-x" type="number" value="${selectedElement.view.x}" /></label><label><span>Y</span><input id="architecture-element-y" type="number" value="${selectedElement.view.y}" /></label><label><span>Width</span><input id="architecture-element-width" type="number" min="20" value="${selectedElement.view.width}" /></label><label><span>Height</span><input id="architecture-element-height" type="number" min="20" value="${selectedElement.view.height}" /></label></div><label><span>Documentation</span><textarea id="architecture-element-docs">${esc2(selectedElement.properties?.documentation || selectedElement.properties?.body || "")}</textarea></label><div class="connect-box"><label><span>Connect to</span><select id="architecture-connect-target" ${targets.length ? "" : "disabled"}>${targets.map((element) => `<option value="${esc2(element.id)}">${esc2(element.name)}</option>`).join("")}</select></label><label><span>Connector</span><select id="architecture-connect-kind">${UML_RELATIONSHIP_KINDS.map((kind) => `<option value="${esc2(kind)}">${esc2(kind)}</option>`).join("")}</select></label><button class="button secondary small" id="architecture-connect-btn" ${targets.length ? "" : "disabled"}>Connect</button></div><button class="button secondary small" id="architecture-delete-selection">Delete element</button>`;
   } else {
     $("#architecture-inspector").innerHTML = `<p class="dialog-copy">Select an element or connector to edit its notation, alias, and relationships.</p>`;
   }
@@ -4949,7 +5047,7 @@ $("#architecture-inspector").addEventListener("click", (event) => {
     deleteArchitectureSelection();
   }
 });
-$("#architecture-layout-btn").addEventListener("click", () => mutateArchitecture((diagram) => Object.assign(diagram, applyAutoLayout(diagram, $("#architecture-layout").value))));
+$("#architecture-layout-btn").addEventListener("click", () => mutateArchitecture((diagram) => Object.assign(diagram, applyAutoLayout(diagram, $("#architecture-layout").value)), { updateSource: false }));
 $("#architecture-undo-btn").addEventListener("click", () => {
   const previous = architectureHistory.pop();
   if (!previous)

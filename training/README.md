@@ -8,7 +8,7 @@ After completing the course, a learner should be able to:
 
 1. Explain the difference between a hazard, hazardous situation, hazardous event, safety function, and safety requirement.
 2. Describe why the AMR operating zone is part of the safety analysis.
-3. Build a basic AMR architecture model in PlantUML.
+3. Build a basic AMR architecture model in the Praxis UML DSL.
 4. Catalogue operational situations and hazards.
 5. Estimate a target SIL for an AMR safety function with the app's C/F/P/W risk graph.
 6. Record a component-level failure mode in the FMEA worksheet.
@@ -46,7 +46,7 @@ Open:
 http://localhost:8080
 ```
 
-The course example PlantUML model is available at [`examples/warehouse-amr.puml`](examples/warehouse-amr.puml).
+The course example Praxis UML DSL model is available at [`examples/warehouse-amr.uml`](examples/warehouse-amr.uml). The earlier [`PlantUML example`](examples/warehouse-amr.puml) remains available for compatibility exercises.
 
 Create a blank project before starting:
 
@@ -98,10 +98,9 @@ An AMR is a powered mobile robot that can operate automatically within an intend
 
 For this course, analyze a warehouse AMR that transports a 150 kg tote between storage and packing stations. It travels through shared aisles and a blind intersection. Pedestrians may enter the route during normal operation.
 
-In **Architecture**, paste the content of [`examples/warehouse-amr.puml`](examples/warehouse-amr.puml), then select:
+In **Architecture**, paste the content of [`examples/warehouse-amr.uml`](examples/warehouse-amr.uml), then select **Apply source**.
 
-1. **Render diagram**
-2. **Render diagram** — the PlantUML declarations automatically define the component context.
+The DSL declarations render as automatically positioned native shapes and connectors and define the component context. Use **Layout**, drag shapes, or enter exact geometry in the inspector to refine the presentation.
 
 Expected result: seven architecture components appear under **Components defined in architecture**.
 
@@ -320,7 +319,7 @@ A warehouse AMR transports loaded totes through a mixed-traffic area. Forklifts 
 
 Use Praxis Studio to create:
 
-1. A PlantUML architecture with at least six components.
+1. A Praxis UML DSL architecture with at least six components.
 2. Five operational situations, including charging and jam recovery.
 3. Five hazards, including collision, payload, and stored-energy hazards.
 4. Three AMR SIL assessments for distinct safety functions.
@@ -372,5 +371,6 @@ The `training` folder includes three automotive ADAS fault-tree examples in the 
 
 # Automotive functional-safety preparation
 
+- [Praxis UML DSL guide](UML-DSL-GUIDE.md) — native architecture syntax, layout rules, examples, and troubleshooting.
 - [Fault Tree Analysis guide](FAULT-TREE-GUIDE.md) — current DSL, review checklist, and scope.
 - [Automotive FTA interview practicum](automotive-fta-interview-practicum.md) — exercises and model answers for automated-driving safety interviews.

@@ -848,20 +848,31 @@ try {
 
   await test("UML DSL defines native entities, connectors, and component context", async () => {
     await click('[data-view="architecture"]');
-    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller" at 140, 120 size 220, 104\n  node TEST_ARM "Test arm" at 520, 240 size 230, 130\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+    await fill("#plantuml-source", 'diagram "Test architecture" {\n  component "Test controller" as TEST_CTRL\n  node "Test arm" as TEST_ARM\n  interface TEST_CTRL -> TEST_ARM : "Safe stop interface"\n}');
     await click("#render-btn");
     assert(await count("#component-list .component-item") === 2, "UML DSL did not update component context");
     assert(await evaluate(`document.querySelector("#component-list").textContent.includes("TEST_ARM")`), "UML DSL alias is missing");
     assert(await count("#architecture-stage .uml-node") === 2, "UML DSL entities did not render as native shapes");
     assert(await count("#architecture-stage .interface-assembly") === 1, "UML DSL interface did not render as a native connector");
-    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_CTRL").view.x`) === 140, "UML DSL layout coordinates were not applied");
+    assert(await evaluate(`(() => { const [first, second] = activeArchitectureDiagram().elements; return Number.isFinite(first.view.x) && Number.isFinite(second.view.x) && (first.view.x !== second.view.x || first.view.y !== second.view.y); })()`), "UML DSL entities were not positioned automatically");
+    assert(!await evaluate(`/\bat\s+-?\d|\bsize\s+\d/.test(document.querySelector("#plantuml-source").value)`), "UML DSL exposed canvas geometry in source");
   });
 
-  await test("UML DSL preserves manual layout when source omits coordinates", async () => {
-    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller"\n  node TEST_ARM "Test arm"\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+  await test("inspector geometry is preserved separately from UML source", async () => {
+    await evaluate(`document.querySelector("#architecture-stage .uml-node").dispatchEvent(new MouseEvent("click", { bubbles: true }))`);
+    assert(await evaluate(`getComputedStyle(document.querySelector(".architecture-geometry-fields")).display`) === "grid", "architecture geometry controls are not arranged as a compact grid");
+    const beforeSource = await evaluate(`document.querySelector("#plantuml-source").value`);
+    await fill("#architecture-element-x", "333");
+    await fill("#architecture-element-y", "222");
+    await fill("#architecture-element-width", "250");
+    await fill("#architecture-element-height", "120");
+    await evaluate(`document.querySelector("#architecture-element-height").dispatchEvent(new Event("change", { bubbles: true }))`);
+    const source = await evaluate(`document.querySelector("#plantuml-source").value`);
+    assert(source === beforeSource, "inspector geometry reformatted or changed semantic UML source");
+    assert(!/\bat\s+-?\d|\bsize\s+\d/.test(source), "inspector geometry leaked into UML source");
+    await fill("#plantuml-source", source);
     await click("#render-btn");
-    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_CTRL").view.x`) === 140, "source reapply discarded an existing manual position");
-    assert(await evaluate(`activeArchitectureDiagram().elements.find(item => item.taggedValues.alias === "TEST_ARM").view.x`) === 520, "source reapply discarded a second existing position");
+    assert(await evaluate(`(() => { const item = activeArchitectureDiagram().elements.find(element => element.taggedValues.alias === "TEST_CTRL"); return item.view.x === 333 && item.view.y === 222 && item.view.width === 250 && item.view.height === 120; })()`), "source reapply discarded inspector geometry");
   });
 
   await test("native architecture inspector supports smooth text editing", async () => {
@@ -903,8 +914,8 @@ try {
       const after = activeArchitectureDiagram().elements.find(item => item.id === id).view;
       const otherStayedPut = Math.abs(otherBefore.left - otherAfter.left) < 1 && Math.abs(otherBefore.top - otherAfter.top) < 1;
       const movedSmoothly = Math.abs(after.x - (before.x + 73)) < 0.2 && Math.abs(after.y - (before.y + 49)) < 0.2;
-      const sourceUpdated = document.querySelector("#plantuml-source").value.includes("at " + after.x + ", " + after.y);
-      return Boolean(movedSmoothly && otherStayedPut && viewBoxBefore === viewBoxDuringDrag && sourceUpdated && document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']"));
+      const sourceIsSemantic = !/\bat\s+-?\d|\bsize\s+\d/.test(document.querySelector("#plantuml-source").value);
+      return Boolean(movedSmoothly && otherStayedPut && viewBoxBefore === viewBoxDuringDrag && sourceIsSemantic && document.querySelector("#architecture-stage .uml-node[data-id='" + id + "']"));
     })()`);
     assert(moved, "architecture shape drag moved the wrong visual target or shifted the canvas viewport");
   });
@@ -1177,20 +1188,20 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
     assert(!await evaluate(`document.querySelector("#plantuml-completions").hidden`), "UML DSL completion menu did not open");
     assert(await evaluate(`document.querySelector("#plantuml-completions").textContent.includes("component")`), "component completion is missing");
     await evaluate(`document.querySelector("#plantuml-source").dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }))`);
-    assert(await evaluate(`document.querySelector("#plantuml-source").value`) === 'component COMPONENT_ID "" at 120, 120 size 220, 104', "UML DSL component snippet was not inserted");
+    assert(await evaluate(`document.querySelector("#plantuml-source").value`) === 'component "" as COMPONENT', "UML DSL component snippet was not inserted");
     assert(await evaluate(`document.querySelector("#plantuml-source").selectionStart === document.querySelector("#plantuml-source").value.indexOf('""') + 1`), "UML DSL snippet cursor was not placed inside the entity name");
     assert(await evaluate(`document.querySelector("#plantuml-completions").hidden`), "UML DSL completion menu did not close after insertion");
   });
 
   await test("Apply source protects the canvas from invalid UML DSL", async () => {
     const before = await count("#architecture-stage .uml-node");
-    await fill("#plantuml-source", 'uml component "Broken" {\n  component ONLY "Only component"\n  dependency BROKEN "Missing target" from ONLY.right to UNKNOWN.left\n}');
+    await fill("#plantuml-source", 'diagram "Broken" {\n  component "Only component" as ONLY\n  ONLY ..> UNKNOWN : "Missing target"\n}');
     await click("#render-btn");
     assert(await evaluate(`document.querySelector("#render-status").textContent.includes("Unknown target element UNKNOWN")`), "invalid UML DSL did not report the failing construct");
     assert(await count("#architecture-stage .uml-node") === before, "invalid UML DSL replaced the last valid canvas");
-    assert(await evaluate(`document.querySelector("#plantuml-source").value.includes("UNKNOWN.left")`), "invalid UML DSL draft was not retained for correction");
-    assert(await evaluate(`activeArchitectureDiagram().sourceDraft.includes("UNKNOWN.left")`), "invalid UML DSL draft was not persisted separately from the valid model");
-    await fill("#plantuml-source", 'uml component "Test architecture" {\n  component TEST_CTRL "Test controller" at 140, 120 size 220, 104\n  node TEST_ARM "Test arm" at 520, 240 size 230, 130\n  interface SAFE_STOP "Safe stop interface" from TEST_CTRL.right to TEST_ARM.left\n}');
+    assert(await evaluate(`document.querySelector("#plantuml-source").value.includes("UNKNOWN")`), "invalid UML DSL draft was not retained for correction");
+    assert(await evaluate(`activeArchitectureDiagram().sourceDraft.includes("UNKNOWN")`), "invalid UML DSL draft was not persisted separately from the valid model");
+    await fill("#plantuml-source", 'diagram "Test architecture" {\n  component "Test controller" as TEST_CTRL\n  node "Test arm" as TEST_ARM\n  interface TEST_CTRL -> TEST_ARM : "Safe stop interface"\n}');
     await click("#render-btn");
     assert(await evaluate(`document.querySelector("#render-status").textContent`) === "2 entities · 1 connectors", "valid UML DSL did not report the applied native model");
   });
