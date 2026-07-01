@@ -45,7 +45,7 @@ export function architectureDiagramFromPlantUml(source = "@startuml\n@enduml", n
     modelElementIds: elements.map(element => element.id),
     elements,
     relationships,
-    view: { viewport: { x: 0, y: 0, zoom: 1 }, style: { theme: "praxis", grid: true, layoutMode: "left-right" }, nodes: {}, edges: {} },
+    view: { viewport: { x: 0, y: 0, zoom: 1 }, style: { theme: "asasbits", grid: true, layoutMode: "left-right" }, nodes: {}, edges: {} },
     validationStatus: "unchecked",
     revision: 1
   };

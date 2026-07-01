@@ -2,9 +2,9 @@
 
 This course gives a new engineer a realistic, hands-on introduction to the work performed when designing, integrating, commissioning, and releasing an industrial robotic cell.
 
-The exercise uses an automated carton-palletizing cell and the completed Praxis Studio project:
+The exercise uses an automated carton-palletizing cell and the completed AsasBits Studio project:
 
-[`examples/palletizing-cell.praxis.json`](examples/palletizing-cell.praxis.json)
+[`examples/palletizing-cell.asasbits.json`](examples/palletizing-cell.asasbits.json)
 
 Allow **11 to 15 hours** for the complete practicum. The goal is not to memorize forms. The goal is to practice the engineering reasoning, cross-functional communication, traceability, and evidence expected on a real robotics project.
 
@@ -74,10 +74,10 @@ On a real project, these responsibilities may be distributed differently. The im
 
 ## Setup
 
-1. Start Praxis Studio with `bun server.js`.
+1. Start AsasBits Studio with `bun server.js`.
 2. Open `http://localhost:8080`.
 3. Select **File > Open**.
-4. Open `training/examples/palletizing-cell.praxis.json`.
+4. Open `training/examples/palletizing-cell.asasbits.json`.
 5. Confirm that **Palletizing Cell Training Project** appears in the workspace selector.
 6. Open **Engineering workflow** and review the six phases.
 7. Select **File > Save** to create a portable checkpoint before editing.
@@ -91,7 +91,7 @@ Do not edit the original example file. Save your working project under a new nam
 3. Confirm that navigation in one tab does not switch the active view in the other.
 4. Select **Close workspace** in the new tab. Confirm that the original tab remains open and the stored project is still available.
 
-Use **Delete** only when you intend to remove stored project data. Praxis Studio prevents duplicate project names and reactivates an already imported project instead of creating a redundant copy.
+Use **Delete** only when you intend to remove stored project data. AsasBits Studio prevents duplicate project names and reactivates an already imported project instead of creating a redundant copy.
 
 ## Module 0: Engineering Notes And Review Capture
 
@@ -584,7 +584,7 @@ Prepare a project handover containing:
 12. A structured safety argument with supported and unsupported claims clearly distinguished.
 13. An Engineering notes decision log with assumptions, stakeholder actions, calculations, and artifact links.
 14. At least one FMEA draft cleaned and promoted without creating a duplicate record.
-15. Exported `.praxis.json` project that reopens successfully.
+15. Exported `.asasbits.json` project that reopens successfully.
 
 ## Peer Review Questions
 

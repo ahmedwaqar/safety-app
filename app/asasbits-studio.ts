@@ -8,9 +8,10 @@ import { UML_PALETTE_GROUPS, UML_RELATIONSHIP_KINDS, applyAutoLayout, createElem
 const STORAGE_KEY = "safeguard-cobot-workspace-v1";
 const WORKSPACES_KEY = "safeguard-workspaces-v1";
 const ACTIVE_WORKSPACE_KEY = "safeguard-active-workspace-v1";
-const TAB_WORKSPACES_KEY = "praxis-open-workspaces-v1";
-const PROJECT_FORMAT = "praxis-studio-workspace";
-const LEGACY_PROJECT_FORMAT = "safeguard-safety-workspace";
+const TAB_WORKSPACES_KEY = "asasbits-open-workspaces-v1";
+const LEGACY_TAB_WORKSPACES_KEY = "praxis-open-workspaces-v1";
+const PROJECT_FORMAT = "asasbits-studio-workspace";
+const LEGACY_PROJECT_FORMATS = ["praxis-studio-workspace", "safeguard-safety-workspace"];
 const PROJECT_VERSION = 1;
 
 // Engineering workflow feature: reusable phases and safety-checkpoint defaults.
@@ -376,7 +377,7 @@ function setActiveWorkspaceId(id, historyMode: string | false = "replace") {
 }
 function tabWorkspaceIds() {
   const available = new Set(workspaceRegistry.workspaces.map(workspace => workspace.id));
-  const stored = sessionStorage.getItem(TAB_WORKSPACES_KEY);
+  const stored = sessionStorage.getItem(TAB_WORKSPACES_KEY) || sessionStorage.getItem(LEGACY_TAB_WORKSPACES_KEY);
   let ids = stored ? JSON.parse(stored) : [];
   if (!stored) {
     const requested = requestedWorkspaceId();
@@ -560,10 +561,10 @@ function projectEnvelope(workspace = activeWorkspace()) {
 }
 function parseProject(text) {
   const parsed = JSON.parse(text);
-  const hasEnvelope = [PROJECT_FORMAT, LEGACY_PROJECT_FORMAT].includes(parsed.format);
+  const hasEnvelope = [PROJECT_FORMAT, ...LEGACY_PROJECT_FORMATS].includes(parsed.format);
   const data = hasEnvelope ? parsed.workspace?.data : parsed;
   const name = hasEnvelope ? parsed.workspace?.name : "Imported safety workspace";
-  if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid Praxis Studio workspace.");
+  if (!data || !Array.isArray(data.components) || !Array.isArray(data.hazards) || !Array.isArray(data.fmea)) throw new Error("The JSON file is not a valid AsasBits Studio workspace.");
   return { id: hasEnvelope ? parsed.workspace?.id : undefined, name: name || "Imported safety workspace", data: validateWorkspaceData(data) };
 }
 
@@ -2201,7 +2202,7 @@ function renderFaultTreeBuilder() {
 function renderWorkspaceControls() {
   const active = activeWorkspace();
   $("#workspace-select").innerHTML = tabWorkspaces().map(workspace => `<option value="${esc(workspace.id)}" ${workspace.id === active.id ? "selected" : ""}>${esc(workspace.name)}</option>`).join("");
-  document.title = `${active.name} | Praxis Studio`;
+  document.title = `${active.name} | AsasBits Studio`;
 }
 
 // Feature registry: new features can join the application shell without adding
@@ -3182,7 +3183,7 @@ $("#export-btn").addEventListener("click", () => {
   persistState();
   const project = projectEnvelope(); const slug = activeWorkspace().name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "safety-workspace";
   const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
-  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.praxis.json` });
+  const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: `${slug}.asasbits.json` });
   link.click(); URL.revokeObjectURL(link.href);
 });
 

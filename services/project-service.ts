@@ -12,14 +12,29 @@ const emptyRegistry = (): ProjectRegistry => ({ version: 1, workspaces: [], clos
 export class ProjectService {
   private registry = emptyRegistry();
   private loaded = false;
+  private readonly storagePath: string;
+  private readonly legacyStoragePath: string;
 
-  constructor(private readonly storagePath = join(import.meta.dir, "..", ".praxis-data", "projects.json")) {}
+  constructor(storagePath?: string) {
+    this.storagePath = storagePath || join(import.meta.dir, "..", ".asasbits-data", "projects.json");
+    this.legacyStoragePath = storagePath ? "" : join(import.meta.dir, "..", ".praxis-data", "projects.json");
+  }
 
   private async load() {
     if (this.loaded) return;
     this.loaded = true;
     const file = Bun.file(this.storagePath);
-    if (await file.exists()) this.registry = this.validate(await file.json());
+    if (await file.exists()) {
+      this.registry = this.validate(await file.json());
+      return;
+    }
+    if (this.legacyStoragePath) {
+      const legacyFile = Bun.file(this.legacyStoragePath);
+      if (await legacyFile.exists()) {
+        this.registry = this.validate(await legacyFile.json());
+        await this.persist();
+      }
+    }
   }
 
   private validate(value: unknown): ProjectRegistry {

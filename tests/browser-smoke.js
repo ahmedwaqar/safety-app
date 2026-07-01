@@ -8,7 +8,7 @@ const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const debugPort = 9333;
 const profile = `/tmp/safeguard-chrome-${Date.now()}`;
 const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".md": "text/markdown" };
-const projectService = new ProjectService(`/tmp/praxis-project-service-${Date.now()}.json`);
+const projectService = new ProjectService(`/tmp/asasbits-project-service-${Date.now()}.json`);
 
 const server = Bun.serve({
   port: 0,
@@ -89,9 +89,17 @@ try {
   await retry(async () => { assert(await count("#metrics .metric") === 4, "app did not render"); });
   await evaluate(`window.alert = message => window.__lastAlert = message; window.confirm = () => true;`);
 
-  await test("Praxis Studio branding appears in the app and browser tab", async () => {
-    assert(await evaluate(`document.querySelector(".brand strong").textContent`) === "Praxis Studio", "sidebar branding is incorrect");
-    assert(await evaluate(`document.title.endsWith("| Praxis Studio")`), "browser tab title is incorrect");
+  await test("AsasBits Studio branding appears in the app and browser tab", async () => {
+    assert(await evaluate(`document.querySelector(".brand strong").textContent`) === "AsasBits Studio", "sidebar branding is incorrect");
+    assert(await evaluate(`document.querySelector(".brand span").textContent`) === "Foundations for dependable systems", "brand meaning is not visible in the sidebar");
+    assert(await evaluate(`document.title.endsWith("| AsasBits Studio")`), "browser tab title is incorrect");
+    await evaluate(`document.querySelector("#help-btn").click()`);
+    assert(await evaluate(`document.querySelector("#help-dialog").textContent.includes("foundation or basis")`), "brand meaning is missing from in-app help");
+    await evaluate(`document.querySelector("#help-dialog [data-close-dialog]").click()`);
+  });
+
+  await test("legacy Praxis project envelopes remain readable", async () => {
+    assert(await evaluate(`parseProject(JSON.stringify({ format: "praxis-studio-workspace", workspace: { id: "legacy-brand", name: "Legacy brand project", data: structuredClone(state) } })).name`) === "Legacy brand project", "legacy Praxis project format is not supported");
   });
 
   await test("application shell has unique identifiers and navigation routes", async () => {
@@ -157,7 +165,7 @@ try {
     await click("#close-workspace-btn");
     assert(await count("#workspace-select option") === before - 1, "close workspace did not remove the project from the switcher");
     assert(await evaluate(`workspaceRegistry.workspaces.length`) === globalBefore, "close workspace removed the project from the shared registry");
-    assert(!await evaluate(`JSON.parse(sessionStorage.getItem("praxis-open-workspaces-v1")).includes(${JSON.stringify(closedId)})`), "closed project remains open in the current tab");
+    assert(!await evaluate(`JSON.parse(sessionStorage.getItem("asasbits-open-workspaces-v1")).includes(${JSON.stringify(closedId)})`), "closed project remains open in the current tab");
     assert(await evaluate(`workspaceRegistry.workspaces.some(workspace => workspace.id === ${JSON.stringify(closedId)})`), "closed project is unavailable to other tabs");
     await evaluate(`openProject({ name: ${JSON.stringify(closedName)}, data: blankWorkspace() })`);
     assert(await count("#workspace-select option") === before, "reopening a closed project did not restore it");
@@ -199,7 +207,7 @@ try {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
     assert(await evaluate(`JSON.parse(localStorage.getItem("safeguard-workspaces-v1")).workspaces.find(workspace => workspace.id === sessionStorage.getItem("safeguard-active-workspace-v1")).data.architecture.diagrams[0].source.includes("Explicit save test")`), "save did not preserve UML DSL editor text");
-    assert(await evaluate(`window.__download`) === "cobot-safety-case.praxis.json", "save did not download the project file");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.asasbits.json", "save did not download the project file");
   });
 
   await test("workspace manager deletes the active project and keeps a blank fallback", async () => {
@@ -223,7 +231,7 @@ try {
       delete envelope.workspace.id;
       envelope.workspace.name = "Imported AMR project";
       envelope.workspace.data.hazards.push({ id: "H-IMPORTED", name: "Imported JSON hazard", category: "Operational", description: "Portable project test" });
-      const file = new File([JSON.stringify(envelope)], "imported.praxis.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "imported.asasbits.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -234,7 +242,7 @@ try {
 
   await test("robotic cell training project is a complete importable workspace", async () => {
     const summary = await evaluate(`(async () => {
-      const project = parseProject(await (await fetch("/training/examples/palletizing-cell.praxis.json")).text());
+      const project = parseProject(await (await fetch("/training/examples/palletizing-cell.asasbits.json")).text());
       return {
         name: project.name,
         phases: project.data.workflow.phases.length,
@@ -265,7 +273,7 @@ try {
 
   await test("EN 50126 railway RAMS training project is complete and importable", async () => {
     const summary = await evaluate(`(async () => {
-      const project = parseProject(await (await fetch("/training/examples/metro-psd-rams.praxis.json")).text());
+      const project = parseProject(await (await fetch("/training/examples/metro-psd-rams.asasbits.json")).text());
       return {
         name: project.name,
         phases: project.data.workflow.phases.length,
@@ -296,7 +304,7 @@ try {
     await evaluate(`(() => {
       const envelope = projectEnvelope();
       envelope.workspace.name = "imported amr PROJECT";
-      const file = new File([JSON.stringify(envelope)], "duplicate-project-name.praxis.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "duplicate-project-name.asasbits.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -311,7 +319,7 @@ try {
       envelope.workspace.name = "Invalid imported project";
       envelope.workspace.data.quantitative.components[0] ??= { id: crypto.randomUUID(), component: "TEST", role: "Validation test", lambdaTotal: 1e-6, dangerousFraction: 0.5, diagnosticCoverage: 0.9, proofTestHours: 8760, channels: 1, beta: 0.05 };
       envelope.workspace.data.quantitative.components[0].diagnosticCoverage = 2;
-      const file = new File([JSON.stringify(envelope)], "invalid.praxis.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "invalid.asasbits.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -325,7 +333,7 @@ try {
       const envelope = projectEnvelope();
       envelope.workspace.name = "Duplicate-ID imported project";
       envelope.workspace.data.hazards.push({ ...envelope.workspace.data.hazards[0], id: envelope.workspace.data.hazards[0].id.toLowerCase() });
-      const file = new File([JSON.stringify(envelope)], "duplicate-id.praxis.json", { type: "application/json" });
+      const file = new File([JSON.stringify(envelope)], "duplicate-id.asasbits.json", { type: "application/json" });
       const transfer = new DataTransfer(); transfer.items.add(file);
       const input = document.querySelector("#workspace-file-input"); input.files = transfer.files; input.dispatchEvent(new Event("change", { bubbles: true }));
     })()`);
@@ -1278,8 +1286,8 @@ BASIC LEGACY_A "Legacy basic event" layer=Legacy`;
   await test("save initiates JSON download", async () => {
     await evaluate(`HTMLAnchorElement.prototype.click = function () { window.__download = this.download; };`);
     await click("#export-btn");
-    assert(await evaluate(`window.__download`) === "cobot-safety-case.praxis.json", "save project file did not initiate expected portable JSON download");
-    assert(await evaluate(`projectEnvelope().format`) === "praxis-studio-workspace", "export envelope format is missing");
+    assert(await evaluate(`window.__download`) === "cobot-safety-case.asasbits.json", "save project file did not initiate expected portable JSON download");
+    assert(await evaluate(`projectEnvelope().format`) === "asasbits-studio-workspace", "export envelope format is missing");
     assert(await evaluate(`parseProject(JSON.stringify({ ...projectEnvelope(), format: "safeguard-safety-workspace" })).name`) === "Cobot safety case", "legacy project format is no longer supported");
     assert(await evaluate(`projectEnvelope().version`) === 1, "export envelope version is missing");
   });

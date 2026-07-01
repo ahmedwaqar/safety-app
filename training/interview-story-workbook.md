@@ -1,6 +1,6 @@
 # Engineering Interview Story Workbook
 
-Use this workbook with the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md). Complete each story after performing the corresponding work in Praxis Studio.
+Use this workbook with the [`Critical Systems Lifecycle Interview Practicum`](lifecycle-interview-practicum.md). Complete each story after performing the corresponding work in AsasBits Studio.
 
 Keep the spoken version to about 90 seconds. Keep the detailed version for follow-up questions.
 

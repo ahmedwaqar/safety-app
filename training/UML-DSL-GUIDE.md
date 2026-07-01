@@ -1,6 +1,6 @@
-# Praxis UML DSL guide
+# AsasBits UML DSL guide
 
-Praxis UML DSL is the source language for the native Architecture editor. Its syntax is intentionally close to PlantUML: declare named UML entities, give them short aliases, and connect those aliases with arrows. The app handles shape position, size, routing, and layout separately.
+AsasBits UML DSL is the source language for the native Architecture editor. Its syntax is intentionally close to PlantUML: declare named UML entities, give them short aliases, and connect those aliases with arrows. The app handles shape position, size, routing, and layout separately.
 
 Use the DSL to describe **what the architecture means**. Use the canvas and inspector to decide **how the diagram is arranged**.
 

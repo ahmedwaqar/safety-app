@@ -4,10 +4,10 @@ This practicum is a compressed simulation of full-lifecycle engineering work for
 
 It cannot replace years of responsibility on real projects. It can give you deliberate practice with the reasoning patterns experienced interviewers look for: defining uncertainty, finding the real system boundary, controlling interfaces, making risk-informed design decisions, handling failed tests, resisting schedule pressure, and defending release decisions.
 
-Use either completed Praxis Studio project:
+Use either completed AsasBits Studio project:
 
-- [`examples/palletizing-cell.praxis.json`](examples/palletizing-cell.praxis.json) for machinery and robotics
-- [`examples/metro-psd-rams.praxis.json`](examples/metro-psd-rams.praxis.json) for railway RAMS
+- [`examples/palletizing-cell.asasbits.json`](examples/palletizing-cell.asasbits.json) for machinery and robotics
+- [`examples/metro-psd-rams.asasbits.json`](examples/metro-psd-rams.asasbits.json) for railway RAMS
 
 Model answers and interviewer probes are in [`lifecycle-interview-answer-key.md`](lifecycle-interview-answer-key.md).
 Capture your rehearsed examples in the [`Engineering Interview Story Workbook`](interview-story-workbook.md).
@@ -40,7 +40,7 @@ That answer demonstrates initiative and judgment without inventing experience.
 
 For every scenario, produce four outputs:
 
-1. **Project record:** Update the relevant Praxis Studio artifacts.
+1. **Project record:** Update the relevant AsasBits Studio artifacts.
 2. **Decision memo:** Write five to ten sentences in Engineering notes.
 3. **Spoken answer:** Explain the situation in 90 seconds without reading.
 4. **Challenge round:** Answer the listed follow-up questions in 30 seconds each.

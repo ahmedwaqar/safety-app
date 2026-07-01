@@ -49,5 +49,5 @@ export function startServer(serverPort = port) {
 if (import.meta.main) {
   await buildApp();
   const server = startServer();
-  console.log(`Praxis Studio running at http://localhost:${server.port}`);
+  console.log(`AsasBits Studio running at http://localhost:${server.port}`);
 }

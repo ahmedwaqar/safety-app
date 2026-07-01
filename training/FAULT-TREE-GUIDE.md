@@ -61,7 +61,7 @@ Layer views are a non-destructive review aid over one canonical DSL model: start
 
 ## Architecture starter generator
 
-Define the architecture with component-like entities in the [Praxis UML DSL](UML-DSL-GUIDE.md); their stable aliases automatically populate **Components defined in architecture**. Then use **Generate starter from architecture** to produce an editable two-layer starter tree. It recognizes common component names and proposes three malfunctioning behaviours for each:
+Define the architecture with component-like entities in the [AsasBits UML DSL](UML-DSL-GUIDE.md); their stable aliases automatically populate **Components defined in architecture**. Then use **Generate starter from architecture** to produce an editable two-layer starter tree. It recognizes common component names and proposes three malfunctioning behaviours for each:
 
 - sensing/perception: no output, dangerous invalid output, stale output;
 - control/compute: unavailable execution, dangerous incorrect output, timing/watchdog failure;

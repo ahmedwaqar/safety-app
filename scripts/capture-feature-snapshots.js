@@ -9,8 +9,8 @@ const root = join(import.meta.dir, "..");
 const outputDir = join(root, "docs", "images", "features");
 const chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const debugPort = 9400 + Math.floor(Math.random() * 400);
-const profile = `/tmp/praxis-snapshot-chrome-${Date.now()}`;
-const projectService = new ProjectService(`/tmp/praxis-snapshot-projects-${Date.now()}.json`);
+const profile = `/tmp/asasbits-snapshot-chrome-${Date.now()}`;
+const projectService = new ProjectService(`/tmp/asasbits-snapshot-projects-${Date.now()}.json`);
 const mime = {
   ".css": "text/css",
   ".html": "text/html",

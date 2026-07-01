@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#173f3a" />
-    <title>Praxis Studio</title>
+    <title>AsasBits Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -14,7 +14,7 @@
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">P</div>
-        <div><strong>Praxis Studio</strong><span>Critical systems engineering</span></div>
+        <div><strong>AsasBits Studio</strong><span>Foundations for dependable systems</span></div>
       </div>
       <nav id="main-nav">
         <button class="nav-item active" data-view="overview"><span class="nav-icon">⌂</span>Overview</button>
@@ -467,7 +467,7 @@
           </div>
         </section>
         <section class="diagram-card architecture-notation-card">
-          <div class="card-header"><div><p class="eyebrow">Praxis UML DSL</p><h3>Architecture source</h3></div><span class="render-status" id="render-status">Source defines canvas</span></div>
+          <div class="card-header"><div><p class="eyebrow">AsasBits UML DSL</p><h3>Architecture source</h3></div><span class="render-status" id="render-status">Source defines canvas</span></div>
           <div class="plantuml-editor">
             <textarea id="plantuml-source" spellcheck="false" autocomplete="off" aria-autocomplete="list" aria-controls="plantuml-completions" aria-expanded="false"></textarea>
             <div class="completion-menu" id="plantuml-completions" role="listbox" aria-label="UML DSL completions" hidden></div>
@@ -719,6 +719,7 @@
       <form method="dialog">
         <div class="dialog-header"><div><p class="eyebrow">Input guidance</p><h2>Choosing appropriate values</h2></div><button class="dialog-close" type="button" data-close-dialog>×</button></div>
         <div class="help-sections">
+          <section><h3>What AsasBits means</h3><p><strong>Asas</strong> comes from the Arabic word <strong>أساس</strong>, meaning foundation or basis. <strong>Bits</strong> are the digital building blocks of software and connected systems. Together, AsasBits reflects the app's purpose: establishing sound engineering foundations for dependable systems. Pronounce it <strong>uh-SAAS bits</strong>.</p></section>
           <section><h3>Start with architecture</h3><p>Define components in the architecture UML source before creating component-linked FMEA, FMEDA, quantitative, or requirement records. Use stable aliases such as <code>SCAN</code> or <code>PLC</code>.</p></section>
           <section><h3>FMEA ratings</h3><p>Severity, occurrence, and detection use integer values from <code>1</code> to <code>10</code>. Document your organization-specific rating scale and apply it consistently.</p></section>
           <section><h3>AMR SIL risk graph</h3><p>Select C/F/P/W values from documented operating-zone evidence. Treat the resulting SIL as a target estimate for competent review, not an automatic compliance decision.</p></section>
@@ -732,6 +733,6 @@
       </form>
     </dialog>
 
-    <script src="app/praxis-studio.browser.js"></script>
+    <script src="app/asasbits-studio.browser.js"></script>
   </body>
 </html>

@@ -1,8 +1,10 @@
-# Praxis Studio
+# AsasBits Studio
 
-Praxis Studio helps engineers do good engineering before asking them to produce safety paperwork. It provides a structured workspace for defining the system, understanding how it will be used, exploring architecture, making design decisions, and recording the reasoning and evidence behind those decisions.
+**AsasBits** combines the Arabic word **asas** (**أساس**), meaning *foundation* or *basis*, with **bits**, the digital building blocks of software and connected systems. The name reflects the product's purpose: helping engineers establish sound foundations for dependable systems. It is pronounced **uh-SAAS bits**.
 
-As the engineering workflow develops, Praxis Studio helps the team identify the points where a decision could introduce, increase, or reduce risk. Engineers can place safety checkpoints at those points, define what must be reviewed before work proceeds, and connect each checkpoint to the appropriate analysis, requirement, owner, and verification evidence. Safety becomes an integrated outcome of disciplined, traceable engineering rather than a separate activity added near the end.
+AsasBits Studio helps engineers do good engineering before asking them to produce safety paperwork. It provides a structured workspace for defining the system, understanding how it will be used, exploring architecture, making design decisions, and recording the reasoning and evidence behind those decisions.
+
+As the engineering workflow develops, AsasBits Studio helps the team identify the points where a decision could introduce, increase, or reduce risk. Engineers can place safety checkpoints at those points, define what must be reviewed before work proceeds, and connect each checkpoint to the appropriate analysis, requirement, owner, and verification evidence. Safety becomes an integrated outcome of disciplined, traceable engineering rather than a separate activity added near the end.
 
 Architecture, operational context, hazards, integrity assessments, FMEA records, and requirements remain together in one traceable project, helping teams develop critical systems with greater clarity, confidence, and assurance.
 
@@ -10,11 +12,11 @@ The initial browser workspace ships with an example cobot-cell safety case so th
 
 ## License and Safety Notice
 
-Praxis Studio is released under the [MIT License](LICENSE) for public use, modification, and distribution.
+AsasBits Studio is released under the [MIT License](LICENSE) for public use, modification, and distribution.
 
-Praxis Studio was developed with AI-assisted workflows, including large language model support and vibe-coding practices. Review the implementation, calculations, assumptions, generated content, and project outputs carefully before relying on them.
+AsasBits Studio was developed with AI-assisted workflows, including large language model support and vibe-coding practices. Review the implementation, calculations, assumptions, generated content, and project outputs carefully before relying on them.
 
-The software is provided **as is**, without warranty of any kind and without liability for claims, damages, production losses, safety incidents, compliance gaps, or other issues arising from use of the app or its outputs. Praxis Studio is an engineering support tool, not a certified safety system, conformity-assessment body, or substitute for competent engineering judgment. Before using any analysis, calculation, requirement, evidence record, or exported project in a production system, have it independently reviewed and approved by qualified professionals against the applicable laws, standards, operating context, and organizational safety processes.
+The software is provided **as is**, without warranty of any kind and without liability for claims, damages, production losses, safety incidents, compliance gaps, or other issues arising from use of the app or its outputs. AsasBits Studio is an engineering support tool, not a certified safety system, conformity-assessment body, or substitute for competent engineering judgment. Before using any analysis, calculation, requirement, evidence record, or exported project in a production system, have it independently reviewed and approved by qualified professionals against the applicable laws, standards, operating context, and organizational safety processes.
 
 ## Feature Snapshot
 
@@ -23,7 +25,7 @@ The software is provided **as is**, without warranty of any kind and without lia
 | Overview | Safety-case metrics, residual-risk summary, high-priority failure modes, analysis coverage, and architecture components in scope |
 | Engineering notes | Capture rich text, equations, tables, figures, artifact links, and stakeholder FMEA/HARA drafts that can be cleaned and imported |
 | Engineering workflow | Configure development phases and activities, insert safety checkpoints, define gate criteria, record evidence, assign owners, and launch linked analyses |
-| Architecture | Define diagrams in the Praxis UML DSL, render native shapes and connectors, refine layout on the canvas, and reuse stable component aliases throughout the safety workspace |
+| Architecture | Define diagrams in the AsasBits UML DSL, render native shapes and connectors, refine layout on the canvas, and reuse stable component aliases throughout the safety workspace |
 | Operational situations | Catalogue normal operation, setup, intervention, maintenance, and other relevant operating contexts |
 | Hazard catalogue | Maintain reusable hazards and view linked analysis references |
 | AMR SIL assessment | Estimate a target Safety Integrity Level for AMR safety functions with a transparent C/F/P/W risk graph |
@@ -46,7 +48,7 @@ Select any figure to open the full-resolution snapshot.
 <table>
   <tr><th>Overview</th><th>Engineering notes</th></tr>
   <tr>
-    <td><a href="docs/images/features/overview.png"><img src="docs/images/features/overview.png" alt="Praxis Studio overview workspace"></a></td>
+    <td><a href="docs/images/features/overview.png"><img src="docs/images/features/overview.png" alt="AsasBits Studio overview workspace"></a></td>
     <td><a href="docs/images/features/engineering-notes.png"><img src="docs/images/features/engineering-notes.png" alt="Engineering notes workspace"></a></td>
   </tr>
   <tr><th>Engineering workflow</th><th>Architecture</th></tr>
@@ -104,22 +106,22 @@ bun run screenshots
 - A modern browser
 - Google Chrome for the automated interaction suite
 
-The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](vendor/plantuml.jar) for compatibility workflows. Praxis UML DSL diagrams render natively in the browser and do not require Java.
+The official PlantUML `v1.2026.4` JAR is attached at [`vendor/plantuml.jar`](vendor/plantuml.jar) for compatibility workflows. AsasBits UML DSL diagrams render natively in the browser and do not require Java.
 
 ## Beginner Training
 
-For an industry-style learning path, use the [`Robotic Cell Engineering Practicum`](training/robotic-cell-practicum.md) with its completed [`palletizing-cell.praxis.json`](training/examples/palletizing-cell.praxis.json) project.
+For an industry-style learning path, use the [`Robotic Cell Engineering Practicum`](training/robotic-cell-practicum.md) with its completed [`palletizing-cell.asasbits.json`](training/examples/palletizing-cell.asasbits.json) project.
 
 The shorter [`AMR Robot Safety Training`](training/README.md) remains available as an introductory course. Training assets include:
 
 - Five beginner modules
-- Runnable warehouse-AMR Praxis UML DSL and legacy PlantUML examples
+- Runnable warehouse-AMR AsasBits UML DSL and legacy PlantUML examples
 - A detailed palletizing-cell project covering Engineering notes, workflow, architecture, hazards, safety functions, FMEA, FMEDA, requirements, validation, and change impact
 - Working SIL, FMEA, and safety-requirement examples
 - Student tasks and a capstone assessment
 - A separate instructor answer key
 
-For railway systems engineering, use the [`EN 50126 Railway RAMS Practicum`](training/en-50126-rams-practicum.md) with its completed [`metro-psd-rams.praxis.json`](training/examples/metro-psd-rams.praxis.json) project and [`instructor answer key`](training/en-50126-answer-key.md). It covers the 12-phase RAMS lifecycle, system definition, RAM requirements, hazard control, apportionment, assurance, acceptance, operation, modification, and decommissioning.
+For railway systems engineering, use the [`EN 50126 Railway RAMS Practicum`](training/en-50126-rams-practicum.md) with its completed [`metro-psd-rams.asasbits.json`](training/examples/metro-psd-rams.asasbits.json) project and [`instructor answer key`](training/en-50126-answer-key.md). It covers the 12-phase RAMS lifecycle, system definition, RAM requirements, hazard control, apportionment, assurance, acceptance, operation, modification, and decommissioning.
 
 For experience-based interview preparation, use the [`Critical Systems Lifecycle Interview Practicum`](training/lifecycle-interview-practicum.md), its [`interview guide`](training/lifecycle-interview-answer-key.md), and the reusable [`story workbook`](training/interview-story-workbook.md). The course provides a two-week practice schedule, fourteen lifecycle simulations, failed-test and field-incident exercises, management-pressure scenarios, timed questions, follow-up probes, and an evidence-based scoring rubric.
 
@@ -148,7 +150,7 @@ Opening `index.html` directly provides the complete analysis workspace and nativ
 ## Suggested Workflow
 
 1. Open **Engineering workflow** to plan phases, activities, safety checkpoints, gates, and evidence.
-2. Open **Architecture** to describe the model in Praxis UML source or add entities from the native palette. The source renders directly into the canvas, manual layout changes synchronize back to the DSL, and component aliases become available throughout the analysis.
+2. Open **Architecture** to describe the model in AsasBits UML source or add entities from the native palette. The source renders directly into the canvas, manual layout changes synchronize back to the DSL, and component aliases become available throughout the analysis.
 4. Add the relevant **Operational situations**.
 5. Maintain the reusable **Hazard catalogue**.
 6. Use **ISO 26262 HARA** to create hazardous events and derive ASIL from S/E/C classifications.
@@ -159,13 +161,13 @@ Opening `index.html` directly provides the complete analysis workspace and nativ
 11. Use the **FMEA worksheet** to assess component-level failure modes and prioritize actions by risk priority number.
 12. Add **Safety requirements**, linking each control to its source hazard and allocated architecture component.
 13. Use **Lifecycle assurance** to execute V&V, approve evidence, close deviations and hazards, assess changes, establish baselines, record reviews, and support safety-case claims.
-14. Use the top-bar controls to save the active project as a portable `.praxis.json` file.
+14. Use the top-bar controls to save the active project as a portable `.asasbits.json` file.
 
 ## Using Each Workspace
 
 ### Engineering Notes
 
-Use the Engineering notes workspace for raw engineering thinking before information is mature enough for a controlled worksheet. Rich notes can include headings, emphasis, lists, equations, editable tables, embedded figures, and links to other Praxis Studio artifacts. Notes auto-save while you type. Select a table cell to add or delete surrounding rows and columns, or remove the complete table.
+Use the Engineering notes workspace for raw engineering thinking before information is mature enough for a controlled worksheet. Rich notes can include headings, emphasis, lists, equations, editable tables, embedded figures, and links to other AsasBits Studio artifacts. Notes auto-save while you type. Select a table cell to add or delete surrounding rows and columns, or remove the complete table.
 
 For stakeholder reviews, select an **FMEA draft** or **HARA draft**, add rows, and capture ideas collaboratively. **Clean up table** trims text, removes empty drafts, normalizes ratings, and identifies missing references. **Import cleaned rows** promotes valid entries into the formal FMEA or HARA worksheet while retaining incomplete rows for correction.
 
@@ -186,9 +188,9 @@ Safety is treated as a continuous engineering lens rather than a single downstre
 
 Use **Architecture** as a native UML workbench inside the safety workspace:
 
-See the dedicated [`Praxis UML DSL guide`](training/UML-DSL-GUIDE.md) for the complete syntax, modelling workflow, examples, and troubleshooting reference.
+See the dedicated [`AsasBits UML DSL guide`](training/UML-DSL-GUIDE.md) for the complete syntax, modelling workflow, examples, and troubleshooting reference.
 
-- Treat the Praxis UML DSL as the authoritative diagram definition; applying valid source replaces the native model while invalid drafts leave the last valid canvas intact.
+- Treat the AsasBits UML DSL as the authoritative diagram definition; applying valid source replaces the native model while invalid drafts leave the last valid canvas intact.
 - Add UML elements from the palette and select them on the canvas or outline.
 - Drag shapes directly on the canvas with smooth, zoom-aware movement.
 - Edit names, aliases, kind, documentation, and connector labels in the inspector.
@@ -200,7 +202,7 @@ See the dedicated [`Praxis UML DSL guide`](training/UML-DSL-GUIDE.md) for the co
 - Use undo, redo, keyboard delete, and zoom controls while refining the model.
 - Review validation warnings for unsupported element kinds, missing names, missing relationship endpoints, and diagram-specific notation issues.
 
-The architecture model and its DSL source are stored in the active Praxis Studio workspace. Compatible legacy interface-connector shapes with two incident edges are migrated into one native connector. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events. A derived PlantUML representation remains in project data for backward compatibility, but it is not the editor's source of truth.
+The architecture model and its DSL source are stored in the active AsasBits Studio workspace. Compatible legacy interface-connector shapes with two incident edges are migrated into one native connector. Component-like UML elements automatically define reusable architecture references for FMEA rows, FMEDA rows, quantitative safety inputs, requirements, and fault-tree basic events. A derived PlantUML representation remains in project data for backward compatibility, but it is not the editor's source of truth.
 
 The DSL uses concise PlantUML-style names, aliases, and arrows:
 
@@ -428,12 +430,12 @@ The release-readiness check requires complete requirement coverage, justified ha
 
 ## Workspaces And Portable Project Files
 
-Praxis Studio supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
+AsasBits Studio supports multiple independent local workspaces. Use the top-bar workspace selector to switch projects and the **File** menu to:
 
 - Select **New** to name and create a blank browser workspace
 - Select **Open** to reopen a saved project file as a browser workspace
 - Select **Open in new tab** to work with the active project alongside other projects
-- Select **Save** to preserve the active project in browser storage and download `<workspace-name>.praxis.json`
+- Select **Save** to preserve the active project in browser storage and download `<workspace-name>.asasbits.json`
 - Select **Close workspace** to remove the project from the current tab only; other tabs and stored project data are unaffected
 - Select **Delete** to remove the active project from browser storage
 - Select the **?** button to open input guidance
@@ -442,7 +444,7 @@ Portable project files use a versioned JSON envelope:
 
 ```json
 {
-  "format": "praxis-studio-workspace",
+  "format": "asasbits-studio-workspace",
   "version": 1,
   "exportedAt": "2026-05-31T00:00:00.000Z",
   "workspace": {
@@ -454,11 +456,11 @@ Portable project files use a versioned JSON envelope:
 
 The `data` object contains architecture, catalogues, AMR SIL assessments, quantitative safety inputs, FMEDA records, fault tree DSL, HARA records, FMEA rows, safety goals, requirements, and lifecycle-assurance records. The JSON format is platform-independent and can be moved between browsers and operating systems.
 
-Project data is cached in browser `localStorage`, while each tab keeps its own open-project list and active-project selection in `sessionStorage`. In server mode, the browser registry is also mirrored through the `/api/projects` project service to `.praxis-data/projects.json`. Legacy Safeguard project files and storage keys remain supported for backward compatibility.
+Project data is cached in browser `localStorage`, while each tab keeps its own open-project list and active-project selection in `sessionStorage`. In server mode, the browser registry is also mirrored through the `/api/projects` project service to `.asasbits-data/projects.json`. Existing `.praxis-data` registries, `.praxis.json` files, and legacy storage keys remain supported for backward compatibility.
 
 ## Input Validation
 
-Praxis Studio validates typed values before saving records and checks imported JSON project structure before opening a workspace.
+AsasBits Studio validates typed values before saving records and checks imported JSON project structure before opening a workspace.
 
 Key rules:
 
@@ -487,14 +489,14 @@ Run the headless Chrome interaction suite:
 bun tests/browser-smoke.js
 ```
 
-The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, Praxis UML DSL parsing and completion, source-defined native entities and connectors, invalid-draft isolation, manual-layout preservation and source synchronization, smooth property editing, shape dragging, port-to-shape connector creation, native interface-edge rendering and legacy interface migration, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
+The suite verifies workspace creation, switching, deletion, isolation, project-file save and open, navigation, dialogs, FMEA editing, FMEDA symbolic expressions and rollups, fault tree DSL parsing, architecture generation, gate rendering, layer-filtered editing, qualitative cut sets, AsasBits UML DSL parsing and completion, source-defined native entities and connectors, invalid-draft isolation, manual-layout preservation and source synchronization, smooth property editing, shape dragging, port-to-shape connector creation, native interface-edge rendering and legacy interface migration, custom columns, catalogue entries, requirements, safety goals, lifecycle V&V and traceability, evidence-backed closure rules, AMR SIL risk-graph boundaries, quantitative PFH and PFDavg calculations, architecture guidance, the complete ISO 26262 S/E/C matrix, legacy migration, and reset.
 
 Compile-check the browser and server entry points:
 
 ```sh
 bun run check
 bun run build
-bun build server.js --target=bun --outfile=/tmp/praxis-server-check.js
+bun build server.js --target=bun --outfile=/tmp/asasbits-server-check.js
 ```
 
 ## Project Layout
@@ -504,10 +506,10 @@ index.html               Web-app structure and dialogs
 styles.css               Responsive application styling
 app/
   uml-core.js            Native UML model, validation, layout, notation, and SVG renderer
-  architecture-dsl.ts    Praxis UML DSL parser and canonical source serializer
+  architecture-dsl.ts    AsasBits UML DSL parser and canonical source serializer
   architecture-model.ts  Architecture workspace, PlantUML conversion, and component-reference helpers
-  praxis-studio.ts       Typed feature registry, browser state, workflows, and traceability source
-  praxis-studio.browser.js
+  asasbits-studio.ts       Typed feature registry, browser state, workflows, and traceability source
+  asasbits-studio.browser.js
                          Generated browser artifact for direct index.html use
 scripts/build-app.ts      Shared TypeScript-to-JavaScript browser build
 services/project-service.ts

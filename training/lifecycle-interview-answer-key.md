@@ -1,6 +1,6 @@
 # Critical Systems Lifecycle Interview Guide
 
-Use this guide after completing the corresponding simulation in [`lifecycle-interview-practicum.md`](lifecycle-interview-practicum.md). These are reasoning patterns, not scripts. Replace generic language with your actual project decisions and remain explicit that the Praxis Studio work is a simulation.
+Use this guide after completing the corresponding simulation in [`lifecycle-interview-practicum.md`](lifecycle-interview-practicum.md). These are reasoning patterns, not scripts. Replace generic language with your actual project decisions and remain explicit that the AsasBits Studio work is a simulation.
 
 ## What Experienced Interviewers Listen For
 

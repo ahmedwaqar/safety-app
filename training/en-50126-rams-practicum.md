@@ -1,10 +1,10 @@
 # EN 50126 Railway RAMS Practicum
 
-This course introduces the application of the EN 50126 railway RAMS lifecycle through a worked metro platform screen door (PSD) control upgrade. It combines systems engineering, reliability, availability, maintainability, safety, evidence planning, and change control in Praxis Studio.
+This course introduces the application of the EN 50126 railway RAMS lifecycle through a worked metro platform screen door (PSD) control upgrade. It combines systems engineering, reliability, availability, maintainability, safety, evidence planning, and change control in AsasBits Studio.
 
 The completed training project is:
 
-[`examples/metro-psd-rams.praxis.json`](examples/metro-psd-rams.praxis.json)
+[`examples/metro-psd-rams.asasbits.json`](examples/metro-psd-rams.asasbits.json)
 
 Allow **10 to 14 hours** for the complete practicum.
 
@@ -23,7 +23,7 @@ After completing the course, a learner should be able to:
 7. Distinguish verification, validation, independent safety assessment, and acceptance.
 8. Organize evidence into a safety argument without treating document completion as proof.
 9. Plan operation, maintenance, performance monitoring, modification, and decommissioning activities.
-10. Use Praxis Studio to preserve review notes, workflow evidence, architecture, hazards, analyses, and requirements in one project.
+10. Use AsasBits Studio to preserve review notes, workflow evidence, architecture, hazards, analyses, and requirements in one project.
 
 ## Standards Baseline
 
@@ -62,10 +62,10 @@ The project must maintain passenger service during staged installation. Existing
 
 ## Setup
 
-1. Start Praxis Studio with `bun server.js`.
+1. Start AsasBits Studio with `bun server.js`.
 2. Open `http://localhost:8080`.
 3. Select **File > Open**.
-4. Open `training/examples/metro-psd-rams.praxis.json`.
+4. Open `training/examples/metro-psd-rams.asasbits.json`.
 5. Confirm that **Metro PSD EN 50126 Training** appears in the workspace selector.
 6. Select **File > Save** to create a personal checkpoint before editing.
 
@@ -238,7 +238,7 @@ A useful hazard record has:
 - Status and acceptance rationale
 - Links to requirements, verification, and residual risk
 
-Praxis Studio separates the hazard catalogue from failure modes and requirements. Use Engineering notes for workshop observations that are not yet controlled records.
+AsasBits Studio separates the hazard catalogue from failure modes and requirements. Use Engineering notes for workshop observations that are not yet controlled records.
 
 ### 4.2 Exercise: Hazard Workshop
 
@@ -326,7 +326,7 @@ Record interface assumptions and avoid allocating a complete system requirement 
 
 ### 5.4 SIL Caution
 
-EN 50126-2 provides methods for deriving safety integrity requirements and SILs for safety-related electronic functions. The Praxis Studio **AMR SIL assessment** is a generic training risk graph and is not the EN 50126-2 allocation method. Use it only to discuss assumptions; do not use its output as formal railway SIL evidence.
+EN 50126-2 provides methods for deriving safety integrity requirements and SILs for safety-related electronic functions. The AsasBits Studio **AMR SIL assessment** is a generic training risk graph and is not the EN 50126-2 allocation method. Use it only to discuss assumptions; do not use its output as formal railway SIL evidence.
 
 ## Module 6: Architecture, Failure Analysis, And Maintainability
 
@@ -507,7 +507,7 @@ Prepare a handover containing:
 9. Safety-case outline with open claims and evidence.
 10. Operation and performance-monitoring plan.
 11. Change-impact assessment.
-12. Exported `.praxis.json` project that reopens successfully.
+12. Exported `.asasbits.json` project that reopens successfully.
 
 ## Peer Review Questions
 

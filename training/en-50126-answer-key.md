@@ -82,7 +82,7 @@ The departure-permission function should be apportioned end to end. A reasonable
 - Local controls cannot bypass protection without authorization and indication.
 - Procedure controls exceptional degraded operation.
 
-The Praxis Studio risk graph output is not formal EN 50126-2 SIL derivation evidence.
+The AsasBits Studio risk graph output is not formal EN 50126-2 SIL derivation evidence.
 
 ## Module 6: Architecture And Maintainability
 
@@ -130,6 +130,6 @@ A satisfactory project:
 - Distinguishes generic product evidence from application-specific validation.
 - Records independence, competence, configuration, and acceptance responsibilities.
 - Includes operation, monitoring, modification, and decommissioning.
-- Reopens successfully as a portable Praxis Studio project.
+- Reopens successfully as a portable AsasBits Studio project.
 
 Do not reward a large document set, high SIL, or low calculated failure rate without credible assumptions and evidence.
